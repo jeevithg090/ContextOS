@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Surfaces: near-black with a faint cool cast. */
+  --bg: 9 11 14;
+  --surface: 14 17 22;
+  --surface-2: 20 24 31;
+  --surface-3: 28 33 42;
+  --border: 33 39 49;
+  --border-strong: 48 56 70;
+  --fg: 229 232 238;
+  --fg-muted: 146 155 171;
+  --fg-faint: 98 107 122;
+
+  /* Accent: periwinkle "signal" — used for primary actions, focus and selection only. */
+  --accent: 139 156 255;
+  --accent-strong: 112 131 255;
+  --accent-fg: 10 12 20;
+
+  /* Trust classification */
+  --trust-trusted: 52 211 153;
+  --trust-approved: 45 212 191;
+  --trust-external: 56 189 248;
+  --trust-unknown: 148 163 184;
+  --trust-suspicious: 251 191 36;
+  --trust-blocked: 251 113 133;
+
+  /* Severity */
+  --sev-critical: 244 63 94;
+  --sev-high: 251 146 60;
+  --sev-medium: 250 204 21;
+  --sev-low: 96 165 250;
+  --sev-info: 148 163 184;
+
+  /* Policy decisions */
+  --dec-allow: 52 211 153;
+  --dec-deny: 244 63 94;
+  --dec-approval: 251 191 36;
+  --dec-restrict: 232 121 249;
+  --dec-audit: 56 189 248;
+
+  --ok: 52 211 153;
+  --warn: 251 191 36;
+  --danger: 244 63 94;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-bg text-fg font-sans antialiased;
+    font-feature-settings: "cv11", "ss01", "ss03";
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  ::selection {
+    background: rgb(var(--accent) / 0.3);
+  }
+  *:focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  code,
+  kbd,
+  pre,
+  .font-mono {
+    font-feature-settings: "calt" 0;
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.01em;
+  }
+  /* Scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--border-strong)) transparent;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-lg border border-border bg-surface shadow-panel;
+  }
+  .hairline {
+    @apply border-border;
+  }
+  .label-caps {
+    @apply text-2xs font-medium uppercase tracking-[0.08em] text-fg-faint;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* React Flow dark theme alignment */
+.react-flow__attribution {
+  display: none;
+}
+.react-flow__controls-button {
+  background: rgb(var(--surface-2));
+  border-bottom: 1px solid rgb(var(--border));
+  fill: rgb(var(--fg-muted));
+}
+.react-flow__controls-button:hover {
+  background: rgb(var(--surface-3));
+}
+.react-flow__minimap {
+  background: rgb(var(--surface));
+}
