@@ -119,3 +119,13 @@ def org(make_org) -> OrgCtx:
 @pytest.fixture()
 def other_org(make_org) -> OrgCtx:
     return make_org("Globex")
+
+
+@pytest.fixture()
+def seeded_org(org, db) -> OrgCtx:
+    """``org`` with the built-in policy pack and default trust rules installed."""
+    from app.services.seed import seed_security_defaults
+
+    seed_security_defaults(db, org.org_id)
+    db.commit()
+    return org
