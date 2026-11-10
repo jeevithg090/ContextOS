@@ -1,53 +1,39 @@
-"""STUB — to be implemented by the provenance work package. Keep these signatures."""
+"""Provenance engine public surface (pure; no database access).
+
+Implementation is split by responsibility:
+
+- ``receipts``  canonical context-receipt fields, signing and verification
+- ``graph``     node/edge normalisation, deduplication and adjacency
+- ``signals``   reading trust / detection / sensitivity / destination / decision signals off nodes
+- ``search``    time-aware directed walks from untrusted origins to tool invocations
+- ``assess``    explainable scoring of a walk; ``explain`` turns it into plain language
+- ``paths``     ``RiskyPath`` and ``find_risky_paths`` (merging, deduplication, ordering, caps)
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from app.engines.provenance._util import OBSERVED_RELATIONSHIP_NOTE
+from app.engines.provenance.graph import ProvenanceGraph, build_graph
+from app.engines.provenance.paths import RiskyPath, find_risky_paths
+from app.engines.provenance.receipts import (
+    RECEIPT_PURPOSE,
+    RECEIPT_VERSION,
+    canonical_json,
+    receipt_fields,
+    sign_receipt,
+    verify_receipt,
+)
 
-
-@dataclass
-class ProvenanceGraph:
-    nodes: dict[str, dict[str, Any]] = field(default_factory=dict)  # id -> node
-    edges: list[dict[str, Any]] = field(default_factory=list)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"nodes": list(self.nodes.values()), "edges": self.edges}
-
-
-@dataclass
-class RiskyPath:
-    node_ids: list[str]
-    edge_ids: list[str]
-    severity: str
-    title: str
-    explanation: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "node_ids": self.node_ids,
-            "edge_ids": self.edge_ids,
-            "severity": self.severity,
-            "title": self.title,
-            "explanation": self.explanation,
-        }
-
-
-def receipt_fields(item: dict[str, Any]) -> dict[str, Any]:
-    raise NotImplementedError
-
-
-def sign_receipt(fields: dict[str, Any]) -> str:
-    raise NotImplementedError
-
-
-def verify_receipt(fields: dict[str, Any], signature: str) -> bool:
-    raise NotImplementedError
-
-
-def build_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> ProvenanceGraph:
-    raise NotImplementedError
-
-
-def find_risky_paths(graph: ProvenanceGraph, *, max_depth: int = 8) -> list[RiskyPath]:
-    raise NotImplementedError
+__all__ = [
+    "OBSERVED_RELATIONSHIP_NOTE",
+    "RECEIPT_PURPOSE",
+    "RECEIPT_VERSION",
+    "ProvenanceGraph",
+    "RiskyPath",
+    "build_graph",
+    "canonical_json",
+    "find_risky_paths",
+    "receipt_fields",
+    "sign_receipt",
+    "verify_receipt",
+]
