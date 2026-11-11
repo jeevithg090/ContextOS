@@ -16,7 +16,7 @@ import secrets
 from app.core.config import get_settings
 
 API_KEY_PREFIX = "ctxk_"
-SESSION_TOKEN_PREFIX = "ctxs_"
+SESSION_TOKEN_PREFIX = "ctxs_"  # noqa: S105 (a name, not a credential)
 
 _SCRYPT_N = 2**14
 _SCRYPT_R = 8

@@ -89,7 +89,7 @@ class FindingCategory(StrEnum):
     PROMPT_INJECTION = "prompt_injection"
     INSTRUCTION_OVERRIDE = "instruction_override"
     CREDENTIAL_ACCESS = "credential_access"
-    SECRET_EXPOSURE = "secret_exposure"
+    SECRET_EXPOSURE = "secret_exposure"  # noqa: S105 (a name, not a credential)
     EXFILTRATION = "exfiltration"
     UNTRUSTED_SOURCE = "untrusted_source"
     SUSPICIOUS_TOOL_USE = "suspicious_tool_use"
@@ -162,7 +162,7 @@ class Sensitivity(StrEnum):
     PUBLIC = "public"
     INTERNAL = "internal"
     CONFIDENTIAL = "confidential"
-    SECRET = "secret"
+    SECRET = "secret"  # noqa: S105 (a name, not a credential)
 
 
 class RiskLevel(StrEnum):

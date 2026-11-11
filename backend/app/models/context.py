@@ -38,6 +38,10 @@ class ContextSource(TimestampMixin, OrgScopedMixin, Base):
     finding_count: Mapped[int] = mapped_column(Integer, default=0)
     max_finding_severity: Mapped[str | None] = mapped_column(String(16), default=None)
     source_metadata: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    # True while every observation of this source came from simulated (Simulation Lab) traffic.
+    # Ingestion sets it on creation from the event's simulation flag and clears it the first time
+    # real traffic observes the same source; it never flips back to True.
+    is_simulation: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
 
 class ContextItem(OrgScopedMixin, Base):

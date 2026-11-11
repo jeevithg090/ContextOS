@@ -120,6 +120,23 @@ def test_denied_call_never_reaches_the_upstream_server(server: FakeServer, clien
     assert server.events_of("tool.completed") == [] and server.events_of("tool.failed") == []
 
 
+def test_a_call_without_a_listing_reports_the_listing_before_the_decision(server: FakeServer, client) -> None:
+    async def scenario(chain):  # the host never sends tools/list on this connection
+        first = await chain.host.call_tool("get_forecast", {"city": "Oslo"})
+        second = await chain.host.call_tool("get_forecast", {"city": "Rome"})
+        return first, second
+
+    first, second = _run(scenario, client)
+    assert not first.is_error and not second.is_error
+    listings = server.events_of("mcp.server_connected")
+    assert len(listings) == 1 and "~/.ssh/id_rsa" in json.dumps(listings[0]["metadata"]["tools"])
+    kinds = [json.loads(r.content)["events"][0]["event_type"] if r.url.path == "/api/v1/events" else "decide"
+             for r in server.requests if r.method == "POST"]
+    assert kinds.index("mcp.server_connected") < kinds.index("decide")
+    decide = server.bodies("POST", "/api/v1/decide")[0]
+    assert decide["tool"]["description"].startswith("Get today")  # the listed description accompanies the request
+
+
 def test_unreachable_contextos_blocks_by_default(server: FakeServer, client, _isolated: Path) -> None:
     async def scenario(chain):
         await chain.host.list_tools()

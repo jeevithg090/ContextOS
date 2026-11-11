@@ -6,7 +6,7 @@ import type { ContextReceipt, VerificationStatus } from "../types";
 
 const STATUS: Record<VerificationStatus, { title: string; tone: Tone; Icon: typeof ShieldCheck }> = {
   valid: { title: "Signature valid", tone: "ok", Icon: ShieldCheck },
-  invalid: { title: "Signature INVALID — this record was altered after it was signed", tone: "danger", Icon: ShieldAlert },
+  invalid: { title: "Signature INVALID — the stored record no longer matches its signature", tone: "danger", Icon: ShieldAlert },
   missing: { title: "No signature recorded", tone: "warn", Icon: ShieldQuestion },
 };
 

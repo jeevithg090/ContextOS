@@ -41,6 +41,7 @@ PREFIXES: dict[str, str] = {
     "board_column": "col",
     "task": "tsk",
     "task_label": "lbl",
+    "task_label_link": "tll",
     "task_assignment": "tas",
     "task_comment": "tcm",
     "task_dependency": "tdp",

@@ -170,7 +170,8 @@ def _item(row: Any, now: datetime) -> dict[str, Any]:
         remaining = max(0, int((approval.expires_at - now).total_seconds()))
     return {
         "id": approval.id, "status": approval.status, "summary": approval.summary,
-        "action": describe_action(tool_name, category, inv.arguments_redacted if inv is not None else {}, primary),
+        "action": describe_action(tool_name, category, inv.arguments_redacted if inv is not None else {}, primary,
+                                  destination=dest.identifier if dest is not None else None),
         "agent": {"id": approval.agent_id, "name": agent.name if agent else None,
                   "environment": agent.environment if agent else None},
         "session": {"id": approval.session_id, "external_session_id": session.external_session_id if session else None,
@@ -251,7 +252,9 @@ def approval_detail(db: Session, org_id: str, approval_id: str, *, bound_agent_i
         enforcement_note=enforcement_note(
             status=approval.status, enforcement=decision.enforcement if decision is not None else None,
             integration=(snapshot.get("integration") or {}).get("kind"),
-            invocation_status=inv.status if inv is not None else None),
+            invocation_status=inv.status if inv is not None else None,
+            ran_before_decision=bool(inv is not None and inv.completed_at is not None and approval.decided_at is not None
+                                     and inv.completed_at < approval.decided_at)),
         activity=_activity(db, org_id, approval),
     )
     out["recent_context"], out["context_total"] = _recent_context(db, org_id, approval)

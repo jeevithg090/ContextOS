@@ -54,7 +54,8 @@ export function AllTasksPage() {
     label: get("label") || undefined,
     status_key: oneOf(get("status"), STATUS_KEYS),
     q: get("q") || undefined,
-    include_done: get("done") === "1",
+    // Choosing the Done stage implies showing done tasks.
+    include_done: get("done") === "1" || get("status") === "done",
     sort: oneOf(get("sort"), SORT_VALUES, "updated"),
   };
   const filterSignature = FILTER_KEYS.map((k) => get(k)).join("|") + get("sort");
@@ -159,7 +160,12 @@ export function AllTasksPage() {
             onChange={(v) => set({ label: v })}
             options={(labels.data ?? []).map((l) => ({ value: l.id, label: l.name, count: l.task_count }))}
           />
-          <Checkbox label="Include done" checked={filters.include_done} onChange={(v) => set({ done: v ? "1" : null })} />
+          <Checkbox
+            label="Include done"
+            checked={filters.include_done}
+            disabled={filters.status_key === "done"}
+            onChange={(v) => set({ done: v ? "1" : null })}
+          />
         </FilterBar>
         <DataTable
           aria-label="Tasks"

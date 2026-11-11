@@ -265,6 +265,9 @@ class Gateway:
 
     async def call_tool(self, ctx: Any, params: types.CallToolRequestParams) -> types.CallToolResult:
         agent = self._observe(ctx)
+        # A host may call a tool it listed on an earlier connection: report this server's listing
+        # first, so its descriptions are scanned and the server's trust applies to this decision.
+        await self._ensure_listing()
         name = params.name
         try:
             request = tool_request_event(

@@ -97,11 +97,15 @@ def _clip(text: str, limit: int = MAX_REASON_CHARS) -> str:
 
 
 def _policies(decision: DecisionResponse) -> str:
-    names = []
-    for match in decision.matched_policies:
-        if isinstance(match, dict) and match.get("name") and match.get("mode", "enforce") == "enforce":
-            severity = f", {match['severity']}" if match.get("severity") else ""
-            names.append(f"“{match['name']}”{severity}")
+    """The enforce-mode policies that produced this decision (an AUDIT match did not block anything)."""
+    enforced = [m for m in decision.matched_policies
+                if isinstance(m, dict) and m.get("name") and m.get("mode", "enforce") == "enforce"]
+    wanted = (decision.decision or "").upper()
+    if any(m.get("outcome") for m in enforced):
+        deciding = [m for m in enforced if str(m.get("outcome") or "").upper() == wanted]
+    else:  # a server that does not report outcomes: cite every enforce-mode match
+        deciding = enforced
+    names = [f"“{m['name']}”" + (f", {m['severity']}" if m.get("severity") else "") for m in deciding]
     return "; ".join(dict.fromkeys(names)) or "organisation default decision"
 
 
@@ -210,9 +214,12 @@ class PreToolUseEnforcer:
                            "closed).", outcome="approval_error")
         summary = f"{decision.reason} Policy: {_policies(decision)}."
         if self.cfg.on_approval_timeout == "deny":
+            # Approvals belong to one call: approving this request later does not run anything, and a
+            # retry is a new call with a new approval request. Say so, so nobody waits on a dead request.
             return Verdict("deny", reason=f"ContextOS approval {result.approval_id} for this {tool} call is still "
-                           f"pending after {wait:.0f}s, so it was blocked. {summary} The user can approve it in the "
-                           "ContextOS Approval Centre and ask you to retry.",
+                           f"pending after {wait:.0f}s, so it was blocked. {summary} Approving that request now "
+                           "will not run this call. If the user still wants it, they can ask you to retry and "
+                           f"approve the new request in the ContextOS Approval Centre within {wait:.0f}s.",
                            system_message=f"ContextOS approval {result.approval_id} pending: {tool} blocked",
                            outcome="approval_timeout_deny")
         return Verdict("ask", reason=f"ContextOS approval {result.approval_id} pending — approve in the Approval Centre "
