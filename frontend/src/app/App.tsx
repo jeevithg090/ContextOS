@@ -1,12 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation } from "react-router-dom";
-import { AppShell } from "@/components/layout/AppShell";
-import { ToastProvider, TooltipProvider, LoadingRows } from "@/components/ui";
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { ToastProvider, TooltipProvider } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { AuthProvider, useAuth } from "@/features/auth/AuthProvider";
-import { LoginPage } from "@/features/auth/LoginPage";
-import { NotFoundPage } from "@/features/auth/NotFoundPage";
-import { appRoutes } from "./routes";
+import { AuthProvider } from "@/features/auth/AuthProvider";
+import { ROUTER_FUTURE, routeTree } from "./routeTree";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,27 +15,7 @@ const queryClient = new QueryClient({
   },
 });
 
-function RequireAuth() {
-  const { me, loading } = useAuth();
-  const location = useLocation();
-  if (loading) {
-    return (
-      <div className="mx-auto max-w-md pt-32">
-        <LoadingRows rows={3} />
-      </div>
-    );
-  }
-  if (!me) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  return <Outlet />;
-}
-
-const router = createBrowserRouter([
-  { path: "/login", element: <LoginPage /> },
-  {
-    element: <RequireAuth />,
-    children: [{ path: "/", element: <AppShell />, children: [...appRoutes, { path: "*", element: <NotFoundPage /> }] }],
-  },
-]);
+const router = createBrowserRouter(routeTree, { future: ROUTER_FUTURE });
 
 export function App() {
   return (
@@ -46,7 +23,7 @@ export function App() {
       <TooltipProvider>
         <ToastProvider>
           <AuthProvider>
-            <RouterProvider router={router} />
+            <RouterProvider router={router} future={{ v7_startTransition: true }} />
           </AuthProvider>
         </ToastProvider>
       </TooltipProvider>

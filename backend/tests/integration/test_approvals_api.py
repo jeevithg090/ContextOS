@@ -12,7 +12,7 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.ids import new_id
@@ -401,3 +401,99 @@ def test_agent_bound_api_key_sees_only_its_agent(client, seeded_org, db):
     assert [i["id"] for i in listed["items"]] == [mine["approval_id"]]
     assert client.get(f"/api/v1/approvals/{theirs['approval_id']}", headers=bound).status_code == 404
     assert client.get(f"/api/v1/approvals/{mine['approval_id']}", headers=bound).status_code == 200
+
+
+# -- integration cancels / held calls that complete ----------------------------------------------------
+
+
+def _cancel(client, headers, approval_id: str, *, reason: str | None = None, expect: int = 200):
+    body = {"reason": reason} if reason is not None else None
+    response = client.post(f"/api/v1/decide/approvals/{approval_id}/cancel", json=body, headers=headers)
+    assert response.status_code == expect, response.text
+    return response.json()
+
+
+def test_integration_can_cancel_a_pending_approval(client, seeded_org, db, published):
+    paused = _pause_webhook(client, seeded_org)
+    approval_id = paused["approval_id"]
+    published.clear()
+    cancelled = _cancel(client, seeded_org.api_headers, approval_id, reason=f"hook timed out {GITHUB_TOKEN}")
+    assert cancelled["status"] == "cancelled" and cancelled["decided_at"]
+    assert _cancel(client, seeded_org.api_headers, approval_id)["status"] == "cancelled"  # idempotent
+
+    db = _fresh(db)
+    assert db.get(ToolInvocation, paused["tool_invocation_id"]).status == "cancelled"
+    entry = db.scalar(select(AuditEvent).where(AuditEvent.action == "approval.cancelled"))
+    assert entry.actor_type == "api_key" and entry.target_id == approval_id
+    assert entry.details["invocation_status_before"] == "pending_approval"
+    assert GITHUB_TOKEN not in json.dumps(entry.details) and "[REDACTED:github_token" in entry.details["reason"]
+    assert [m for _o, m in published if m["type"] == "approval.decided"][0]["status"] == "cancelled"
+    assert db.scalar(select(func.count()).select_from(AuditEvent).where(AuditEvent.action == "approval.cancelled")) == 1
+
+    poll = client.get(f"/api/v1/decide/approvals/{approval_id}", headers=seeded_org.api_headers).json()
+    assert poll["status"] == "cancelled"
+    assert client.get(PENDING, headers=seeded_org.user_headers).json()["total"] == 0
+    detail = client.get(f"/api/v1/approvals/{approval_id}", headers=seeded_org.user_headers).json()
+    assert "withdrew this request" in detail["enforcement_note"]
+    _decide(client, seeded_org, approval_id, approve=True, expect=409)
+
+
+def test_cancel_after_a_decision_conflicts_and_needs_the_decide_scope(client, seeded_org, make_org, other_org, db):
+    paused = _pause_webhook(client, seeded_org)
+    approval_id = paused["approval_id"]
+    _decide(client, seeded_org, approval_id, approve=False)
+    assert _cancel(client, seeded_org.api_headers, approval_id, expect=409)["error"]["code"] == "conflict"
+    _cancel(client, other_org.api_headers, approval_id, expect=404)
+    _cancel(client, seeded_org.api_headers, "apr_does_not_exist", expect=404)
+
+    other = _pause_webhook(client, seeded_org, session="s-2")
+    raw, prefix, key_hash = generate_api_key()
+    db.add(ApiKey(id=new_id("api_key"), organization_id=seeded_org.org_id, name="ingest only", prefix=prefix,
+                  key_hash=key_hash, scopes=["ingest", "read"]))
+    db.commit()
+    url = f"/api/v1/decide/approvals/{other['approval_id']}/cancel"
+    assert client.post(url, headers={"Authorization": f"Bearer {raw}"}).status_code == 403
+    assert client.post(url, json={"reason": "x", "status": "approved"}, headers=seeded_org.api_headers).status_code == 422
+    assert client.post(url, json={"reason": "x" * 501}, headers=seeded_org.api_headers).status_code == 422
+    assert _cancel(client, seeded_org.api_headers, other["approval_id"])["status"] == "cancelled"
+
+
+def test_approved_call_counts_as_a_transfer_once_it_completes(client, seeded_org, db):
+    from app.models import Destination
+
+    request = tool_requested("WebFetch", WEBHOOK)
+    paused = decide(client, seeded_org.api_headers, request)
+    db = _fresh(db)
+    dest = db.scalar(select(Destination).where(Destination.organization_id == seeded_org.org_id))
+    assert (dest.transfer_count, dest.blocked_count) == (0, 0)  # held: nothing sent yet
+
+    _decide(client, seeded_org, paused["approval_id"], approve=True)
+    db = _fresh(db)
+    assert db.get(Destination, dest.id).transfer_count == 0  # approval alone transfers nothing
+
+    done = tool_completed("WebFetch", WEBHOOK, "ok", correlation_id=request["correlation_id"])
+    post_events(client, seeded_org.api_headers, done)
+    db = _fresh(db)
+    assert db.get(Destination, dest.id).transfer_count == 1
+    # A repeated result for the same call is not a second transfer.
+    post_events(client, seeded_org.api_headers, tool_completed("WebFetch", WEBHOOK, "ok",
+                                                               correlation_id=request["correlation_id"]))
+    db = _fresh(db)
+    assert db.get(Destination, dest.id).transfer_count == 1
+
+
+def test_held_call_that_fails_is_not_a_transfer(client, seeded_org, db):
+    from app.models import Destination
+    from tests.integration.ingestion_support import event
+
+    request = tool_requested("WebFetch", WEBHOOK)
+    paused = decide(client, seeded_org.api_headers, request)
+    _decide(client, seeded_org, paused["approval_id"], approve=True)
+    post_events(client, seeded_org.api_headers, event(
+        "tool.failed", tool={"name": "WebFetch", "provider": "claude_code"}, arguments=WEBHOOK, is_error=True,
+        correlation_id=request["correlation_id"], result="connection refused"))
+    db = _fresh(db)
+    dest = db.scalar(select(Destination).where(Destination.organization_id == seeded_org.org_id))
+    assert dest.transfer_count == 0
+    inv = db.get(ToolInvocation, paused["tool_invocation_id"])
+    assert inv.status == "failed" and inv.result_context_item_id  # the error text was scanned as context

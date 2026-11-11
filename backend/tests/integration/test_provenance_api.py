@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 from urllib.parse import quote
 
+import pytest
 from sqlalchemy import select
 
+from app.core.errors import NotFoundError
 from app.models import AgentSession, ContextItem, SecurityFinding
+from app.services.provenance_service import risky_paths_for_session
 from tests.integration.ingestion_support import (
     GITHUB_TOKEN,
     decide,
@@ -298,3 +301,18 @@ def test_permissions_and_validation(client, seeded_org, make_org):
     assert both.status_code == 422 and both.json()["error"]["code"] == "validation_failed"
     assert client.get(GRAPH, params={"depth": 9}, headers=seeded_org.user_headers).status_code == 422
     assert client.get(GRAPH, params={"limit": 5}, headers=seeded_org.user_headers).status_code == 422
+
+
+def test_risky_paths_for_session_matches_the_session_graph(client, seeded_org, other_org, db):
+    exfil = _exfil_session(client, seeded_org.api_headers)
+    assert exfil["decision"] == "DENY"
+    session_id = _session_id(db, seeded_org.org_id, "sess-exfil")
+    paths = risky_paths_for_session(db, seeded_org.org_id, session_id)
+    assert paths, "the README injection -> .env read -> upload attempt is a risky path"
+    graph = client.get(GRAPH, params={"session_id": session_id}, headers=seeded_org.user_headers).json()
+    assert {p.id for p in paths} == {p["id"] for p in graph["risky_paths"]}
+    data = paths[0].model_dump()
+    assert data["title"] and data["explanation"] and data["outcome"]
+    assert GITHUB_TOKEN not in json.dumps([p.model_dump(mode="json") for p in paths])
+    with pytest.raises(NotFoundError):
+        risky_paths_for_session(db, other_org.org_id, session_id)

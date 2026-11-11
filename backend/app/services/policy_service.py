@@ -1,5 +1,6 @@
 """Policy Studio service: policy CRUD (validated, audited, notified), match statistics over recorded
-decisions, recorded-decision lookups and dry-run evaluation.
+decisions and recorded-decision lookups. Dry-run evaluation lives in ``policy_testing`` (re-exported
+here as ``run_policy_test``).
 
 Rules enforced here:
 - A policy is saved only if its conditions pass ``validate_conditions``, its restrictions pass
@@ -14,8 +15,6 @@ Rules enforced here:
 
 from __future__ import annotations
 
-import dataclasses
-import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -23,39 +22,29 @@ from typing import Any
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.errors import ConflictError, PayloadTooLargeError, ValidationFailedError
+from app.core.errors import ConflictError, ValidationFailedError
 from app.core.ids import new_id
 from app.core.timeutil import ensure_utc, utcnow
 from app.domain.enums import DECISION_PRECEDENCE
 from app.engines.policy import (
-    EvaluationInput,
-    PolicySpec,
-    evaluate,
     explain_conditions,
     validate_conditions,
     validate_restrictions,
 )
 from app.engines.policy.restrictions import describe_restrictions
-from app.engines.redaction import detect_secrets, redact_value
-from app.models import Organization, PolicyDecision, SecurityPolicy
+from app.engines.redaction import detect_secrets
+from app.models import PolicyDecision, SecurityPolicy
 from app.services.audit import append_audit
-from app.services.bootstrap import effective_org_settings
-from app.services.loaders import load_policy_specs, policy_to_spec
 from app.services.notify import notify
 from app.services.scoping import get_scoped, paginate, scoped
 
 STATS_WINDOW_DAYS = 7
-DRAFT_ID = "draft"
-MAX_TEST_INPUT_BYTES = 256 * 1024
 EDITABLE_FIELDS = (
     "name", "description", "outcome", "mode", "enabled", "priority", "severity", "conditions", "restrictions", "tags",
 )
 # Every PolicySpec field that can change an evaluation result (or the recorded match).
 EVALUATION_FIELDS = frozenset({"conditions", "outcome", "mode", "enabled", "restrictions", "priority", "severity"})
 _NOT_NULLABLE = frozenset(EDITABLE_FIELDS) - {"description"}
-_INPUT_FIELDS: dict[str, type] = {
-    f.name: type(f.default_factory()) for f in dataclasses.fields(EvaluationInput)  # type: ignore[misc]
-}
 
 
 @dataclass(frozen=True)
@@ -423,121 +412,12 @@ def delete_policy(db: Session, org_id: str, actor: Actor, policy: SecurityPolicy
     notify(db, org_id, "policy.updated", id=policy_id, change="deleted")
 
 
-# ----------------------------------------------------------------------------- dry-run tests
+def __getattr__(name: str) -> Any:
+    """Lazy re-export of the dry-run API (``policy_testing`` imports this module, so a top-level
+    import would be circular)."""
+    if name in ("run_policy_test", "MAX_TEST_INPUT_BYTES", "DRAFT_ID"):
+        from app.services import policy_testing
 
+        return getattr(policy_testing, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-def _prepare_input(data: dict[str, Any], warnings: list[str]) -> dict[str, Any]:
-    if len(json.dumps(data, default=str)) > MAX_TEST_INPUT_BYTES:
-        raise PayloadTooLargeError(f"The test input is larger than {MAX_TEST_INPUT_BYTES // 1024} KB")
-    errors = [
-        f"input.{key}: must be {'an object' if expected is dict else 'a list'}"
-        for key, expected in _INPUT_FIELDS.items()
-        if data.get(key) is not None and not isinstance(data[key], expected)
-    ]
-    _raise_if_invalid(errors, "The test input is not a valid evaluation input")
-    unknown = sorted(k for k in data if k not in _INPUT_FIELDS)
-    if unknown:
-        warnings.append(f"Ignored unknown input keys: {', '.join(unknown)}")
-    cleaned = {k: v for k, v in data.items() if k in _INPUT_FIELDS}
-    if isinstance(cleaned.get("arguments"), dict):
-        redacted, matches = redact_value(cleaned["arguments"])
-        cleaned["arguments"] = redacted if isinstance(redacted, dict) else {}
-        if matches:
-            warnings.append("Secrets in the test arguments were redacted before evaluation, as the ingestion "
-                            "pipeline does for real tool calls")
-    return cleaned
-
-
-def _recorded(row: PolicyDecision) -> dict[str, Any]:
-    matched = row.matched_policies if isinstance(row.matched_policies, list) else []
-    return {
-        "id": row.id,
-        "session_id": row.session_id,
-        "agent_id": row.agent_id,
-        "decision": row.decision,
-        "enforcement": row.enforcement,
-        "evaluated_at": row.evaluated_at,
-        "explanation": row.explanation or "",
-        "matched_policy_names": [str(m.get("name")) for m in matched if isinstance(m, dict) and m.get("name")],
-        "is_simulation": bool(row.is_simulation),
-    }
-
-
-def run_policy_test(
-    db: Session,
-    org_id: str,
-    *,
-    draft: dict[str, Any] | None,
-    policy_ids: list[str],
-    with_org_policies: bool,
-    input_data: dict[str, Any] | None,
-    policy_decision_id: str | None,
-) -> dict[str, Any]:
-    """Evaluate policies against an input without side effects. The result is a simulation."""
-    warnings: list[str] = []
-    recorded = None
-    if policy_decision_id:
-        row = get_scoped(db, PolicyDecision, policy_decision_id, org_id, label="Policy decision")
-        if not isinstance(row.input_snapshot, dict) or not row.input_snapshot:
-            raise ValidationFailedError("This decision has no recorded input, so it cannot be re-evaluated")
-        raw, source, recorded = dict(row.input_snapshot), "policy_decision", _recorded(row)
-    else:
-        raw, source = _prepare_input(input_data or {}, warnings), "input"
-    inp = EvaluationInput.from_dict(raw)
-
-    specs: dict[str, PolicySpec] = {}
-    meta: dict[str, tuple[bool, bool]] = {}  # id -> (draft, forced_enabled)
-    if with_org_policies:
-        for spec in load_policy_specs(db, org_id):
-            specs[spec.id], meta[spec.id] = spec, (False, False)
-    for pid in dict.fromkeys(policy_ids):
-        policy = get_policy(db, org_id, pid)
-        spec = policy_to_spec(policy)
-        if not policy.enabled:
-            spec = dataclasses.replace(spec, enabled=True)
-            warnings.append(f'"{policy.name}" is disabled; it was evaluated as if enabled to show whether it would match')
-        specs[spec.id], meta[spec.id] = spec, (False, not policy.enabled)
-    if draft is not None:
-        _raise_if_invalid(
-            definition_errors(outcome=draft["outcome"], conditions=draft["conditions"],
-                              restrictions=draft.get("restrictions") or {}),
-            "The draft policy is invalid",
-        )
-        version = get_policy(db, org_id, draft["id"]).version if draft.get("id") else 1
-        draft_id = draft.get("id") or DRAFT_ID
-        if not draft.get("enabled", True):
-            warnings.append("The draft is disabled; it was evaluated as if enabled to show whether it would match")
-        specs[draft_id] = PolicySpec(
-            id=draft_id, name=draft.get("name") or "Draft policy", outcome=draft["outcome"],
-            conditions=draft["conditions"], version=version, enabled=True, mode=draft.get("mode", "enforce"),
-            priority=draft.get("priority", 100), severity=draft.get("severity", "medium"),
-            restrictions=draft.get("restrictions") or {}, description=draft.get("description"),
-        )
-        meta[draft_id] = (True, not draft.get("enabled", True))
-
-    org = db.get(Organization, org_id)
-    default = str(effective_org_settings(org)["default_decision"]) if org else "ALLOW"
-    result = evaluate(inp, list(specs.values()), default_decision=default)
-    evaluated = sorted(
-        specs.values(),
-        key=lambda s: (-DECISION_PRECEDENCE.get(str(s.outcome).upper(), -1), -int(s.priority), s.name.casefold()),
-    )
-    return {
-        "decision": result.decision,
-        "matched": [m.to_dict() for m in result.matched],
-        "monitor_matches": [m.to_dict() for m in result.monitor_matches],
-        "explanation": result.explanation,
-        "restrictions": result.restrictions,
-        "deciding_policy_id": result.deciding_policy_id,
-        "evaluation_errors": result.evaluation_errors,
-        "default_decision": default,
-        "evaluated_policies": [
-            {"id": s.id, "name": s.name, "version": s.version, "outcome": s.outcome, "mode": s.mode,
-             "draft": meta[s.id][0], "forced_enabled": meta[s.id][1]}
-            for s in evaluated
-        ],
-        "source": source,
-        "recorded": recorded,
-        "evaluated_input": inp.to_dict(),
-        "warnings": warnings,
-    }

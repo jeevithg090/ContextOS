@@ -61,7 +61,7 @@ export function FilterSelect({ label, value, onChange, options, allLabel = "All"
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className={cn("!h-7 !w-auto min-w-[96px] !text-xs", active && "border-accent/50 text-fg")}
+        className={cn("h-7 w-auto min-w-[96px] text-xs", active && "border-accent/50 text-fg")}
       >
         {allLabel !== null && <option value="">{allLabel}</option>}
         {options.map((o) => (

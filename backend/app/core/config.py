@@ -7,16 +7,17 @@ Production refuses to start with insecure defaults — see ``Settings.validate_f
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 INSECURE_DEV_SECRET = "contextos-dev-insecure-secret-change-me"  # noqa: S105 (dev-only placeholder; validate_for_production rejects it)
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="CONTEXTOS_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="CONTEXTOS_", env_file=".env", extra="ignore", populate_by_name=True)
 
     env: Literal["development", "test", "production"] = "development"
     database_url: str = "sqlite:///./data/contextos.db"
@@ -42,12 +43,25 @@ class Settings(BaseSettings):
     retention_days: int = 90
     approval_default_timeout_s: int = 600
 
-    # Repository root used by the Engineering Workspace context-pack builder to verify file references.
-    workspace_root: str | None = None
+    # Repository root the Engineering Workspace context-pack builder reads to verify file references
+    # (project documents, related files and tests, git history). Server-side only: it is never taken
+    # from a request. CONTEXTOS_WORKSPACE_REPO_ROOT; the older name CONTEXTOS_WORKSPACE_ROOT still works.
+    workspace_repo_root: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("CONTEXTOS_WORKSPACE_REPO_ROOT", "CONTEXTOS_WORKSPACE_ROOT"),
+    )
 
     # Serve the built frontend (frontend/dist) from the API process when present.
     serve_frontend: bool = True
     frontend_dist: str | None = None
+
+    @field_validator("workspace_repo_root", mode="before")
+    @classmethod
+    def _clean_repo_root(cls, value: object) -> object:
+        if isinstance(value, str):
+            text = value.strip()
+            return str(Path(text).expanduser()) if text else None
+        return value
 
     @property
     def is_sqlite(self) -> bool:

@@ -250,6 +250,8 @@ def upsert_source(
     display_name: str | None,
     metadata: dict[str, Any] | None,
 ) -> ContextSource:
+    """Source by (org, type, canonical identifier). ``is_simulation`` is set when simulated traffic
+    creates the source and cleared the first time real traffic observes it."""
     db, org = st.db, st.ctx.org_id
     source = db.scalar(
         select(ContextSource).where(
@@ -273,11 +275,14 @@ def upsert_source(
             observation_count=0,
             finding_count=0,
             source_metadata={},
+            is_simulation=st.ctx.is_simulation,
         )
         db.add(source)
         db.flush()
     elif display_name and not source.display_name:
         source.display_name = redact_str(display_name, limit=400)
+    if source.is_simulation and not st.ctx.is_simulation:
+        source.is_simulation = False  # observed by real traffic: no longer simulation-only (never set back)
     source.observation_count = (source.observation_count or 0) + 1
     source.last_seen_at = st.now
     if metadata:

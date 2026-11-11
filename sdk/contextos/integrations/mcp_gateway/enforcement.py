@@ -36,17 +36,13 @@ from contextos._args import to_jsonable
 from contextos.client import ContextOSClient, approval_status_of
 from contextos.errors import APIError, AuthError, ContextOSError, ServerError, Unreachable
 from contextos.models import ApprovalStatus, Decision, DecisionResponse, EventEnvelope
-from contextos.restrictions import apply_restrictions, scan_reports_secrets
+from contextos.restrictions import OPAQUE_ARGUMENT_NAMES, apply_restrictions, scan_reports_secrets
 
 log = logging.getLogger("contextos.mcp_gateway")
 
 FAIL_MODES = ("closed", "open")
 _REASON_CHARS = 1_500
 # Argument names whose value is a program: files it touches are invisible to the gateway.
-OPAQUE_ARGUMENT_NAMES = frozenset({
-    "command", "commands", "cmd", "script", "code", "shell", "bash", "sh", "powershell", "program",
-    "exec", "argv", "cmdline", "command_line",
-})
 
 WaitCallback = Callable[[float, float, str], Awaitable[None]]
 

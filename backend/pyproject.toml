@@ -36,6 +36,8 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 
+# Run from backend/ as its own pytest process (`make test-backend`); never in the same process as
+# sdk/tests (both are packages named `tests`; see the root Makefile).
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

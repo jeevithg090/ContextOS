@@ -48,7 +48,10 @@ class ContextItem(OrgScopedMixin, Base):
     """One observed piece of context delivered to an agent. Doubles as the Context Receipt."""
 
     __tablename__ = "context_items"
-    __table_args__ = (Index("ix_context_items_org_session", "organization_id", "session_id"),)
+    __table_args__ = (
+        Index("ix_context_items_org_session", "organization_id", "session_id"),
+        Index("ix_context_items_org_received", "organization_id", "received_at"),  # retention, time-range scans
+    )
 
     id: Mapped[str] = id_column()
     source_id: Mapped[str] = mapped_column(String(40), ForeignKey("context_sources.id", ondelete="CASCADE"), index=True)
@@ -82,6 +85,7 @@ class ProvenanceEdge(OrgScopedMixin, Base):
     __table_args__ = (
         Index("ix_prov_src", "organization_id", "src_type", "src_id"),
         Index("ix_prov_dst", "organization_id", "dst_type", "dst_id"),
+        Index("ix_prov_org_observed", "organization_id", "observed_at"),  # retention
     )
 
     id: Mapped[str] = id_column()

@@ -2,7 +2,14 @@
 
 Each entry is a dict with keys ``builtin_key, name, description, outcome, mode, priority,
 severity, conditions, restrictions, tags``. Seeding is idempotent by ``builtin_key``; organisations
-may edit, disable or delete the seeded copies.
+may edit or disable the seeded copies. Built-in policies cannot be deleted (the policies API answers
+409 Conflict); disabling one turns it off and it can be re-enabled later.
+
+Each policy matches its own intent, so disabling one changes behaviour instead of being masked by
+another. In particular destructive commands and privilege escalation are separate detection
+semantics: ``TOOL-DESTRUCTIVE-*`` rules report ``suspicious_tool_use`` (matched by rule-id prefix in
+"Deny destructive shell commands"), while ``permission_escalation`` is reserved for agent-config
+writes, persistence and reverse shells ("Deny agent config tampering and privilege escalation").
 
 A decision only stops a tool call where the integration enforces it at an execution boundary
 (Claude Code PreToolUse hook, MCP gateway, SDK ``guard()``). Elsewhere the same decision is
@@ -109,13 +116,62 @@ _PACK: list[dict[str, Any]] = [
         "tags": ["prompt-injection", "sensitive-data"],
     },
     {
+        "builtin_key": "builtin.deny-secrets-to-tools-after-injection",
+        "name": "Deny credentials in tool arguments after prompt injection",
+        "description": (
+            "Threat: injected instructions (for example a poisoned MCP tool description) tell the agent to "
+            "put a credential into a tool's arguments, so the tool's provider receives it even when no "
+            "outbound destination is visible to ContextOS. "
+            "Decision: DENY tool calls whose arguments contain a detected secret once prompt injection has "
+            "been detected in the session's context."
+        ),
+        "outcome": "DENY",
+        "mode": "enforce",
+        "priority": 880,
+        "severity": "critical",
+        "conditions": {
+            "all": [
+                {"field": "context.injection_detected", "op": "is_true"},
+                {"field": "secrets_in_arguments", "op": "not_empty"},
+            ]
+        },
+        "restrictions": {},
+        "tags": ["prompt-injection", "credential-exfiltration", "mcp"],
+    },
+    {
+        "builtin_key": "builtin.approve-outbound-after-injection",
+        "name": "Require approval for outbound calls after prompt injection",
+        "description": (
+            "Threat: after a prompt injection in the session's context, an outbound request to a destination "
+            "that is not approved or trusted may be the injected instruction being carried out (sending data "
+            "out), even when no secret is visible in the arguments. "
+            "Decision: REQUIRE_APPROVAL for outbound calls to destinations that are not TRUSTED or APPROVED once "
+            "prompt injection has been detected in the session's context."
+        ),
+        "outcome": "REQUIRE_APPROVAL",
+        "mode": "enforce",
+        "priority": 680,
+        "severity": "high",
+        "conditions": {
+            "all": [
+                {"field": "context.injection_detected", "op": "is_true"},
+                _OUTBOUND_CALL,
+                _NOT_TRUSTED_DESTINATION,
+            ]
+        },
+        "restrictions": {},
+        "tags": ["prompt-injection", "destinations"],
+    },
+    {
         "builtin_key": "builtin.deny-destructive-shell",
         "name": "Deny destructive shell commands",
         "description": (
             "Threat: irreversible damage such as recursive deletes of the filesystem or repository, disk "
             "wipes, history-rewriting force pushes or dropped databases, whether triggered by an injected "
             "instruction or by an agent mistake. "
-            "Decision: DENY tool requests on which a TOOL-DESTRUCTIVE-* detection rule fired."
+            "Decision: DENY tool requests on which a TOOL-DESTRUCTIVE-* detection rule fired (detection reports "
+            "them as suspicious_tool_use). This is the only built-in policy that denies destructive commands, so "
+            "disabling it lets them through to the shell audit policy."
         ),
         "outcome": "DENY",
         "mode": "enforce",
@@ -132,7 +188,9 @@ _PACK: list[dict[str, Any]] = [
             "Threat: an agent widens what it can do or who controls it: rewriting its own guardrails (hook "
             "or permission settings, MCP server configuration, instruction files), installing persistence "
             "(cron jobs, shell rc edits, launch agents) or opening a reverse shell. "
-            "Decision: DENY tool requests that detection flags in the permission_escalation category."
+            "Decision: DENY tool requests that detection flags in the permission_escalation category (agent "
+            "configuration writes, persistence, reverse shells). Destructive commands are not in this category; "
+            "they are covered by 'Deny destructive shell commands'."
         ),
         "outcome": "DENY",
         "mode": "enforce",

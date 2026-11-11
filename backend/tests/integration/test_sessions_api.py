@@ -175,3 +175,27 @@ def test_cross_org_isolation_and_permissions(client, seeded_org, other_org, make
     assert client.get(API, headers=ingest_only.api_headers).status_code == 403
     assert client.get(f"{API}/{session_id}", headers=seeded_org.api_headers).status_code == 200  # read scope
     assert client.get(API).status_code == 401
+
+
+def test_timeline_entries_carry_the_decision_explanation_and_stay_shared(client, seeded_org, db):
+    from sqlalchemy import select
+
+    from app.models import AgentSession, IngestedEvent
+    from app.services import sessions_service, sessions_timeline
+
+    ids = _setup(client, seeded_org)
+    entries = client.get(f"{API}/{ids['sess-exfil']}/timeline", headers=seeded_org.user_headers).json()["items"]
+    denied = next(e for e in entries if e["decision"] == "DENY")
+    assert denied["enforcement"] == "enforced" and denied["explanation"].startswith("DENY by policy")
+    assert all(e["explanation"] is None for e in entries if e["decision"] is None)
+    assert GITHUB_TOKEN not in json.dumps(entries)
+
+    # The public name and the former private one are the same function (replay imports it).
+    assert sessions_service.timeline_entries is sessions_timeline.timeline_entries is sessions_service._entries
+    db.rollback()
+    session = db.scalar(select(AgentSession).where(AgentSession.id == ids["sess-exfil"]))
+    rows = list(db.scalars(sessions_service.timeline_query(seeded_org.org_id, session, "coder")
+                           .order_by(IngestedEvent.sequence)))
+    direct = sessions_service.timeline_entries(db, seeded_org.org_id, session, rows)
+    assert [e["id"] for e in direct] == [e["id"] for e in entries]
+    assert [e["title"] for e in direct] == [e["title"] for e in entries]

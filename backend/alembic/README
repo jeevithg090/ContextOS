@@ -1,1 +1,23 @@
-Generic single-database configuration.
+ContextOS database migrations (Alembic). The schema is owned by these revisions: production never
+creates tables from the models, and the API refuses to start until the database is at the latest
+revision (app/database/migrations.py).
+
+Apply (from backend/):
+    .venv/bin/python -m app.cli init-db          # = contextos-server init-db, or `make migrate`
+The database URL is CONTEXTOS_DATABASE_URL (alembic.ini's sqlalchemy.url is not used); plain alembic
+commands work too: `.venv/bin/alembic upgrade head`, or `.venv/bin/alembic -x url=<url> upgrade head`.
+
+Write a revision after changing app/models (never against backend/data/contextos.db):
+    export CONTEXTOS_DATABASE_URL=sqlite:////tmp/<scratch>/m.db
+    .venv/bin/alembic upgrade head
+    .venv/bin/alembic revision --autogenerate -m "<what changed>"
+Then review the file by hand:
+  - no application imports: use sa.DateTime(timezone=True) (env.py renders UTCDateTime that way) and
+    sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql") for JSON;
+  - keep op.batch_alter_table(...) blocks for ALTERs (SQLite); name every constraint;
+  - a new NOT NULL column on a populated table needs a server_default or a backfill;
+  - write a real downgrade().
+Verify on a fresh SQLite file and on a scratch PostgreSQL 17 (initdb/pg_ctl on a port in 18000-18999):
+    .venv/bin/alembic upgrade head && .venv/bin/alembic check
+    .venv/bin/alembic downgrade -1 && .venv/bin/alembic upgrade head
+and run tests/integration/test_migrations.py.

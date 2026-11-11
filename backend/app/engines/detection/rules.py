@@ -38,7 +38,8 @@ CONTENT_RULES: list[Rule] = [
         0.9,
         "Text tries to cancel the agent's existing instructions and replace them — a hallmark of "
         "prompt injection. Legitimate data describes things; it does not command the agent to forget its task.",
-        _rx(r"\b(?:ignore|disregard|forget|discard|override)\b[^.\n]{0,40}?\b(?:all\s+)?(?:previous|prior|above|earlier|preceding|the\s+(?:system|above))\b[^.\n]{0,20}?\b(?:instruction|instructions|prompt|prompts|rules?|directions?|context|message|messages)\b"),
+        _rx(r"\b(?:ignore|disregard|forget|discard|override)\b[^.\n]{0,40}?\b(?:all\s+)?(?:previous|prior|above|earlier|preceding|the\s+(?:system|above))\b[^.\n]{0,20}?\b(?:instruction|instructions|prompt|prompts|rules?|directions?|context|messages)\b"
+            r"|\b(?:ignore|disregard|forget|discard|override)\b[^.\n]{0,20}?\bthe\s+system\s+message\b"),
     ),
     Rule(
         "PI-OVERRIDE-002",
@@ -68,7 +69,10 @@ CONTENT_RULES: list[Rule] = [
         0.78,
         "Text invokes a known jailbreak persona or 'developer mode' to pressure the agent into "
         "ignoring its safety and task constraints.",
-        _rx(r"(?:\byou\s+are\s+now\s+(?:DAN|STAN|in\s+developer\s+mode|an?\s+unrestricted)\b|\bdeveloper\s+mode\b|\bas\s+an?\s+AI[, ]+you\s+must\b|\bdo\s+anything\s+now\b|\bjailbreak\b|\bpretend\s+you\s+have\s+no\s+(?:rules|restrictions|guidelines))"),
+        _rx(r"(?:\byou\s+are\s+now\s+(?:DAN|STAN|in\s+developer\s+mode|an?\s+unrestricted)\b|\byou\s+are\s+in\s+developer\s+mode\b"
+            r"|\b(?:enable|enter|activate|switch\s+to)\s+developer\s+mode\b[^.\n]{0,40}?\b(?:bypass|ignore|disable|override|without\s+(?:rules|restrictions|filters|limits))\b"
+            r"|\bas\s+an?\s+AI[, ]+you\s+must\b|\bdo\s+anything\s+now\b|\bjailbreak\s+mode\b|\b(?:enter|activate|enable)\s+jailbreak\b"
+            r"|\byou\s+(?:are|have\s+been)\s+(?:now\s+)?jailbroken\b|\bpretend\s+you\s+have\s+no\s+(?:rules|restrictions|guidelines))"),
     ),
     Rule(
         "PI-AUTHORITY-001",
@@ -88,7 +92,13 @@ CONTENT_RULES: list[Rule] = [
         0.85,
         "Text directs the agent toward credential stores or environment secrets (.env, SSH keys, cloud "
         "credentials, environment variables) — a step toward stealing secrets the agent can reach.",
-        _rx(r"(?:\b(?:cat|read|print|open|show|display|dump|exfiltrate|send)\b[^.\n]{0,40}?(?:\.env\b|~?/?\.ssh/|id_rsa\b|\.aws/credentials\b|\.npmrc\b|\.netrc\b|secrets?\.(?:ya?ml|json|txt)\b)|~/\.ssh/id_rsa|\.aws/credentials\b|\bprint\s*env\b|\bprintenv\b|\bprocess\.env\b|\b(?:list|dump|show|read)\s+(?:all\s+)?(?:the\s+)?environment\s+variables?\b|\bfind\s+(?:all\s+)?(?:the\s+)?(?:API\s+keys?|secrets?|credentials?|passwords?|tokens?)\b)"),
+        _rx(r"(?:\b(?:cat|read|print|open|show|display|dump|exfiltrate|send)\b[^.\n]{0,40}?"
+            r"(?:(?<![\w$])\.env\b(?!\.(?:example|sample|template|dist|defaults)\b)|~?/?\.ssh/(?![\w.-]*\.pub\b)"
+            r"|\bid_(?:rsa|ed25519|ecdsa|dsa)\b(?!\.pub)|\.aws/credentials\b|\.npmrc\b|\.netrc\b|secrets?\.(?:ya?ml|json|txt)\b)"
+            r"|\bprint\s*env\b|\bprintenv\b"
+            # the whole environment object handed to an output / transmit call (not process.env.NAME)
+            r"|\b(?:log|print|dump|send|post|stringify|exfiltrate|upload|leak|show|display|reveal)\b[^.\n;]{0,30}?\bprocess\.env\b(?!\s*(?:\.\s*\w|\[))"
+            r"|\b(?:list|dump|show|read)\s+(?:all\s+)?(?:the\s+)?environment\s+variables?\b|\bfind\s+(?:all\s+)?(?:the\s+)?(?:API\s+keys?|secrets?|credentials?|passwords?|tokens?)\b)"),
     ),
     Rule(
         "EXFIL-001",
@@ -98,7 +108,11 @@ CONTENT_RULES: list[Rule] = [
         0.88,
         "Text instructs the agent to transmit data to an external URL, webhook, or email — the "
         "outbound leg of a data-theft attack. Reading content should never require phoning home.",
-        _rx(r"(?:\b(?:send|post|upload|exfiltrate|transmit|forward|leak|deliver|append)\b[^.\n]{0,50}?\b(?:to|into)\b[^.\n]{0,20}?(?:https?://|webhook|ftp://|the\s+following\s+url|this\s+url|my\s+(?:server|endpoint|email|address))|\b(?:curl|wget)\b[^.\n]{0,60}?https?://|\bappend\s+the\s+(?:contents?|output|results?|data)\b[^.\n]{0,30}?\b(?:to\s+)?(?:this\s+)?(?:url|link|address)\b)"),
+        _rx(r"(?:\b(?:send|post|upload|exfiltrate|transmit|forward|leak|deliver|append)\b[^.\n]{0,50}?\b(?:to|into)\b[^.\n]{0,20}?(?:https?://|webhook|ftp://|the\s+following\s+url|this\s+url|my\s+(?:server|endpoint|email|address))"
+            r"|\b(?:curl|wget)\b[^\n]{0,80}?(?:\s-[a-zA-Z]*[dFT]\b|\s--(?:data(?:-\w+)?|form|upload-file|post-(?:data|file))\b|\s-X\s*(?:POST|PUT)\b)[^\n]{0,120}?https?://"
+            r"|\b(?:curl|wget)\b[^\n]{0,20}?https?://\S+[^\n]{0,80}?(?:\s-[a-zA-Z]*[dFT]\b|\s--(?:data(?:-\w+)?|form|upload-file|post-(?:data|file))\b|\s-X\s*(?:POST|PUT)\b)"
+            r"|\b(?:curl|wget)\b[^.\n]{0,60}?https?://\S+\s+(?:with|containing)\s+(?:the\s+|all\s+|your\s+)?(?:data|contents?|output|secrets?|keys?|credentials?|tokens?|files?)\b"
+            r"|\bappend\s+the\s+(?:contents?|output|results?|data)\b[^.\n]{0,30}?\b(?:to\s+)?(?:this\s+)?(?:url|link|address)\b)"),
     ),
     Rule(
         "EXFIL-002",
@@ -284,12 +298,12 @@ PREFILTER: dict[str, tuple[str, ...]] = {
     "PI-ROLE-001": ("<system", "[system", "[inst", "im_start", "|>", "system message",
                     "system prompt", "developer message", "developer prompt", "begin system",
                     "# system", "#system"),
-    "PI-ROLE-002": ("dan", "developer mode", "anything now", "jailbreak", "unrestricted",
-                    "no rules", "no restriction", "pretend you"),
+    "PI-ROLE-002": ("dan", "developer mode", "anything now", "jailbreak", "jailbroken", "unrestricted",
+                    "no rules", "no restriction", "pretend you", "as an ai", "as a ai"),
     "PI-AUTHORITY-001": ("note to the", "ai assistant", "ai agent", "ai model", "ai reading",
                         "authorized you", "authorised you", "language model", "if you are an ai",
                         "attention, ai", "attention ai", "agents reading"),
-    "CRED-001": (".env", ".ssh", "id_rsa", ".aws/cred", ".npmrc", ".netrc", "printenv", "print env",
+    "CRED-001": (".env", ".ssh", "id_", ".aws/cred", ".npmrc", ".netrc", "printenv", "print env",
                 "process.env", "environment variable", "find api", "find secret", "find credential",
                 "find password", "find token", "~/.ssh", "secrets.", "credentials"),
     "EXFIL-001": ("send", "post ", "upload", "exfiltrat", "transmit", "forward", "leak", "deliver",

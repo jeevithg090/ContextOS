@@ -1,8 +1,9 @@
-"""Event ingestion (POST /events), synchronous decisions (POST /decide), approval polling, stateless
-scanning (POST /scan), the event log (GET /events) and the live stream (GET /stream).
+"""Event ingestion (POST /events), synchronous decisions (POST /decide), approval polling and
+cancellation, stateless scanning (POST /scan), the event log (GET /events) and the live stream
+(GET /stream).
 
-Authorisation: ``ingest`` for /events, ``decide`` for /decide and approval polling, ``read`` for
-everything else. Writes are committed before the response is returned so a decision the
+Authorisation: ``ingest`` for /events, ``decide`` for /decide and approval polling/cancellation,
+``read`` for everything else. Scopes are checked before the body is validated. Writes are committed before the response is returned so a decision the
 integration receives is always durable (and its approval pollable).
 """
 
@@ -27,6 +28,7 @@ from app.domain.enums import EventType, Permission
 from app.events.bus import bus
 from app.schemas.common import Page
 from app.schemas.events import (
+    ApprovalCancelIn,
     ApprovalPollOut,
     DecisionResponse,
     EventBatch,
@@ -37,7 +39,7 @@ from app.schemas.events import (
     ScanIn,
     ScanOut,
 )
-from app.services import ingestion, ingestion_queries
+from app.services import approvals, ingestion, ingestion_queries
 from app.services.ingestion import AttributionRejectedError, DecisionFailedError, IngestContext
 
 router = APIRouter(prefix="", tags=["events"])
@@ -93,6 +95,22 @@ def poll_approval(approval_id: str, principal: Principal = DECIDE, db: Session =
                            decision_note=approval.decision_note, expires_at=approval.expires_at)
 
 
+@router.post("/decide/approvals/{approval_id}/cancel", response_model=ApprovalPollOut)
+def cancel_approval(
+    approval_id: str, body: ApprovalCancelIn | None = None, principal: Principal = DECIDE,
+    db: Session = Depends(get_db),
+) -> ApprovalPollOut:
+    """Withdraw a pending approval the integration is no longer waiting for (idempotent; 409 once a
+    person decided it or it expired). The held call is recorded as cancelled."""
+    approval = approvals.cancel_approval(
+        db, principal.org_id, approval_id, actor_type=principal.actor_type, actor_id=principal.actor_id,
+        reason=body.reason if body else None, bound_agent_id=principal.bound_agent_id,
+    )
+    db.commit()
+    return ApprovalPollOut(approval_id=approval.id, status=approval.status, decided_at=approval.decided_at,
+                           decision_note=approval.decision_note, expires_at=approval.expires_at)
+
+
 @router.post("/scan", response_model=ScanOut)
 def scan(body: ScanIn, principal: Principal = READ) -> ScanOut:
     """Run secret and prompt-injection detection on content without storing anything."""
@@ -105,7 +123,7 @@ def scan(body: ScanIn, principal: Principal = READ) -> ScanOut:
 @router.get("/events", response_model=Page[IngestedEventOut])
 def list_events(
     agent_id: str | None = None,
-    session_id: str | None = None,
+    session_id: str | None = Query(default=None, description="Server session id or the integration's session id"),
     event_type: EventType | None = None,
     since: datetime | None = Query(default=None, description="Only events received at or after this time"),
     processing_status: str | None = Query(default=None, pattern="^(processed|error)$"),

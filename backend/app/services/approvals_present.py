@@ -201,6 +201,9 @@ def enforcement_note(*, status: str, enforcement: str | None, integration: str |
             return f"Rejected. {who} receives \"rejected\" on its next poll and denies the call."
         if status == ApprovalStatus.EXPIRED:
             return f"Nobody decided before the deadline. {who} treats an expired request as not approved."
+        if status == ApprovalStatus.CANCELLED:
+            return (f"{who} stopped waiting and withdrew this request (for example, its own timeout ran out), so "
+                    "the call was not run on this approval.")
         return f"{who} treats a {status} request as not approved."
     if enforcement == EnforcementMode.ADVISORY:
         return (f"Advisory only. {who} received the approval requirement, but ContextOS cannot confirm that it "

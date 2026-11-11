@@ -26,18 +26,18 @@ from tests.integration.workspace_ai_support import (
 )
 from tests.integration.workspace_support import API, add_member, create_task, get_task, ok
 
-NO_ROOT = "No workspace_root configured — repository files could not be verified"
+NO_ROOT = "No repository root configured — repository files could not be verified"
 
 
 @pytest.fixture()
 def no_root(monkeypatch):
-    monkeypatch.setattr(get_settings(), "workspace_root", None)
+    monkeypatch.setattr(get_settings(), "workspace_repo_root", None)
 
 
 @pytest.fixture()
 def repo(tmp_path, monkeypatch):
     root = make_repo(tmp_path)
-    monkeypatch.setattr(get_settings(), "workspace_root", str(root))
+    monkeypatch.setattr(get_settings(), "workspace_repo_root", str(root))
     return root
 
 

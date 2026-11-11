@@ -112,3 +112,11 @@ export function entityHref(type: string, id: string, opts: { sessionId?: string 
       return null;
   }
 }
+
+/** Scopes the provenance page accepts in its URL (src/features/provenance/scopeParams.ts). */
+export type ProvenanceScope = "session" | "agent" | "item" | "finding";
+
+/** Canonical link to the provenance graph scoped to one record, e.g. `/provenance?item=ctx_…`. */
+export function provenanceHref(scope: ProvenanceScope, id: string): string {
+  return `/provenance?${scope}=${encodeURIComponent(id)}`;
+}

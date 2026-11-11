@@ -2,8 +2,6 @@ import {
   Activity,
   BarChart3,
   Bot,
-  BookOpen,
-  CheckCircle2,
   ClipboardList,
   FileSearch,
   FlaskConical,
@@ -23,7 +21,6 @@ import {
   Siren,
   Sparkles,
   UserCheck,
-  Wrench,
   type LucideIcon,
 } from "lucide-react";
 
@@ -80,5 +77,3 @@ export const NAV: NavSection[] = [
     ],
   },
 ];
-
-export const ICONS = { BookOpen, CheckCircle2, Wrench };

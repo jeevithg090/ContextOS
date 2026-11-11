@@ -6,7 +6,6 @@ tests. Everything happens in the caller's transaction; the caller commits.
 
 from __future__ import annotations
 
-import importlib
 import re
 from typing import Any
 
@@ -16,18 +15,15 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.errors import ConflictError, ValidationFailedError
 from app.core.ids import new_id
-from app.core.logging import get_logger
 from app.core.security import hash_password, verify_password
 from app.domain.enums import Role
-from app.models import Membership, Organization, User
+from app.models import Board, Membership, Organization, User
 from app.schemas.auth import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, clean_name, normalize_email
 from app.services.audit import append_audit
 from app.services.seed import seed_security_defaults
-
-log = get_logger(__name__)
+from app.services.workspace_boards import seed_default_board
 
 _SLUG_MAX = 60
-_BOARDS_MODULE = "app.services.workspace_boards"
 
 
 def default_org_settings() -> dict[str, Any]:
@@ -173,28 +169,16 @@ def create_organization(
 
 
 def seed_org_defaults(db: Session, org_id: str, created_by: str | None = None) -> dict[str, Any]:
-    """Install the built-in policy pack, default trust rules and (when available) the default board.
+    """Install the built-in policy pack, default trust rules and the default Engineering Workspace boards.
 
     Idempotent. Returns counts of what was created.
     """
     result: dict[str, Any] = dict(seed_security_defaults(db, org_id))
-    result["default_board"] = _seed_default_board(db, org_id, created_by)
+    boards = seed_default_board(db, org_id, created_by)
+    result["default_board"] = bool(boards) or _has_boards(db, org_id)
+    result["boards_created"] = len(boards)
     return result
 
 
-def _seed_default_board(db: Session, org_id: str, created_by: str | None) -> bool:
-    try:
-        workspace_boards = importlib.import_module(_BOARDS_MODULE)
-    except ModuleNotFoundError as exc:
-        # Only tolerate the Engineering Workspace service itself being absent; a missing dependency
-        # *inside* it is a real error.
-        if exc.name != _BOARDS_MODULE:
-            raise
-        log.warning("bootstrap.default_board_unavailable", extra={"org_id": org_id, "reason": "module not installed"})
-        return False
-    seed = getattr(workspace_boards, "seed_default_board", None)
-    if seed is None:
-        log.warning("bootstrap.default_board_unavailable", extra={"org_id": org_id, "reason": "seed_default_board missing"})
-        return False
-    seed(db, org_id, created_by)
-    return True
+def _has_boards(db: Session, org_id: str) -> bool:
+    return db.scalar(select(func.count()).select_from(Board).where(Board.organization_id == org_id)) > 0

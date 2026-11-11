@@ -210,13 +210,16 @@ def handle_mcp_connected(st: PipelineState) -> None:
         sections.append(f"Tool {spec['name']}: {spec['description']}")
     if poisoned:
         st.refs["poisoned_tool_ids"] = poisoned
-    record_context(st, ContextInput(
+    outcome = record_context(st, ContextInput(
         source_type=SourceType.MCP_SERVER.value, identifier=server, display_name=env.source.display_name,
         raw_text="\n\n".join(sections), source_metadata={**(env.source.metadata or {}), "tool_count": len(tools)},
         item_metadata={"kind": "mcp_tool_listing", "tool_count": len(tools),
                        "tool_names": [t["name"] for t in tools][:100]},
         extra_evidence=extra,
     ))
+    # The server's classification after this listing, so a gateway can hide a BLOCKED server's tools
+    # without a separate read of the source (the value is the server's, never the client's).
+    st.refs["source_trust_level"] = outcome.source.trust_level
 
 
 def mcp_server_ceiling(st: PipelineState, server: str | None) -> tuple[str, str] | None:

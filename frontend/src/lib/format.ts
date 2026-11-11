@@ -1,8 +1,6 @@
 import { formatDistanceToNowStrict, format } from "date-fns";
 
-export function cn(...parts: Array<string | false | null | undefined>): string {
-  return parts.filter(Boolean).join(" ");
-}
+export { cn } from "./cn";
 
 export function timeAgo(iso?: string | null): string {
   if (!iso) return "—";

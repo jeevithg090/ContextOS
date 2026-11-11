@@ -59,7 +59,10 @@ class PolicyDecision(OrgScopedMixin, Base):
     """
 
     __tablename__ = "policy_decisions"
-    __table_args__ = (Index("ix_policy_decisions_org_session", "organization_id", "session_id"),)
+    __table_args__ = (
+        Index("ix_policy_decisions_org_session", "organization_id", "session_id"),
+        Index("ix_policy_decisions_org_evaluated", "organization_id", "evaluated_at"),  # retention, time ranges
+    )
 
     id: Mapped[str] = id_column()
     agent_id: Mapped[str] = mapped_column(String(40), index=True)

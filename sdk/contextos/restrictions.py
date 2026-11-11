@@ -9,7 +9,8 @@ it cannot honour turns RESTRICT into a denial:
 
 - unknown restriction keys, or an empty restriction set;
 - path globs on tools whose paths are hidden inside a command (shell / code execution /
-  infrastructure categories) — the SDK cannot see which files such a call touches;
+  infrastructure categories, or any call with a program-like argument such as ``command``,
+  ``script`` or ``code``) — the SDK cannot see which files such a call touches;
 - ``redact_secrets`` when the masked arguments cannot be re-checked by the server, or the server
   still detects a secret the SDK could not mask.
 
@@ -37,6 +38,11 @@ from contextos.redact import mask_value
 
 KNOWN_KEYS = frozenset({"redact_secrets", "allowed_path_globs", "deny_path_globs", "max_argument_bytes"})
 OPAQUE_PATH_CATEGORIES = frozenset({"shell", "code_execution", "infrastructure"})
+# Argument names that hold a program: whatever files it touches are not visible as arguments.
+OPAQUE_ARGUMENT_NAMES = frozenset({
+    "command", "commands", "cmd", "script", "code", "shell", "bash", "sh", "powershell", "program",
+    "exec", "argv", "cmdline", "command_line",
+})
 
 _PATH_NAME_RE = re.compile(
     r"(?:^|_)(?:path|paths|file|files|filename|filenames|filepath|dir|dirs|directory|folder|dest|src|"
@@ -185,6 +191,10 @@ def apply_restrictions(
     if allowed is not None or denied:
         if (category_hint or "").lower() in OPAQUE_PATH_CATEGORIES:
             return deny(f"path restrictions cannot be checked for a {category_hint} tool (paths are hidden in the command)")
+        program = opaque_argument(current)
+        if program is not None:
+            return deny(f"path restrictions cannot be checked for a call with a '{program}' argument (the files a "
+                        "program touches are not visible in its arguments)")
         if (allowed is not None and not isinstance(allowed, list)) or (denied is not None and not isinstance(denied, list)):
             return deny("path restrictions are malformed")
         problem = check_paths(extract_paths(current, path_args), allowed, denied, cwd)
@@ -202,6 +212,11 @@ def apply_restrictions(
         applied.append(f"arguments are {size} bytes (limit {limit})")
 
     return RestrictionOutcome(True, current, applied=applied, redacted_types=sorted(set(redacted)))
+
+
+def opaque_argument(arguments: Mapping[str, Any]) -> str | None:
+    """The first top-level argument whose name says it holds a program (``command``, ``script``...)."""
+    return next((str(name) for name in arguments if str(name).lower() in OPAQUE_ARGUMENT_NAMES), None)
 
 
 def scan_reports_secrets(response: Any) -> bool | None:
@@ -230,11 +245,13 @@ def scan_reports_secrets(response: Any) -> bool | None:
 
 __all__ = [
     "KNOWN_KEYS",
+    "OPAQUE_ARGUMENT_NAMES",
     "OPAQUE_PATH_CATEGORIES",
     "RestrictionOutcome",
     "apply_restrictions",
     "check_paths",
     "extract_paths",
+    "opaque_argument",
     "path_forms",
     "scan_reports_secrets",
 ]

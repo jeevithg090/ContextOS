@@ -42,6 +42,7 @@ from app.services.trust_service_common import (
     rules_by_id,
 )
 from app.services.trust_service_history import DESTINATION_TARGET
+from app.services.trust_service_simulation import real_destination_filter, simulation_only_destinations
 from app.services.trust_service_sources import finding_ref
 
 INVOCATIONS_SHOWN = 20
@@ -69,11 +70,16 @@ def list_destinations(
     kind: str | None = None,
     q: str | None = None,
     has_blocked: bool | None = None,
+    include_simulated: bool = False,
     sort: str = "-last_seen",
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Destination], int]:
+    """Destinations of the organisation; ones only simulated calls were sent to are left out unless
+    ``include_simulated``."""
     stmt = scoped(Destination, org_id)
+    if not include_simulated:
+        stmt = stmt.where(real_destination_filter(org_id))
     if classifications:
         stmt = stmt.where(Destination.classification.in_(classifications))
     if kind:
@@ -99,7 +105,7 @@ def _verification_summary(checks: list[Any]) -> dict[str, int]:
     return out
 
 
-def destination_out(row: Destination, rules: dict[str, TrustRule]) -> dict[str, Any]:
+def destination_out(row: Destination, rules: dict[str, TrustRule], *, simulation_only: bool = False) -> dict[str, Any]:
     rule = rules.get(row.trust_rule_id or "")
     return {
         "id": row.id,
@@ -116,12 +122,14 @@ def destination_out(row: Destination, rules: dict[str, TrustRule]) -> dict[str, 
         "first_seen_at": row.first_seen_at,
         "last_seen_at": row.last_seen_at,
         "verification": _verification_summary(row.verification or []),
+        "is_simulation": simulation_only,
     }
 
 
 def destinations_out(db: Session, org_id: str, rows: list[Destination]) -> list[dict[str, Any]]:
     rules = rules_by_id(db, org_id, [r.trust_rule_id for r in rows])
-    return [destination_out(r, rules) for r in rows]
+    simulated = simulation_only_destinations(db, org_id, [r.id for r in rows])
+    return [destination_out(r, rules, simulation_only=r.id in simulated) for r in rows]
 
 
 def get_destination(db: Session, org_id: str, destination_id: str) -> Destination:
@@ -193,7 +201,8 @@ def destination_detail(db: Session, org_id: str, row: Destination) -> dict[str, 
         .order_by(SecurityFinding.last_seen_at.desc()).limit(FINDINGS_SHOWN)
     ))
     return {
-        **destination_out(row, rules_by_id(db, org_id, [row.trust_rule_id])),
+        **destination_out(row, rules_by_id(db, org_id, [row.trust_rule_id]),
+                          simulation_only=row.id in simulation_only_destinations(db, org_id, [row.id])),
         "checks": [dict(c) for c in (row.verification or []) if isinstance(c, dict)],
         "assessment": destination_assessment_out(assessment, rules, row.kind, row.identifier),
         "stale": assessment.classification != row.classification,

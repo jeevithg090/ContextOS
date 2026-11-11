@@ -313,3 +313,9 @@ class ModesOut(BaseModel):
     repository_configured: bool
     external_transfer: Literal[False] = False
     privacy_note: str = PRIVACY_NOTE
+    # Set when the catalogue is requested for a task (``?task_id=``): the context-pack profile the server
+    # would pick for that task in the requested mode (default implement_fix), and for every mode.
+    task_id: str | None = None
+    mode: PromptModeName | None = None
+    suggested_profile: ProfileName | None = None
+    suggested_profiles: dict[str, ProfileName] = Field(default_factory=dict)

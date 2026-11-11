@@ -37,6 +37,7 @@ PREFIXES: dict[str, str] = {
     "ingested_event": "evt",
     "integration": "int",
     "simulation_run": "sim",
+    "suite_run": "srn",
     "board": "brd",
     "board_column": "col",
     "task": "tsk",

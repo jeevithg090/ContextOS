@@ -3,6 +3,7 @@ import { Check, Fingerprint, Hash, KeyRound, Radio, ScrollText, ShieldOff, TextQ
 import { Section } from "@/components/data";
 import { Checkbox, Input, useToast } from "@/components/ui";
 import { useUpdateOrgSettings, type Org } from "./api";
+import { RetentionScope } from "./RetentionScope";
 import { AdminOnlyNotice, SaveBar, SettingRow } from "./SettingsControls";
 import { useSettingsDraft } from "./useSettingsDraft";
 
@@ -120,7 +121,7 @@ export function PrivacyTab({ org, canAdmin }: { org: Org; canAdmin: boolean }) {
             <SettingRow
               title="Retention period"
               htmlFor="retention-days"
-              description="How long recorded events, context and decisions should be kept. Data older than this is eligible for deletion."
+              description="How long recorded events, context, tool calls and decisions are kept. Older data is deleted the next time the purge command runs — see below for exactly what it removes."
             >
               <div className="flex flex-wrap items-center gap-3">
                 <div className="relative w-36">
@@ -144,6 +145,9 @@ export function PrivacyTab({ org, canAdmin }: { org: Org; canAdmin: boolean }) {
                 </span>
               </div>
             </SettingRow>
+            <div className="py-4">
+              <RetentionScope days={retentionError ? null : values.retention_days} />
+            </div>
             <SettingRow
               title="Store redacted previews"
               description="When off, new context and tool calls are recorded without preview text — as hashes, fingerprints and metadata only. Existing previews are not removed."

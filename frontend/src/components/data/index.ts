@@ -3,7 +3,7 @@
  * Primitives and status badges live in "@/components/ui".
  */
 export { EntityLink, type EntityLinkProps } from "./EntityLink";
-export { ENTITY_META, ENTITY_TYPES, entityHref, entityTypeLabel, isEntityType, type EntityMeta, type EntityType } from "./entityRoutes";
+export { ENTITY_META, ENTITY_TYPES, entityHref, entityTypeLabel, isEntityType, provenanceHref, type EntityMeta, type EntityType, type ProvenanceScope } from "./entityRoutes";
 
 export { JsonView, type JsonViewProps } from "./JsonView";
 export { CodeBlock, type CodeBlockProps } from "./CodeBlock";

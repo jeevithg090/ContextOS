@@ -306,6 +306,8 @@ class PostureBasisOut(BaseModel):
     sessions_with_trifecta: int
     total_sessions: int
     integration_kind: str | None
+    # connected | stale (no event for 24 hours) | never_seen | error; None without an integration
+    integration_health: str | None = None
     supports_enforcement: bool
     decisions_by_enforcement: dict[str, int]
 

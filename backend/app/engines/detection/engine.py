@@ -37,6 +37,7 @@ _OBFUSCATION = {"zero_width", "homoglyph", "base64", "url_encoded", "html_commen
 _SEV_ORDER = [Severity.INFO, Severity.LOW, Severity.MEDIUM, Severity.HIGH, Severity.CRITICAL]
 
 MAX_CONTENT_CHARS = 1_000_000  # hard cap to bound worst-case scan time
+DESCRIBED_SUFFIX = " (described, not issued)"
 
 _classifier: Classifier | None = None
 CLASSIFIER_THRESHOLD = 0.8
@@ -97,18 +98,34 @@ def _concealed_technique(start: int, end: int, hidden_ranges: list[tuple[int, in
     return None
 
 
+class _ViewContext:
+    """A view plus its lazily computed benign ranges. Every view — not only the original text — is
+    checked for descriptive context in its own text, so an explanatory example that is also visible
+    through a decoded, extracted or re-flowed view is not reported at full severity there."""
+
+    __slots__ = ("_ranges", "view")
+
+    def __init__(self, view: normalize.View, ranges: list[tuple[int, int]] | None = None) -> None:
+        self.view = view
+        self._ranges = ranges
+
+    def is_benign(self, start: int, end: int) -> bool:
+        if self._ranges is None:
+            self._ranges = _benign_ranges(self.view.text)
+        return _is_benign(self.view.text, start, end, self._ranges)
+
+
 def _match_rule(
     rule: Rule,
-    view: normalize.View,
-    benign_ranges: list[tuple[int, int]],
+    ctx: _ViewContext,
     hidden_ranges: list[tuple[int, int, str]],
-    plain_text: str,
 ) -> list[DetectionHit]:
     # One hit per rule per view is sufficient (dedup keeps the best overall). Prefer a non-benign
     # match — the highest-severity outcome for the rule — and stop scanning as soon as one is found.
+    view = ctx.view
     best: tuple[bool, int, int] | None = None
     for m in rule.pattern.finditer(view.text):
-        benign = view.has_offsets and _is_benign(plain_text, m.start(), m.end(), benign_ranges)
+        benign = ctx.is_benign(m.start(), m.end())
         if best is None or (best[0] and not benign):
             best = (benign, m.start(), m.end())
         if not benign:
@@ -135,7 +152,7 @@ def _match_rule(
         confidence = round(min(confidence, 0.35), 3)
         explanation = "Appears to be describing an attack rather than issuing it (code block, quote, or " \
                       "explanatory text). Reported at low severity so it is visible but not alarming."
-        title = f"{rule.title} (described, not issued)"
+        title = f"{rule.title}{DESCRIBED_SUFFIX}"
 
     return [
         DetectionHit(
@@ -154,11 +171,13 @@ def _match_rule(
 
 def _apply_obfuscation_bump(hits: list[DetectionHit]) -> list[DetectionHit]:
     """A rule seen ONLY through an obfuscation layer (never in plain text) is elevated: hiding the
-    instruction is itself evidence of intent."""
+    instruction is itself evidence of intent. A hit dampened as *described, not issued* is not: an
+    explanatory example inside an HTML comment or collapsed section is still an example."""
     plain_rules = {h.rule_id for h in hits if h.technique == "plain"}
     out: list[DetectionHit] = []
     for h in hits:
-        if h.rule_id not in plain_rules and h.technique in _OBFUSCATION and not h.technique.startswith("multilingual"):
+        if (h.rule_id not in plain_rules and h.technique in _OBFUSCATION and not h.technique.startswith("multilingual")
+                and not h.title.endswith(DESCRIBED_SUFFIX)):
             out.append(
                 replace(
                     h,
@@ -184,9 +203,10 @@ def analyze_content(text: str, *, source_type: str | None = None, content_type: 
     raw: list[DetectionHit] = []
     for view in views:
         low = view.text.lower()
+        ctx = _ViewContext(view, benign_ranges if view.has_offsets else None)
         for rule in ALL_CONTENT_RULES:
             if rule_applies(rule.rule_id, low):
-                raw.extend(_match_rule(rule, view, benign_ranges, hidden_ranges, truncated))
+                raw.extend(_match_rule(rule, ctx, hidden_ranges))
 
     raw = _apply_obfuscation_bump(raw)
     hits = dedupe_best(raw)
@@ -282,6 +302,9 @@ def analyze_tool_request(
     views = [normalize.View("plain", plain_blob, has_offsets=True)]
     if normalized != plain_blob:
         views.append(normalize.View("homoglyph", normalized))
+    # An encoded command (`echo <base64> | base64 -d | sh`) is also matched on what it decodes to.
+    for segment in normalize.decode_base64_segments(normalized):
+        views.append(normalize.View("base64", segment))
 
     raw: list[DetectionHit] = []
     for view in views:

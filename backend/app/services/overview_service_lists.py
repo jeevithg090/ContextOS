@@ -8,7 +8,7 @@ and is passed through the redaction engine again here, then truncated, before it
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import case, func, or_, select
@@ -43,11 +43,11 @@ from app.models import (
 from app.services.approvals_present import describe_action
 from app.services.findings import ACTIVE_STATUSES
 from app.services.ingestion_state import ENFORCING_INTEGRATIONS
+from app.services.integrations_health import is_stale
 
 OPEN_INCIDENT_STATUSES = frozenset({
     IncidentStatus.OPEN.value, IncidentStatus.INVESTIGATING.value, IncidentStatus.CONTAINED.value,
 })
-STALE_AFTER = timedelta(hours=24)
 RISKY_AGENTS = 5
 _SESSION_CANDIDATES = 10
 ATTENTION_ITEMS = 5
@@ -281,7 +281,7 @@ def _health(row: Integration, now: datetime) -> tuple[str, str]:
         return "error", "The integration reported an error."
     if last is None:
         return "never_seen", "Registered, but no event has arrived yet."
-    if now - last > STALE_AFTER:
+    if is_stale(last, now):
         return "stale", "No events in the last 24 hours."
     return "connected", "Sent events in the last 24 hours."
 

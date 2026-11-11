@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -61,8 +61,9 @@ def list_events(
     query = _event_query(org_id, bound_agent_id)
     if agent_id:
         query = query.where(IngestedEvent.agent_id == agent_id)
-    if session_id:
-        query = query.where(IngestedEvent.session_id == session_id)
+    if session_id:  # the server session id, or the integration's own session id (e.g. Claude Code's)
+        query = query.where(or_(IngestedEvent.session_id == session_id,
+                                AgentSession.external_session_id == session_id))
     if event_type:
         query = query.where(IngestedEvent.event_type == event_type)
     if since is not None:
@@ -96,24 +97,28 @@ def poll_approval(db: Session, org_id: str, approval_id: str, *, bound_agent_id:
 
 
 def scan_content(content: str, *, source_type: str | None, content_type: str | None) -> dict[str, Any]:
-    """Detection + secret scan of ad-hoc content. Persists nothing; returns only redacted text."""
+    """Detection + secret scan of ad-hoc content. Persists nothing; returns only redacted text.
+
+    ``hits`` (also under ``detection.hits``) carry the detection fields with redacted excerpts;
+    ``secrets`` lists one entry per secret found, with its type, confidence and character offsets
+    into the submitted content — never the value or its fingerprint.
+    """
     redaction = redact_text(content)
     raw_secrets = [content[m.start : m.end] for m in redaction.matches if m.end - m.start >= 6]
     result = analyze_content(content, source_type=source_type, content_type=content_type)
     summary = result.to_summary()
-    summary["hits"] = [
+    hits = [
         {"rule_id": h.rule_id, "category": h.category, "title": h.title, "severity": h.severity,
          "confidence": h.confidence, "explanation": h.explanation, "technique": h.technique,
          "excerpt": scrub_fragments(h.excerpt, raw_secrets)}
         for h in result.hits
     ]
-    secrets: dict[tuple[str, str], float] = {}
-    for m in redaction.matches:
-        key = (m.secret_type, m.fingerprint)
-        secrets[key] = max(secrets.get(key, 0.0), m.confidence)
+    summary["hits"] = hits
     return {
         "detection": summary,
-        "secrets": [{"type": t, "confidence": c} for (t, _fp), c in secrets.items()],
+        "hits": hits,
+        "secrets": [{"type": m.secret_type, "start": m.start, "end": m.end, "confidence": m.confidence}
+                    for m in redaction.matches],
         "sensitivity": str(classify_sensitivity(content, redaction.matches)),
         "content_length": len(content),
         "content_sha256": sha256_hex(content),

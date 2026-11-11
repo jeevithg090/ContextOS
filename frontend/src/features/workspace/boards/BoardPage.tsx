@@ -200,7 +200,7 @@ export function BoardPage() {
       )}
       {columnDialog?.kind === "delete" && <DeleteColumnDialog boardId={data.id} column={columnDialog.column} columns={columns} onClose={() => setColumnDialog(null)} />}
       {settingsOpen && <BoardSettingsDialog board={data} onClose={() => setSettingsOpen(false)} />}
-      <CreateTaskDialog open={creating} onOpenChange={setCreating} boardId={data.id} />
+      <CreateTaskDialog open={creating} onOpenChange={setCreating} boardId={data.id} onCreated={openTask} />
       <TaskDrawer taskId={taskId} onClose={() => set({ task: null })} />
       {conflictDialog}
     </div>

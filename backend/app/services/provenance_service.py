@@ -1,20 +1,19 @@
-"""Provenance / Context Trust Graph: scope collection, node resolution, risky paths, inspector detail.
+"""Provenance / Context Trust Graph: graph assembly, risky paths, inspector detail and scope picker.
 
-Edges come from ``ProvenanceEdge`` rows recorded by the ingestion pipeline (``observed`` or ``inferred``)
-plus, for findings no edge points at, the subject stored on the finding row itself
-(``basis="finding_record"``). None of them is a causal claim — see ``OBSERVED_RELATIONSHIP_NOTE``.
+Scope collection (which recorded relationships belong to a session, agent, item or finding) lives
+in ``provenance_scope``; node resolution in ``provenance_nodes``. Edges are observed relationships
+recorded by the ingestion pipeline (or the subject stored on a finding); none of them is a causal
+claim — see ``OBSERVED_RELATIONSHIP_NOTE``.
 
 Every query filters on the caller's organisation; ids from another organisation resolve to 404.
-Graphs are bounded: at most ``_MAX_EDGES`` edges are read and at most ``limit`` nodes returned. Nodes on
+Graphs are bounded: at most ``MAX_EDGES`` edges are read and at most ``limit`` nodes returned. Nodes on
 risky paths and the scope root are kept first, so truncation never hides the paths it reports.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
-from datetime import datetime
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import and_, func, or_, select
@@ -24,14 +23,7 @@ from app.core.errors import NotFoundError, ValidationFailedError
 from app.core.security import sha256_hex
 from app.domain.enums import SEVERITY_RANK, TRUST_RANK, ProvenanceNodeType, ProvenanceRelation
 from app.engines.provenance import OBSERVED_RELATIONSHIP_NOTE, build_graph, find_risky_paths
-from app.models import (
-    Agent,
-    AgentSession,
-    ContextItem,
-    ContextSource,
-    ProvenanceEdge,
-    SecurityFinding,
-)
+from app.models import Agent, AgentSession, ContextItem, ProvenanceEdge, SecurityFinding
 from app.schemas.provenance import (
     GraphEdgeOut,
     GraphNodeOut,
@@ -48,7 +40,25 @@ from app.schemas.provenance import (
     ScopeSessionOut,
 )
 from app.services import provenance_nodes as nodes_mod
-from app.services.scoping import find_scoped, get_scoped, scoped
+from app.services.provenance_scope import (
+    FINDING_EVIDENCE,
+    HIGH_RISK_SCORE,
+    MAX_EDGES,
+    Collected,
+    Key,
+    RawEdge,
+    agent_scope,
+    auto_scope,
+    finding_record_edges,
+    finding_scope,
+    findings_where,
+    graph_id,
+    item_scope,
+    raw_edge,
+    recent_activity,
+    session_scope,
+)
+from app.services.scoping import get_scoped, scoped
 
 N = ProvenanceNodeType
 R = ProvenanceRelation
@@ -56,14 +66,9 @@ PE = ProvenanceEdge
 NODE_TYPES = {t.value for t in N}
 DEFAULT_NODE_LIMIT = 400
 DEFAULT_DEPTH = 2
-FINDING_EVIDENCE = "finding_evidence"
-HIGH_RISK_SCORE = 50  # engines.risk: score >= 50 is "high"
-_MAX_EDGES = 3000
-_MAX_SCOPE_SESSIONS = 40
-_MAX_FINDINGS = 200
+MAX_PATHS = 25
+_MAX_PATH_DEPTH = 8
 _MAX_LINKS = 60
-_CHUNK = 400
-_HUB_TYPES = {N.AGENT.value, N.TOOL.value}  # link unrelated sessions; never expanded through
 _TYPE_PRIORITY = {"session": 0, "finding": 1, "context_item": 1, "tool_invocation": 1, "source": 2,
                   "destination": 2, "resource": 3, "policy_decision": 4, "tool": 5, "agent": 5}
 RELATION_LABELS = {
@@ -82,225 +87,10 @@ RELATION_LABELS = {
     FINDING_EVIDENCE: "recorded as finding evidence",
 }
 
-Key = tuple[str, str]  # (node type, record id)
-
-
-def graph_id(k: Key) -> str:
-    return f"{k[0]}:{k[1]}"
-
-
-@dataclass
-class RawEdge:
-    id: str
-    src: Key
-    dst: Key
-    relation: str
-    confidence: str
-    observed_at: datetime | None
-    session_id: str | None
-    basis: str = "provenance_edge"
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-def _raw(e: ProvenanceEdge) -> RawEdge:
-    return RawEdge(e.id, (e.src_type, e.src_id), (e.dst_type, e.dst_id), e.relation, e.confidence or "observed",
-                   e.observed_at, e.session_id, metadata=e.edge_metadata or {})
-
-
-@dataclass
-class Collected:
-    scope: GraphScopeOut
-    edges: dict[str, RawEdge]
-    roots: set[Key]
-    truncation: str | None = None
-
-
-def _chunks(values: Iterable[str]) -> Iterable[list[str]]:
-    items = list(values)
-    for i in range(0, len(items), _CHUNK):
-        yield items[i:i + _CHUNK]
-
-
-# -- finding-record edges -------------------------------------------------------------------------
-
-
-def _finding_record_edges(db: Session, org_id: str, findings: list[SecurityFinding]) -> list[RawEdge]:
-    """Link findings that no provenance edge points at to the subject recorded on the finding."""
-    if not findings:
-        return []
-    linked: set[str] = set()
-    for chunk in _chunks(f.id for f in findings):
-        linked.update(db.scalars(select(PE.dst_id).where(
-            PE.organization_id == org_id, PE.dst_type == N.FINDING.value, PE.dst_id.in_(chunk))))
-    out: list[RawEdge] = []
-    for f in findings:
-        if f.id in linked:
-            continue
-        if f.tool_invocation_id:
-            subject: Key = (N.TOOL_INVOCATION.value, f.tool_invocation_id)
-        elif f.context_item_id:
-            subject = (N.CONTEXT_ITEM.value, f.context_item_id)
-        elif f.session_id:
-            subject = (N.SESSION.value, f.session_id)
-        else:
-            continue
-        out.append(RawEdge(f"fr_{f.id}", subject, (N.FINDING.value, f.id), FINDING_EVIDENCE, "observed",
-                           f.first_seen_at, f.session_id, basis="finding_record"))
-    return out
-
-
-def _findings_where(db: Session, org_id: str, *conditions: Any) -> list[SecurityFinding]:
-    return list(db.scalars(scoped(SecurityFinding, org_id).where(*conditions)
-                           .order_by(SecurityFinding.last_seen_at.desc()).limit(_MAX_FINDINGS)))
-
-
-# -- scope collection -----------------------------------------------------------------------------
-
-
-def _related_sessions(db: Session, org_id: str, root: AgentSession) -> list[str]:
-    """The session, its delegating ancestors and its delegated descendants (bounded)."""
-    ids, seen = [root.id], {root.id}
-    current = root
-    while current.parent_session_id and len(ids) < _MAX_SCOPE_SESSIONS:
-        parent = find_scoped(db, AgentSession, current.parent_session_id, org_id)
-        if parent is None or parent.id in seen:
-            break
-        ids.insert(0, parent.id)
-        seen.add(parent.id)
-        current = parent
-    frontier = [root.id]
-    while frontier and len(ids) < _MAX_SCOPE_SESSIONS:
-        children = db.scalars(scoped(AgentSession, org_id).where(AgentSession.parent_session_id.in_(frontier))
-                              .with_only_columns(AgentSession.id).limit(_MAX_SCOPE_SESSIONS - len(ids)))
-        frontier = [c for c in children if c not in seen]
-        seen.update(frontier)
-        ids.extend(frontier)
-    return ids
-
-
-def _session_edges(db: Session, org_id: str, ids: list[str]) -> tuple[dict[str, RawEdge], bool]:
-    cond = or_(PE.session_id.in_(ids), and_(PE.src_type == N.SESSION.value, PE.src_id.in_(ids)),
-               and_(PE.dst_type == N.SESSION.value, PE.dst_id.in_(ids)))
-    rows = list(db.scalars(scoped(PE, org_id).where(cond).order_by(PE.observed_at.desc(), PE.id).limit(_MAX_EDGES + 1)))
-    edges = {r.id: _raw(r) for r in rows[:_MAX_EDGES]}
-    for e in _finding_record_edges(db, org_id, _findings_where(db, org_id, SecurityFinding.session_id.in_(ids))):
-        edges[e.id] = e
-    return edges, len(rows) > _MAX_EDGES
-
-
-def _expand(db: Session, org_id: str, seeds: set[Key], depth: int) -> tuple[dict[str, RawEdge], bool]:
-    """Edges within ``depth`` hops of ``seeds`` in either direction (agents and tools are not crossed)."""
-    edges: dict[str, RawEdge] = {}
-    seen, frontier = set(seeds), set(seeds)
-    for _ in range(depth):
-        by_type: dict[str, list[str]] = defaultdict(list)
-        for node_type, ref in frontier:
-            if node_type not in _HUB_TYPES:
-                by_type[node_type].append(ref)
-        if not by_type:
-            break
-        conds = [cond for node_type, refs in by_type.items() for chunk in _chunks(refs) for cond in (
-            and_(PE.src_type == node_type, PE.src_id.in_(chunk)), and_(PE.dst_type == node_type, PE.dst_id.in_(chunk)))]
-        rows = db.scalars(scoped(PE, org_id).where(or_(*conds)).order_by(PE.observed_at.desc(), PE.id).limit(_MAX_EDGES + 1))
-        frontier = set()
-        for row in rows:
-            if row.id in edges:
-                continue
-            if len(edges) >= _MAX_EDGES:
-                return edges, True
-            raw = edges[row.id] = _raw(row)
-            for end in (raw.src, raw.dst):
-                if end not in seen:
-                    seen.add(end)
-                    frontier.add(end)
-    return edges, False
-
-
-def _sessions_in(edges: dict[str, RawEdge]) -> list[str]:
-    return sorted({end[1] for e in edges.values() for end in (e.src, e.dst) if end[0] == N.SESSION.value})
-
-
-def _agent_name(db: Session, org_id: str, agent_id: str) -> str:
-    agent = find_scoped(db, Agent, agent_id, org_id)
-    return agent.name if agent else "Unknown agent"
-
-
-def _session_scope(db: Session, org_id: str, session: AgentSession, reason: str | None = None) -> Collected:
-    ids = _related_sessions(db, org_id, session)
-    edges, capped = _session_edges(db, org_id, ids)
-    extra = len(ids) - 1
-    label = f"{_agent_name(db, org_id, session.agent_id)} · {session.external_session_id}"
-    scope = GraphScopeOut(
-        kind="session", id=session.id,
-        label=label + (f" (+{extra} session{'s' * (extra > 1)} linked by delegation)" if extra else ""),
-        auto_selected=reason is not None, reason=reason, session_ids=ids,
-        root_node_ids=[graph_id((N.SESSION.value, session.id))], is_simulation=session.is_simulation,
-    )
-    return Collected(scope, edges, {(N.SESSION.value, session.id)},
-                     f"Only the {_MAX_EDGES} most recent relationships were read." if capped else None)
-
-
-def _recent() -> Any:
-    return func.coalesce(AgentSession.last_event_at, AgentSession.started_at)
-
-
-def _agent_scope(db: Session, org_id: str, agent: Agent) -> Collected:
-    base = scoped(AgentSession, org_id).where(AgentSession.agent_id == agent.id)
-    sessions = list(db.scalars(base.order_by(_recent().desc()).limit(_MAX_SCOPE_SESSIONS)))
-    total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
-    ids = [s.id for s in sessions]
-    edges, capped = _session_edges(db, org_id, ids) if ids else ({}, False)
-    notes = []
-    if total > len(ids):
-        notes.append(f"Showing the {len(ids)} most recent of {total} sessions.")
-    if capped:
-        notes.append(f"Only the {_MAX_EDGES} most recent relationships were read.")
-    scope = GraphScopeOut(kind="agent", id=agent.id, label=agent.name, session_ids=ids,
-                          root_node_ids=[graph_id((N.AGENT.value, agent.id))], is_simulation=agent.is_simulation)
-    return Collected(scope, edges, {(N.AGENT.value, agent.id)}, " ".join(notes) or None)
-
-
-def _item_scope(db: Session, org_id: str, item: ContextItem, depth: int) -> Collected:
-    root = (N.CONTEXT_ITEM.value, item.id)
-    edges, capped = _expand(db, org_id, {root}, depth)
-    for e in _finding_record_edges(db, org_id, _findings_where(db, org_id, SecurityFinding.context_item_id == item.id)):
-        edges[e.id] = e
-    source = find_scoped(db, ContextSource, item.source_id, org_id)
-    label = f"Context from {nodes_mod.compact(source.display_name or source.identifier) if source else 'unknown source'}"
-    scope = GraphScopeOut(kind="context_item", id=item.id, label=label, session_ids=_sessions_in(edges), depth=depth,
-                          root_node_ids=[graph_id(root)], is_simulation=item.is_simulation)
-    return Collected(scope, edges, {root}, f"Only the first {_MAX_EDGES} relationships were read." if capped else None)
-
-
-def _finding_scope(db: Session, org_id: str, finding: SecurityFinding, depth: int) -> Collected:
-    root = (N.FINDING.value, finding.id)
-    seeds = {root}
-    for node_type, ref in ((N.CONTEXT_ITEM, finding.context_item_id), (N.TOOL_INVOCATION, finding.tool_invocation_id),
-                           (N.DESTINATION, finding.destination_id)):
-        if ref:
-            seeds.add((node_type.value, ref))
-    if len(seeds) == 1 and finding.session_id:
-        seeds.add((N.SESSION.value, finding.session_id))
-    edges, capped = _expand(db, org_id, seeds, depth)
-    for e in _finding_record_edges(db, org_id, [finding]):
-        edges[e.id] = e
-    scope = GraphScopeOut(kind="finding", id=finding.id, label=finding.title, session_ids=_sessions_in(edges), depth=depth,
-                          root_node_ids=[graph_id(root)], is_simulation=finding.is_simulation)
-    return Collected(scope, edges, {root}, f"Only the first {_MAX_EDGES} relationships were read." if capped else None)
-
-
-def _auto_scope(db: Session, org_id: str) -> Collected | None:
-    """No scope requested: the most recent high-risk session (real activity before simulations)."""
-    order = (AgentSession.is_simulation.asc(), _recent().desc())
-    risky = db.scalar(scoped(AgentSession, org_id).where(AgentSession.risk_score >= HIGH_RISK_SCORE).order_by(*order).limit(1))
-    if risky is not None:
-        return _session_scope(db, org_id, risky, f"No scope was chosen, so this is the most recent high-risk session "
-                                                 f"(risk {risky.risk_score}/100).")
-    latest = db.scalar(scoped(AgentSession, org_id).order_by(*order).limit(1))
-    if latest is None:
-        return None
-    return _session_scope(db, org_id, latest, "No scope was chosen and no high-risk session has been recorded, "
-                                              "so this is the most recent session.")
+__all__ = [
+    "DEFAULT_DEPTH", "DEFAULT_NODE_LIMIT", "HIGH_RISK_SCORE", "MAX_EDGES", "RELATION_LABELS", "RawEdge",
+    "build_provenance_graph", "graph_id", "node_detail", "risky_paths_for_session", "scope_options",
+]
 
 
 # -- assembly -------------------------------------------------------------------------------------
@@ -337,13 +127,18 @@ def _path_out(path: Any) -> RiskyPathOut:
     return RiskyPathOut(id="rp_" + sha256_hex("|".join(path.edge_ids))[:16], **data)
 
 
-def _assemble(db: Session, org_id: str, col: Collected, limit: int) -> ProvenanceGraphOut:
+def _analyse(db: Session, org_id: str, col: Collected) -> tuple[dict[Key, Any], Any, list[Any]]:
+    """Resolve every node of the scope, build the engine graph and find its risky paths."""
     raw_edges = list(col.edges.values())
     keys = {end for e in raw_edges for end in (e.src, e.dst)} | col.roots
     found = nodes_mod.resolve(db, org_id, keys, nodes_mod.resource_meta(raw_edges))
     full = build_graph([r.engine for r in found.values()], [_engine_edge(e) for e in raw_edges])
+    return found, full, find_risky_paths(full, max_depth=_MAX_PATH_DEPTH, max_results=MAX_PATHS)
+
+
+def _assemble(db: Session, org_id: str, col: Collected, limit: int) -> ProvenanceGraphOut:
+    found, full, paths = _analyse(db, org_id, col)
     resolved = {k: r.out for k, r in found.items()}
-    paths = find_risky_paths(full, max_depth=8, max_results=25)
     kept = _select(resolved, col.roots, paths, limit)
     kept_gids = {graph_id(k) for k in kept}
     edges = [e for e in full.edges if e["src"] in kept_gids and e["dst"] in kept_gids]
@@ -412,18 +207,30 @@ def build_provenance_graph(
         raise ValidationFailedError("Choose one scope: session_id, agent_id, context_item_id or finding_id")
     collected: Collected | None
     if session_id:
-        collected = _session_scope(db, org_id, get_scoped(db, AgentSession, session_id, org_id, label="Session"))
+        collected = session_scope(db, org_id, get_scoped(db, AgentSession, session_id, org_id, label="Session"))
     elif agent_id:
-        collected = _agent_scope(db, org_id, get_scoped(db, Agent, agent_id, org_id, label="Agent"))
+        collected = agent_scope(db, org_id, get_scoped(db, Agent, agent_id, org_id, label="Agent"))
     elif context_item_id:
         item = get_scoped(db, ContextItem, context_item_id, org_id, label="Context item")
-        collected = _item_scope(db, org_id, item, depth)
+        collected = item_scope(db, org_id, item, depth)
     elif finding_id:
         finding = get_scoped(db, SecurityFinding, finding_id, org_id, label="Finding")
-        collected = _finding_scope(db, org_id, finding, depth)
+        collected = finding_scope(db, org_id, finding, depth)
     else:
-        collected = _auto_scope(db, org_id)
+        collected = auto_scope(db, org_id)
     return _empty(limit) if collected is None else _assemble(db, org_id, collected, limit)
+
+
+def risky_paths_for_session(db: Session, org_id: str, session_id: str) -> list[RiskyPathOut]:
+    """Risky paths of one session's scope (the session and the sessions linked to it by delegation).
+
+    Unlike the graph view no node limit applies, so every path the analysis finds is returned (at
+    most ``MAX_PATHS``). Paths are sequences of observed relationships, never proof of causation.
+    Raises ``NotFoundError`` for a session of another organisation.
+    """
+    session = get_scoped(db, AgentSession, session_id, org_id, label="Session")
+    _found, _full, paths = _analyse(db, org_id, session_scope(db, org_id, session))
+    return [_path_out(p) for p in paths]
 
 
 # -- node inspector -------------------------------------------------------------------------------
@@ -441,10 +248,10 @@ def node_detail(db: Session, org_id: str, node_type: str, ref_id: str) -> NodeDe
         raise NotFoundError(f"Unknown provenance node type '{node_type}'")
     key: Key = (node_type, ref_id)
     cond = or_(and_(PE.src_type == node_type, PE.src_id == ref_id), and_(PE.dst_type == node_type, PE.dst_id == ref_id))
-    rows = [_raw(r) for r in db.scalars(scoped(PE, org_id).where(cond).order_by(PE.observed_at.desc(), PE.id).limit(_MAX_LINKS))]
+    rows = [raw_edge(r) for r in db.scalars(scoped(PE, org_id).where(cond).order_by(PE.observed_at.desc(), PE.id).limit(_MAX_LINKS))]
     total = db.scalar(select(func.count()).select_from(scoped(PE, org_id).where(cond).subquery())) or 0
     if node_type in _FINDING_SUBJECT:
-        extra = [e for e in _finding_record_edges(db, org_id, _findings_where(db, org_id, _FINDING_SUBJECT[node_type](ref_id)))
+        extra = [e for e in finding_record_edges(db, org_id, findings_where(db, org_id, _FINDING_SUBJECT[node_type](ref_id)))
                  if key in (e.src, e.dst)]
         rows.extend(extra)
         total += len(extra)
@@ -492,7 +299,7 @@ def scope_options(db: Session, org_id: str, *, q: str | None = None, limit: int 
         ScopeSessionOut(id=s.id, agent_id=a.id, agent_name=a.name, external_session_id=s.external_session_id,
                         status=s.status, risk_score=s.risk_score or 0, risk_level=(s.risk_state or {}).get("level"),
                         started_at=s.started_at, last_event_at=s.last_event_at, is_simulation=s.is_simulation)
-        for s, a in db.execute(sq.order_by(_recent().desc()).limit(limit))
+        for s, a in db.execute(sq.order_by(recent_activity().desc()).limit(limit))
     ]
     agents = [
         ScopeAgentOut(id=a.id, name=a.name, framework=a.framework, environment=a.environment, risk_score=a.risk_score or 0,

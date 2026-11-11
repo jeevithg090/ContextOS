@@ -122,6 +122,20 @@ def test_path_restrictions_on_shell_tools_fail_closed(tmp_path: Path) -> None:
         guard("bash", category_hint="shell", client=server.client(tmp_path))(lambda command: "ran")("cat notes.txt")
 
 
+def test_path_restrictions_on_undeclared_program_arguments_fail_closed(tmp_path: Path) -> None:
+    """Without a category hint, a ``command`` argument still hides which files the call touches."""
+    server = FakeServer()
+    _restrict(server, deny_path_globs=["*/.ssh/*"])
+    run = guard("run", client=server.client(tmp_path))(lambda command: "ran")
+    with pytest.raises(ToolDenied, match="'command' argument"):
+        run("cat ~/.ssh/id_rsa")
+    for name in ("script", "CODE", "argv"):
+        outcome = apply_restrictions({"allowed_path_globs": ["/work/*"]}, {name: "x", "path": "/work/a.txt"})
+        assert not outcome.allowed and "fail closed" in (outcome.reason or ""), name
+    # Restrictions that do not involve paths still apply to such calls.
+    assert apply_restrictions({"max_argument_bytes": 1000}, {"command": "ls"}).allowed
+
+
 def test_declared_path_args_override_the_heuristics() -> None:
     args = {"source_file": "a.txt", "dest": "b.txt", "note": "/not/a/path/really"}
     assert extract_paths(args) == ["a.txt", "b.txt", "/not/a/path/really"]

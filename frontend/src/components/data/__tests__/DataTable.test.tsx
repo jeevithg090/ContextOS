@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { TestRouter } from "@/test/router";
 import { DataTable, type DataTableColumn } from "../DataTable";
 import { EntityLink } from "../EntityLink";
 import { compareValues, sortRows } from "../sorting";
@@ -34,9 +34,9 @@ const names = () =>
 
 const renderTable = (props: Partial<React.ComponentProps<typeof DataTable<Row>>> = {}) =>
   render(
-    <MemoryRouter>
+    <TestRouter>
       <DataTable<Row> columns={COLUMNS} rows={ROWS} rowKey={(r) => r.id} aria-label="Agents" {...props} />
-    </MemoryRouter>,
+    </TestRouter>,
   );
 
 describe("DataTable sorting", () => {

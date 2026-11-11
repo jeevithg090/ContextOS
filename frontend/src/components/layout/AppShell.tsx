@@ -1,27 +1,19 @@
-import { Suspense, useState } from "react";
+import { useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { LogOut, Menu, PanelLeftClose } from "lucide-react";
-import { NAV } from "@/app/nav";
+import { NAV, type NavItem } from "@/app/nav";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { useNavCounts } from "@/features/overview/api";
+import type { NavCounts } from "@/features/overview/types";
 import { useLiveEvents } from "@/hooks/useLiveEvents";
-import { api } from "@/lib/api";
 import { cn } from "@/lib/format";
-import { IconButton, LoadingRows, StatusDot, Tooltip } from "@/components/ui";
+import { IconButton, StatusDot, Tooltip } from "@/components/ui";
 
-interface NavCounts {
-  pending_approvals: number;
-  open_incidents: number;
-  open_findings: number;
-}
-
-function useNavCounts() {
-  return useQuery({
-    queryKey: ["overview", "nav-counts"],
-    queryFn: () => api.get<NavCounts>("/overview/nav-counts"),
-    refetchInterval: 30_000,
-  });
-}
+const BADGE_FIELD: Record<NonNullable<NavItem["badgeKey"]>, keyof NavCounts> = {
+  pendingApprovals: "pending_approvals",
+  openIncidents: "open_incidents",
+  openFindings: "open_findings",
+};
 
 function Logo() {
   return (
@@ -37,13 +29,7 @@ function Logo() {
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const counts = useNavCounts().data;
-  const badge = (key?: string) => {
-    if (!counts || !key) return 0;
-    if (key === "pendingApprovals") return counts.pending_approvals;
-    if (key === "openIncidents") return counts.open_incidents;
-    if (key === "openFindings") return counts.open_findings;
-    return 0;
-  };
+  const badge = (key?: NavItem["badgeKey"]) => (counts && key ? counts[BADGE_FIELD[key]] ?? 0 : 0);
   return (
     <nav className="flex h-full flex-col gap-5 overflow-y-auto pb-6 pt-4" aria-label="Main">
       <Logo />
@@ -72,7 +58,11 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                         <item.icon className={cn("h-4 w-4 shrink-0", isActive ? "text-accent" : "text-fg-faint group-hover:text-fg-muted")} aria-hidden />
                         <span className="truncate">{item.label}</span>
                         {count > 0 && (
-                          <span className="num ml-auto rounded bg-surface-3 px-1.5 text-2xs font-medium text-fg-muted group-hover:bg-surface">{count}</span>
+                          <span className="num ml-auto rounded bg-surface-3 px-1.5 text-2xs font-medium text-fg-muted group-hover:bg-surface">
+                            <span className="sr-only">(</span>
+                            {count}
+                            <span className="sr-only">)</span>
+                          </span>
                         )}
                       </>
                     )}
@@ -107,12 +97,18 @@ export function AppShell() {
 
   return (
     <div className="flex h-full">
+      <a
+        href="#main-content"
+        className="sr-only z-50 rounded bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg focus:not-sr-only focus:fixed focus:left-3 focus:top-2"
+      >
+        Skip to content
+      </a>
       <aside className="hidden w-60 shrink-0 border-r border-border bg-surface/60 lg:block">
         <Sidebar />
       </aside>
       {mobileOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
+          <div className="absolute inset-0 bg-scrim/60" onClick={() => setMobileOpen(false)} />
           <aside className="absolute inset-y-0 left-0 w-64 border-r border-border bg-surface animate-slide-in-right">
             <div className="flex justify-end p-2">
               <IconButton label="Close navigation" onClick={() => setMobileOpen(false)}>
@@ -141,11 +137,10 @@ export function AppShell() {
             </IconButton>
           </div>
         </header>
-        <main className="min-h-0 flex-1 overflow-y-auto">
+        <main id="main-content" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto focus:outline-none">
+          {/* Each route renders inside its own Suspense and error boundary (src/app/routes.tsx). */}
           <div key={location.pathname} className="mx-auto w-full max-w-[1480px] px-4 py-6 sm:px-6 animate-fade-in">
-            <Suspense fallback={<LoadingRows rows={6} />}>
-              <Outlet />
-            </Suspense>
+            <Outlet />
           </div>
         </main>
       </div>

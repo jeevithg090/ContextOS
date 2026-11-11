@@ -30,6 +30,7 @@ from app.schemas.workspace_ai import (
     FixContextOut,
     FixContextRequest,
     ModesOut,
+    PromptModeName,
     PromptOut,
     PromptPatch,
     PromptSummaryOut,
@@ -60,8 +61,17 @@ WRITE = Depends(require(Permission.WRITE.value))
 
 
 @router.get("/modes", response_model=ModesOut)
-def modes(principal: Principal = READ) -> ModesOut:
-    return templates.catalogue()
+def modes(
+    principal: Principal = READ,
+    db: Session = Depends(get_db),
+    task_id: str | None = Query(None, description="Also return the context-pack profile suggested for this task."),
+    mode: PromptModeName | None = Query(None, description="Mode for suggested_profile (default implement_fix)."),
+) -> ModesOut:
+    catalogue = templates.catalogue()
+    if task_id is None:
+        return catalogue
+    task = get_task(db, principal.org_id, task_id)
+    return packs.with_suggestions(catalogue, task, mode or ai.DEFAULT_MODE)
 
 
 # ----------------------------------------------------------------------------- context packs
@@ -97,6 +107,16 @@ def list_context_packs(
 def get_context_pack(pack_id: str, principal: Principal = READ, db: Session = Depends(get_db)) -> ContextPackOut:
     pack = packs.get_pack(db, principal.org_id, pack_id)
     return packs.pack_out(pack, packs.pack_task(db, pack))
+
+
+@router.get("/context-packs/{pack_id}/export")
+def export_context_pack(pack_id: str, principal: Principal = READ, db: Session = Depends(get_db)) -> Response:
+    """The pack as a JSON download (redacted again). Audited as ``context_pack.exported``."""
+    pack = packs.get_pack(db, principal.org_id, pack_id)
+    body, filename = packs.export_pack(db, as_actor(principal), pack)
+    return Response(content=body, media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"',
+                             "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"})
 
 
 @router.patch("/context-packs/{pack_id}", response_model=ContextPackOut)

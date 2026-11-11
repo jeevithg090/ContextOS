@@ -193,7 +193,7 @@ def _inherited(db: Session, org_id: str, session: AgentSession) -> dict[str, Any
     state = parent.risk_state or {}
     return {
         "session_id": parent.id, "score": parent.risk_score or 0, "level": state.get("level"),
-        "trifecta": bool(state.get("trifecta")), "relation": "delegating (parent)",
+        "trifecta": bool(state.get("trifecta")), "relation": "parent",
     }
 
 

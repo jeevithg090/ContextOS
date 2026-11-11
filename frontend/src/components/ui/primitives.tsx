@@ -178,6 +178,9 @@ export function Spinner({ className }: { className?: string }) {
 
 /* ----------------------------------------------------------------------------- Form controls */
 
+// Sizing (h-/w-/px-/py-/text-size) and colours can be overridden through `className`: cn() lets the
+// later class of a conflicting group win, so `<Input className="h-7 text-xs" />` needs no "!".
+
 const CONTROL = "w-full rounded border border-border-strong bg-surface-2 px-2.5 text-[13px] text-fg placeholder:text-fg-faint transition-colors focus:border-accent/60 focus:outline-none focus-visible:outline-none disabled:opacity-60";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input({ className, ...rest }, ref) {
@@ -190,7 +193,9 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
 
 export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(function Select({ className, children, ...rest }, ref) {
   return (
-    <select ref={ref} className={cn(CONTROL, "h-8 appearance-none bg-[length:12px] bg-[right_8px_center] bg-no-repeat pr-7", className)} style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23929bab' stroke-width='1.5'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E\")" }} {...rest}>
+    // pr-7 comes after className: the right padding reserves room for the chevron and must survive
+    // a caller's px-* override (cn() resolves conflicts so the last class wins).
+    <select ref={ref} className={cn(CONTROL, "h-8 appearance-none bg-[length:12px] bg-[right_8px_center] bg-no-repeat", className, "pr-7")} style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23929bab' stroke-width='1.5'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E\")" }} {...rest}>
       {children}
     </select>
   );
