@@ -102,7 +102,7 @@ def set_task_labels(db: Session, actor: Actor, task: Task, label_ids: list[str])
     current = set(task_label_ids(db, task))
     added, removed = [i for i in wanted if i not in current], [i for i in current if i not in wanted]
     for label_id in added:
-        db.add(TaskLabelLink(id=new_id("tll"), organization_id=task.organization_id, task_id=task.id, label_id=label_id))
+        db.add(TaskLabelLink(id=new_id("task_label_link"), organization_id=task.organization_id, task_id=task.id, label_id=label_id))
     if removed:
         for link in db.scalars(select(TaskLabelLink).where(
             TaskLabelLink.organization_id == task.organization_id, TaskLabelLink.task_id == task.id,

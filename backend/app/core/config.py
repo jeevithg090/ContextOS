@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-INSECURE_DEV_SECRET = "contextos-dev-insecure-secret-change-me"
+INSECURE_DEV_SECRET = "contextos-dev-insecure-secret-change-me"  # noqa: S105 (dev-only placeholder; validate_for_production rejects it)
 
 
 class Settings(BaseSettings):

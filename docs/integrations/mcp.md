@@ -19,7 +19,7 @@ host ──stdio──▶ contextos mcp-gateway ──stdio──▶ upstream MC
 |---|---|---|
 | `tools/call` | Sends `tool.requested` to `POST /decide` and applies the answer (table below). A blocked call gets an error result and **never reaches the upstream server**. | **enforced** |
 | tool result | Sends `tool.completed` (or `tool.failed`) before the result goes back to the host. ContextOS records the result as context from an `mcp_tool` source (`<server>/<tool>`), caps its trust at the server's trust level and scans it for prompt injection. | observed |
-| `tools/list` | Sends `mcp.server_connected` with every tool's name, description and input schema. The server instructions and the text inside input schemas (parameter descriptions, defaults, enums) are sent as listing content. ContextOS scans all of it for tool poisoning. Tools are re-exposed unchanged. If the listing changes later (a description swapped after you started trusting the server), it is reported again. | observed |
+| `tools/list` | Sends `mcp.server_connected` with every tool's name, description and input schema. The server instructions and the text inside input schemas (parameter descriptions, defaults, enums) are sent as listing content. ContextOS scans all of it for tool poisoning. Tools are re-exposed unchanged. If the listing changes later (a description swapped after you started trusting the server), it is reported again. If the host calls a tool without listing first on this connection (a cached listing), the gateway reports the listing before asking for the decision. | observed |
 | `resources/read`, `prompts/get` | Passed through unchanged. The returned text is reported as `context.ingested` from an `mcp_server` source (`<server>/resource:<uri>`, `<server>/prompt:<name>`) and scanned. | observed |
 | `resources/list`, `resources/templates/list`, `prompts/list`, `completion/complete` | Passed through unchanged (only if the upstream advertises the capability). | — |
 
@@ -179,6 +179,7 @@ Run from `backend/`:
   keys).
 - **Proxy:** host ↔ gateway ↔ example server over the real MCP stack, in memory. Covers:
   - tools re-exposed unchanged, and changed descriptions reported again;
+  - a call made without a prior `tools/list` reports the listing before the decision;
   - allowed calls decided first, forwarded and reported;
   - denied calls never executed upstream (checked against the example server's call log);
   - fail-closed and fail-open behaviour;

@@ -161,7 +161,7 @@ function KpiGrid({ data, loading }: { data: EngineeringAnalytics | undefined; lo
         value={n(data?.completed_in_window)}
         detail={data ? `tasks done in the last ${pluralize(days, "day")}` : null}
         definition="Tasks whose completed_at falls in the window and that are still in a done column."
-        href={`/work/tasks${buildQuery({ board_id: board, done: "1", sort: "updated" })}`}
+        href={`/work/tasks${buildQuery({ board_id: board, status: "done", done: "1", sort: "updated" })}`}
         hrefLabel="Done tasks"
       />
     </div>

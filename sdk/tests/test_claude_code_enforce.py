@@ -99,6 +99,25 @@ def test_deny_cites_the_policy_and_decision(server: FakeServer, tmp_path: Path, 
     assert "Block credential exfiltration" in verdict.to_output()["systemMessage"]
 
 
+def test_deny_cites_only_the_policy_that_decided_not_audit_matches(
+        server: FakeServer, tmp_path: Path, clock: FakeClock) -> None:
+    audit = {**POLICY, "policy_id": "pol_2", "name": "Audit sensitive file reads", "outcome": "AUDIT",
+             "severity": "medium"}
+    monitor = {**POLICY, "policy_id": "pol_3", "name": "Trial rule", "mode": "monitor"}
+    decide_returns(server, "DENY", matched_policies=[audit, POLICY, monitor])
+    reason = specific(run(server, tmp_path, clock, P.PRE_EXFIL))["permissionDecisionReason"]
+    assert "Policy: “Block credential exfiltration”, critical." in reason
+    assert "Audit sensitive file reads" not in reason and "Trial rule" not in reason
+
+
+def test_deny_by_the_default_decision_does_not_credit_an_audit_policy(
+        server: FakeServer, tmp_path: Path, clock: FakeClock) -> None:
+    audit = {**POLICY, "name": "Audit shell commands", "outcome": "AUDIT", "severity": "low"}
+    decide_returns(server, "DENY", matched_policies=[audit])
+    reason = specific(run(server, tmp_path, clock, P.PRE_BASH))["permissionDecisionReason"]
+    assert "Policy: organisation default decision." in reason and "Audit shell commands" not in reason
+
+
 def test_reasons_are_masked_locally_even_if_the_server_echoed_a_secret(
         server: FakeServer, tmp_path: Path, clock: FakeClock) -> None:
     decide_returns(server, "DENY", reason="found AKIAIOSFODNN7EXAMPLE in the command")
@@ -170,6 +189,9 @@ def test_pending_after_the_wait_denies_when_configured(server: FakeServer, tmp_p
     approval_needed(server, [(200, {"status": "pending"})])
     out = specific(run(server, tmp_path, clock, P.PRE_WEBFETCH, on_approval_timeout="deny"))
     assert out["permissionDecision"] == "deny" and "still pending" in out["permissionDecisionReason"]
+    # An approval belongs to one call: the reason must not suggest approving the stale request helps.
+    assert "will not run this call" in out["permissionDecisionReason"]
+    assert "approve the new request" in out["permissionDecisionReason"]
 
 
 def test_approval_wait_always_fits_inside_the_hook_timeout(server: FakeServer, tmp_path: Path, clock: FakeClock) -> None:

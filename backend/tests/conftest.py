@@ -19,14 +19,13 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+import app.models as models  # noqa: F401  (registers tables)
 from app.core.ids import new_id
 from app.core.security import generate_api_key, generate_session_token, hash_password
 from app.core.timeutil import utcnow
 from app.database.base import Base
 from app.database.session import make_engine, session_factory, set_engine
 from app.domain.enums import Role
-
-import app.models as models  # noqa: F401  (registers tables)
 
 
 @pytest.fixture()

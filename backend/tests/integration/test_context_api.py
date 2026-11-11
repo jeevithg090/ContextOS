@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.ids import new_id
 from app.core.security import generate_api_key
 from app.core.timeutil import utcnow
+from app.engines.provenance import receipt_fields, verify_receipt
 from app.events.envelope import EventEnvelope
 from app.models import Agent, ApiKey, ContextItem, SecurityFinding
 from app.services.ingestion import IngestContext, ingest_event
@@ -282,6 +283,24 @@ def test_tampered_receipt_reports_invalid_signature(client, seeded_org, db: Sess
     db.commit()
     missing = _get(client, f"/items/{item_id}/receipt", seeded_org.user_headers)
     assert missing["signature_valid"] is False and missing["verification"]["status"] == "missing"
+
+
+def test_exported_receipt_reverifies_and_edits_break_it(client, seeded_org):
+    """What "Export receipt" downloads (fields + signature) verifies as-is; any edit invalidates it."""
+    item_id = _readme_item(client, seeded_org)
+    exported = json.loads(json.dumps(_get(client, f"/items/{item_id}/receipt", seeded_org.user_headers)))
+    fields, signature = exported["receipt"], exported["signature"]
+    assert verify_receipt(receipt_fields(fields), signature) is True
+
+    for path, value in ((("content_hash",), "0" * 64), (("source", "trust_level_at_ingest"), "TRUSTED"),
+                        (("detection", "rule_ids"), []), (("received_at",), "2020-01-01T00:00:00Z")):
+        edited = json.loads(json.dumps(fields))
+        target = edited
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
+        assert verify_receipt(receipt_fields(edited), signature) is False, path
+    assert verify_receipt(receipt_fields(fields), "f" * 64) is False
 
 
 # -- sources -----------------------------------------------------------------------------------------

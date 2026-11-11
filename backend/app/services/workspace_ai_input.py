@@ -7,7 +7,8 @@
   redacted evidence;
 - the linked incident and its most recent timeline entries;
 - event summaries (types and titles only, never content) for the referenced sessions, bounded;
-- agent metadata; provenance risky paths when the provenance service is available;
+- agent metadata; provenance risky paths for the linked sessions from the provenance service (imported
+  lazily; skipped with a note when unavailable), each led by whether its final tool call was stopped;
 - policies involved, taken from the referenced decisions' ``matched_policies``;
 - previous fix attempts and verification runs.
 
@@ -19,13 +20,14 @@ though the stored rows are already redacted. ``to_input`` turns the bundle plus 
 from __future__ import annotations
 
 import importlib
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.errors import NotFoundError
 from app.core.logging import get_logger
 from app.core.timeutil import isoformat
 from app.engines.redaction import redact_value
@@ -58,8 +60,18 @@ MAX_PATHS = 30
 PROVENANCE_MODULE = "app.services.provenance_service"
 # Functions the provenance service may expose: (db, org_id, session_id) -> list[RiskyPath | dict].
 PROVENANCE_FUNCTIONS = ("risky_paths_for_session", "session_risky_paths")
+# Otherwise the session-scoped graph builder is used: (db, org_id, *, session_id) -> graph with ``risky_paths``.
+PROVENANCE_GRAPH_FUNCTION = "build_provenance_graph"
 PROVENANCE_UNAVAILABLE = ("Provenance risky-path analysis is not available on this server, so no provenance paths "
                           "are included.")
+# Put first so it survives truncation: whether the path's final tool call was actually stopped.
+PATH_OUTCOMES = {
+    "prevented": "Outcome: the final tool call was blocked at an enforced boundary.",
+    "awaiting_approval": "Outcome: the final tool call was held at an enforced boundary for human approval.",
+    "advisory_only": "Outcome: a blocking decision was returned as advice only; the integration may have run the call.",
+    "not_prevented": "Outcome: the final tool call was not prevented (allowed, approved, or only observed after it "
+                     "ran).",
+}
 
 
 @dataclass
@@ -224,15 +236,41 @@ def _agent(row: Agent) -> dict[str, Any]:
 
 
 def _path_dict(path: Any) -> dict[str, Any] | None:
-    data = path.to_dict() if hasattr(path, "to_dict") else path
-    if not isinstance(data, dict):
+    if hasattr(path, "model_dump"):
+        data = path.model_dump()
+    elif hasattr(path, "to_dict"):
+        data = path.to_dict()
+    else:
+        data = path
+    if not isinstance(data, dict) or not (data.get("title") or data.get("explanation")):
         return None
-    return _redacted({"title": data.get("title"), "explanation": data.get("explanation"),
-                      "severity": data.get("severity")})
+    outcome = PATH_OUTCOMES.get(str(data.get("outcome") or ""))
+    explanation = " ".join(t for t in (outcome, inline(data.get("explanation"), 2000)) if t)
+    return _redacted({"id": data.get("id"), "title": data.get("title"), "explanation": explanation,
+                      "severity": data.get("severity"), "outcome": data.get("outcome")})
+
+
+def _path_source(module: Any) -> Callable[[Session, str, str], Iterable[Any]] | None:
+    """``(db, org_id, session_id) -> risky paths`` from whatever the provenance service exposes."""
+    fn = next((getattr(module, name) for name in PROVENANCE_FUNCTIONS if callable(getattr(module, name, None))), None)
+    if fn is not None:
+        return fn
+    graph = getattr(module, PROVENANCE_GRAPH_FUNCTION, None)
+    if not callable(graph):
+        return None
+
+    def from_graph(db: Session, org_id: str, session_id: str) -> Iterable[Any]:
+        return getattr(graph(db, org_id, session_id=session_id), "risky_paths", None) or []
+
+    return from_graph
 
 
 def provenance_paths(db: Session, org_id: str, session_ids: list[str]) -> tuple[list[dict[str, Any]], str | None]:
-    """Risky paths for the sessions via the provenance service, imported lazily. ``(paths, note)``."""
+    """Risky paths for the sessions via the provenance service, imported lazily. ``(paths, note)``.
+
+    Each lookup runs in a savepoint so a failing (read-only) analysis can never poison the request's
+    transaction; failures degrade to a plain-language note instead of failing prompt generation.
+    """
     if not session_ids:
         return [], None
     try:
@@ -242,20 +280,25 @@ def provenance_paths(db: Session, org_id: str, session_ids: list[str]) -> tuple[
     except Exception:  # noqa: BLE001 — a broken optional module must not break prompt generation
         log.exception("provenance_service_import_failed")
         return [], PROVENANCE_UNAVAILABLE
-    fn = next((getattr(module, name) for name in PROVENANCE_FUNCTIONS if callable(getattr(module, name, None))), None)
+    fn = _path_source(module)
     if fn is None:
         return [], PROVENANCE_UNAVAILABLE
-    paths: list[dict[str, Any]] = []
+    paths: dict[str, dict[str, Any]] = {}
     for session_id in session_ids:
         try:
-            found = fn(db, org_id, session_id) or []
+            with db.begin_nested():
+                found = list(fn(db, org_id, session_id) or [])
+        except NotFoundError:
+            continue  # the session was removed since it was linked; nothing to analyse
         except Exception:  # noqa: BLE001 — degrade to a visible note instead of failing prompt generation
             log.exception("provenance_paths_failed", extra={"session_id": session_id})
-            return paths, "Provenance risky-path analysis failed for a linked session; paths may be incomplete."
-        paths.extend(p for p in (_path_dict(x) for x in found) if p)
+            return list(paths.values())[:MAX_PATHS], ("Provenance risky-path analysis failed for a linked session; "
+                                                      "paths may be incomplete.")
+        for path in (p for p in (_path_dict(x) for x in found) if p):
+            paths.setdefault(str(path.get("id") or f"{path.get('title')}|{path.get('explanation')}"), path)
         if len(paths) >= MAX_PATHS:
             break
-    return paths[:MAX_PATHS], None
+    return list(paths.values())[:MAX_PATHS], None
 
 
 def _attempts(db: Session, task: Task) -> list[dict[str, Any]]:

@@ -10,12 +10,15 @@ import { TaskRowList } from "./analytics/TaskRowList";
 import { STATUS_KEYS, type StatusKey, type TaskCard } from "./types";
 
 const OPEN_LIMIT = 200;
+const DUE_LIMIT = 50;
 const DUE_WINDOW_DAYS = 7;
 
 /** "What am I working on?" — tasks assigned to me by stage, what is due, and what changed. */
 export function MyWorkPage() {
   const open = useTasks({ assignee: "me", sort: "priority", limit: OPEN_LIMIT });
-  const due = useTasks({ assignee: "me", sort: "due_date", limit: 50 });
+  // Open tasks soonest-due first (tasks without a due date sort last), plus an exact overdue count.
+  const due = useTasks({ assignee: "me", sort: "due_date", limit: DUE_LIMIT });
+  const late = useTasks({ assignee: "me", overdue: true, sort: "due_date", limit: 1 });
   const recent = useTasks({ assignee: "me", include_done: true, sort: "updated", limit: 8 });
 
   const groups = useMemo(() => {
@@ -25,8 +28,12 @@ export function MyWorkPage() {
   }, [open.data]);
 
   const horizon = addDays(new Date(), DUE_WINDOW_DAYS);
-  const dueSoon = (due.data?.items ?? []).filter((t) => t.due_date && isBefore(new Date(t.due_date), horizon));
-  const overdue = dueSoon.filter((t) => t.is_overdue).length;
+  const dueItems = due.data?.items ?? [];
+  const dueSoon = dueItems.filter((t) => t.due_date && isBefore(new Date(t.due_date), horizon));
+  const overdue = late.data?.total ?? dueSoon.filter((t) => t.is_overdue).length;
+  // The list stops at DUE_LIMIT rows; when every row is inside the window there may be more.
+  const dueCapped = dueItems.length === DUE_LIMIT && dueSoon.length === DUE_LIMIT;
+  const dueThisWeek = Math.max(0, dueSoon.length - dueSoon.filter((t) => t.is_overdue).length);
   const blocked = (open.data?.items ?? []).filter((t) => t.blocked_by_open > 0).length;
   const total = open.data?.total ?? 0;
 
@@ -50,8 +57,12 @@ export function MyWorkPage() {
         <>
           <div className="panel mb-4 flex flex-wrap gap-x-8 gap-y-2 px-4 py-3" aria-busy={open.isLoading || undefined}>
             <InlineStat label="Assigned, open" value={open.isLoading ? "…" : total} hint="Tasks assigned to you that are not in a done column" />
-            <InlineStat label="Overdue" value={due.isLoading ? "…" : overdue} tone={overdue ? "danger" : undefined} hint="Open tasks whose due date has passed" />
-            <InlineStat label={`Due in ${DUE_WINDOW_DAYS} days`} value={due.isLoading ? "…" : dueSoon.length - overdue} hint="Open tasks due in the next week" />
+            <InlineStat label="Overdue" value={late.isLoading && due.isLoading ? "…" : overdue} tone={overdue ? "danger" : undefined} hint="Open tasks whose due date has passed" />
+            <InlineStat
+              label={`Due in ${DUE_WINDOW_DAYS} days`}
+              value={due.isLoading ? "…" : `${dueThisWeek}${dueCapped ? "+" : ""}`}
+              hint="Open tasks due in the next week that are not overdue yet"
+            />
             <InlineStat label="Blocked" value={open.isLoading ? "…" : blocked} tone={blocked ? "warn" : undefined} hint="Open tasks waiting on another open task" />
           </div>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
