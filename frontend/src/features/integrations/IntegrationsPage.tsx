@@ -12,6 +12,7 @@ import { formatNumber } from "@/lib/format";
 import { useIntegrations } from "./api";
 import { CapabilityMatrix, PlannedIntegrations } from "./CapabilityMatrix";
 import { ConnectedIntegrations } from "./ConnectedIntegrations";
+import { staleWindowLabel } from "./meta";
 import { SetupGuides } from "./SetupGuides";
 import type { IntegrationsOverview } from "./types";
 
@@ -22,7 +23,7 @@ function Summary({ data }: { data: IntegrationsOverview }) {
   const notEnforced = data.connected.reduce((n, c) => n + c.decisions.advisory + c.decisions.observed, 0);
   return (
     <div className="mb-5 flex flex-wrap gap-x-6 gap-y-2" aria-label="Summary">
-      <InlineStat label="Connected now" value={`${live} of ${data.connected.length}`} tone={live ? "ok" : undefined} hint={`Integrations with an event in the last ${data.stale_after_minutes} minutes`} />
+      <InlineStat label="Connected now" value={`${live} of ${data.connected.length}`} tone={live ? "ok" : undefined} hint={`Integrations with an event in the last ${staleWindowLabel(data)}`} />
       <InlineStat label="Can enforce" value={enforcing} hint="Integrations whose decisions are applied before the tool runs" />
       <InlineStat label="Enforced decisions" value={formatNumber(enforced)} hint="Decisions returned at an enforcing boundary (real traffic)" />
       <InlineStat label="Advisory or observed" value={formatNumber(notEnforced)} tone={notEnforced ? "warn" : undefined} hint="Decisions that could not be enforced: advisory integrations or tool calls reported after they ran" />
@@ -69,7 +70,7 @@ export function IntegrationsPage() {
         <>
           <Summary data={overview.data} />
           <div className="space-y-5">
-            <ConnectedIntegrations items={overview.data.connected} staleAfterMinutes={overview.data.stale_after_minutes} onSetup={openSetup} />
+            <ConnectedIntegrations items={overview.data.connected} staleWindow={staleWindowLabel(overview.data)} onSetup={openSetup} />
             <CapabilityMatrix entries={overview.data.catalog} onSetup={openSetup} />
             <PlannedIntegrations entries={overview.data.catalog} onSetup={openSetup} />
             <SetupGuides entries={overview.data.catalog} selected={selected} onSelect={selectGuide} />

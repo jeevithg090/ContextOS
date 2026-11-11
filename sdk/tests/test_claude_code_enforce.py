@@ -172,26 +172,63 @@ def test_rejected_expired_or_cancelled_approval_denies(server: FakeServer, tmp_p
         assert "not this domain" in out["permissionDecisionReason"]
 
 
-def test_pending_after_the_wait_asks_with_the_approval_id(server: FakeServer, tmp_path: Path, clock: FakeClock) -> None:
+CANCEL = "/api/v1/decide/approvals/apr_1/cancel"
+
+
+def cancel_returns(server: FakeServer, status: int, body: dict) -> None:
+    server.route("POST", CANCEL, body, status=status)
+
+
+def test_pending_after_the_wait_withdraws_the_request_and_asks(server: FakeServer, tmp_path: Path, clock: FakeClock) -> None:
     approval_needed(server, [(200, {"approval_id": "apr_1", "status": "pending"})])
+    cancel_returns(server, 200, {"approval_id": "apr_1", "status": "cancelled"})
     start = clock()
     verdict = run(server, tmp_path, clock, P.PRE_WEBFETCH)
     out = specific(verdict)
     assert out["permissionDecision"] == "ask"
     assert out["permissionDecisionReason"].startswith(
-        "ContextOS approval apr_1 pending — approve in the Approval Centre or here.")
+        "ContextOS approval apr_1 was not decided within 45s — decide at this prompt. The request was withdrawn "
+        "from the Approval Centre")
     assert 44 <= clock() - start <= 46  # waited approval_wait_s (45 s) on the fake clock
+    (body,) = server.bodies("POST", CANCEL)
+    assert body == {"reason": "The Claude Code hook stopped waiting after 45s and answered 'ask'."}
+    assert verdict.notes["approval_withdrawn"] is True
     record = approval.take_host_prompt(P.PRE_WEBFETCH["tool_use_id"])
     assert record == {"reason": "approval_pending", "approval_id": "apr_1", "policy_decision_id": "pd_1"}
 
 
 def test_pending_after_the_wait_denies_when_configured(server: FakeServer, tmp_path: Path, clock: FakeClock) -> None:
     approval_needed(server, [(200, {"status": "pending"})])
+    cancel_returns(server, 200, {"approval_id": "apr_1", "status": "cancelled"})
     out = specific(run(server, tmp_path, clock, P.PRE_WEBFETCH, on_approval_timeout="deny"))
     assert out["permissionDecision"] == "deny" and "still pending" in out["permissionDecisionReason"]
     # An approval belongs to one call: the reason must not suggest approving the stale request helps.
-    assert "will not run this call" in out["permissionDecisionReason"]
+    assert "can no longer be approved" in out["permissionDecisionReason"]
     assert "approve the new request" in out["permissionDecisionReason"]
+    assert server.bodies("POST", CANCEL)[0]["reason"].endswith("answered 'deny'.")
+
+
+def test_a_withdrawal_the_server_cannot_record_keeps_the_answer_honest(server: FakeServer, tmp_path: Path,
+                                                                       clock: FakeClock) -> None:
+    approval_needed(server, [(200, {"status": "pending"})])
+    cancel_returns(server, 503, {"error": {"code": "unavailable", "message": "down", "details": None}})
+    verdict = run(server, tmp_path, clock, P.PRE_WEBFETCH, on_approval_timeout="deny")
+    out = specific(verdict)
+    assert out["permissionDecision"] == "deny"
+    assert "Approving that request now will not run this call" in out["permissionDecisionReason"]
+    assert verdict.notes["approval_withdrawn"] is False
+
+
+@pytest.mark.parametrize(("status", "permission"), [("approved", None), ("rejected", "deny"), ("expired", "deny")])
+def test_a_decision_made_just_before_the_withdrawal_wins(server: FakeServer, tmp_path: Path, clock: FakeClock,
+                                                         status: str, permission: str | None) -> None:
+    """The person decided between the last poll and the withdrawal: the server answers 409 with it."""
+    approval_needed(server, [(200, {"status": "pending"})])
+    cancel_returns(server, 409, {"error": {"code": "conflict", "message": f"Approval already {status}",
+                                           "details": {"status": status, "decided_at": "2026-11-11T10:00:00Z"}}})
+    verdict = run(server, tmp_path, clock, P.PRE_WEBFETCH)
+    assert verdict.permission == permission
+    assert verdict.outcome == ("approved" if status == "approved" else f"approval_{status}")
 
 
 def test_approval_wait_always_fits_inside_the_hook_timeout(server: FakeServer, tmp_path: Path, clock: FakeClock) -> None:

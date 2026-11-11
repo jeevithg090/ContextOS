@@ -1,10 +1,11 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider, TooltipProvider } from "@/components/ui";
+import { TestRouter } from "@/test/router";
 import { IntegrationsPage } from "../IntegrationsPage";
+import { staleWindowLabel } from "../meta";
 import type { CatalogEntry, ConnectedIntegration, IntegrationsOverview, SetupGuide } from "../types";
 
 const CLAUDE: CatalogEntry = {
@@ -58,11 +59,11 @@ function wrap(ui: ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={["/integrations"]}>
+      <TestRouter initialEntries={["/integrations"]}>
         <TooltipProvider>
           <ToastProvider>{ui}</ToastProvider>
         </TooltipProvider>
-      </MemoryRouter>
+      </TestRouter>
     </QueryClientProvider>,
   );
 }
@@ -101,6 +102,19 @@ describe("IntegrationsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Interim setup for Cursor" }));
     await waitFor(() => expect(urls).toContain("/api/v1/integrations/cursor/setup"));
     expect(await screen.findByText(/Interim path through the/)).toBeInTheDocument();
+  });
+
+  it("states the staleness window in hours when the server sends a whole number of hours", async () => {
+    overview = { ...overview, stale_after_minutes: 1440, stale_after_hours: 24 };
+    wrap(<IntegrationsPage />);
+    expect(await screen.findByText(/Connected means an event arrived in the last 24 hours\./)).toBeInTheDocument();
+    expect(screen.queryByText(/1440 minutes/)).not.toBeInTheDocument();
+  });
+
+  it("formats staleness windows shorter than an hour in minutes", () => {
+    expect(staleWindowLabel({ stale_after_minutes: 15 })).toBe("15 minutes");
+    expect(staleWindowLabel({ stale_after_minutes: 60, stale_after_hours: 1 })).toBe("1 hour");
+    expect(staleWindowLabel({ stale_after_minutes: 90, stale_after_hours: 1.5 })).toBe("90 minutes");
   });
 
   it("shows an empty state when nothing has connected", async () => {

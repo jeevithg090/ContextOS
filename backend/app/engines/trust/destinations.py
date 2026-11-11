@@ -306,6 +306,7 @@ def assess_destination(
         domains=domain_candidates(host_name, registrable_domain(host_name)),
     )
     top = matches[0] if matches else None
+    top_name = top.name if top is not None else ""
     allow = next((r for r in matches if r.trust_level in ALLOW_LEVELS), None)
     block = next((r for r in matches if r.trust_level in BLOCK_LEVELS), None)
 
@@ -317,14 +318,14 @@ def assess_destination(
     else:
         checks.append(_check(
             "allowlist", "warn",
-            f"Matches allowlist rule '{allow.name}', but the higher-priority rule '{top.name}' takes precedence.",
+            f"Matches allowlist rule '{allow.name}', but the higher-priority rule '{top_name}' takes precedence.",
         ))
     if block is None:
         checks.append(_check("blocklist", "pass", "Does not match any blocking or suspicious-destination rule."))
     else:
         detail = f"Matches rule '{block.name}', which classifies it as {block.trust_level}."
         if block is not top:
-            detail += f" The higher-priority rule '{top.name}' takes precedence."
+            detail += f" The higher-priority rule '{top_name}' takes precedence."
         checks.append(_check("blocklist", "fail" if block is top else "warn", detail))
 
     signals: list[str] = []

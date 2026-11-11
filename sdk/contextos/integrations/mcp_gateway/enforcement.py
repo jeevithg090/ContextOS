@@ -3,7 +3,9 @@
     ALLOW / AUDIT       forward the call to the upstream server
     DENY                do NOT contact the upstream server; return an error result to the host
     REQUIRE_APPROVAL    poll the approval for up to ``approval_timeout_s``; forward only when it is
-                        approved, otherwise block (rejected, expired, cancelled or still pending)
+                        approved, otherwise block (rejected, expired, cancelled or still pending). A
+                        request the gateway stops waiting for (timeout, ``approval_timeout_s=0``, the
+                        host cancelling the call) is withdrawn, so it can no longer be approved
     RESTRICT            apply every restriction (``contextos.restrictions``) and forward the
                         restricted arguments; any restriction the gateway cannot apply blocks the
                         call (fail closed)
@@ -33,7 +35,7 @@ import anyio
 import anyio.to_thread
 
 from contextos._args import to_jsonable
-from contextos.client import ContextOSClient, approval_status_of
+from contextos.client import ContextOSClient, approval_status_of, withdraw_approval
 from contextos.errors import APIError, AuthError, ContextOSError, ServerError, Unreachable
 from contextos.models import ApprovalStatus, Decision, DecisionResponse, EventEnvelope
 from contextos.restrictions import OPAQUE_ARGUMENT_NAMES, apply_restrictions, scan_reports_secrets
@@ -190,40 +192,65 @@ class Enforcer:
                                                        "approval id"), arguments, decision, outcome="approval_missing")
         timeout = self.approval_timeout_s
         if timeout <= 0:
-            return Verdict(False, policy_block_message(decision, f"approval {approval_id} is waiting in ContextOS and "
-                                                       "this gateway is configured not to wait for approvals"),
-                           arguments, decision, outcome="approval_not_awaited")
+            status = await self._withdraw(approval_id, "The MCP gateway is configured not to wait for approvals.")
+            if status != ApprovalStatus.APPROVED:
+                return Verdict(False, policy_block_message(decision, f"approval {approval_id} "
+                                                           f"{self._stale(status)}: this gateway is configured not "
+                                                           "to wait for approvals"),
+                               arguments, decision, outcome="approval_not_awaited")
+            return Verdict(True, f"Approved in ContextOS (approval {approval_id})", arguments, decision,
+                           outcome="approved")
         log.info("Tool call is waiting for approval %s (up to %.0fs)", approval_id, timeout)
         started = self._clock()
         deadline = started + timeout
         status, note = ApprovalStatus.PENDING.value, None
-        while True:
-            remaining = deadline - self._clock()
-            if remaining <= 0:
-                return Verdict(False, policy_block_message(
-                    decision, f"approval {approval_id} was not decided within {timeout:.0f}s; ask a reviewer to "
-                              "approve it in ContextOS, then call the tool again"),
-                    arguments, decision, outcome="approval_timeout")
-            await self._report_wait(on_wait, self._clock() - started, timeout,
-                                    f"Waiting for approval {approval_id} in ContextOS")
-            await self._sleep(min(self.poll_s, remaining))
-            try:
-                approval = await anyio.to_thread.run_sync(self.client.get_approval, approval_id)
-            except Unreachable as exc:  # transient: keep waiting until the deadline
-                log.info("Approval poll failed (%s); retrying", exc)
-                continue
-            except ContextOSError as exc:
-                return Verdict(False, policy_block_message(decision, f"could not check approval {approval_id} ({exc})"),
-                               arguments, decision, outcome="approval_error")
-            status = approval_status_of(approval) or ApprovalStatus.PENDING.value
-            note = approval.get("decision_note") if isinstance(approval, dict) else None
-            if status != ApprovalStatus.PENDING:
-                break
+        try:
+            while True:
+                remaining = deadline - self._clock()
+                if remaining <= 0:
+                    status = await self._withdraw(approval_id, f"The MCP gateway stopped waiting after {timeout:.0f}s.")
+                    if status in (ApprovalStatus.APPROVED, ApprovalStatus.REJECTED, ApprovalStatus.EXPIRED):
+                        break  # a person decided just before the withdrawal
+                    return Verdict(False, policy_block_message(
+                        decision, f"approval {approval_id} was not decided within {timeout:.0f}s and "
+                                  f"{self._stale(status)}; call the tool again to request a new approval"),
+                        arguments, decision, outcome="approval_timeout")
+                await self._report_wait(on_wait, self._clock() - started, timeout,
+                                        f"Waiting for approval {approval_id} in ContextOS")
+                await self._sleep(min(self.poll_s, remaining))
+                try:
+                    approval = await anyio.to_thread.run_sync(self.client.get_approval, approval_id)
+                except Unreachable as exc:  # transient: keep waiting until the deadline
+                    log.info("Approval poll failed (%s); retrying", exc)
+                    continue
+                except ContextOSError as exc:
+                    return Verdict(False, policy_block_message(decision, f"could not check approval {approval_id} "
+                                                               f"({exc})"),
+                                   arguments, decision, outcome="approval_error")
+                status = approval_status_of(approval) or ApprovalStatus.PENDING.value
+                note = approval.get("decision_note") if isinstance(approval, dict) else None
+                if status != ApprovalStatus.PENDING:
+                    break
+        except anyio.get_cancelled_exc_class():
+            # The MCP host cancelled the request (or the gateway is shutting down): nothing waits any more.
+            with anyio.CancelScope(shield=True), anyio.move_on_after(5):
+                await self._withdraw(approval_id, "The MCP host cancelled the tool call while it waited for approval.")
+            raise
         if status == ApprovalStatus.APPROVED:
             return Verdict(True, f"Approved in ContextOS (approval {approval_id})", arguments, decision,
                            outcome="approved")
         detail = f"approval {approval_id} was {status}" + (f": {_clip(str(note), 300)}" if note else "")
         return Verdict(False, policy_block_message(decision, detail), arguments, decision, outcome=f"approval_{status}")
+
+    async def _withdraw(self, approval_id: str, reason: str) -> str | None:
+        """Withdraw an approval nothing waits on any more; returns its status afterwards (or None)."""
+        return await anyio.to_thread.run_sync(withdraw_approval, self.client, approval_id, reason)
+
+    @staticmethod
+    def _stale(status: str | None) -> str:
+        if status == ApprovalStatus.CANCELLED:
+            return "was withdrawn from ContextOS"
+        return "is still pending in ContextOS (approving it now will not run this call)"
 
     @staticmethod
     async def _report_wait(on_wait: WaitCallback | None, elapsed: float, total: float, message: str) -> None:

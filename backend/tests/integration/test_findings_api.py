@@ -14,10 +14,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.timeutil import utcnow
-from app.domain.enums import Role
+from app.domain.enums import FindingCategory, Role
 from app.events.envelope import EventEnvelope
 from app.models import AuditEvent, ContextSource, Incident, IncidentActivity, SecurityFinding
 from app.services.ingestion import IngestContext, ingest_event
+from app.services.ingestion_findings import remediation_for
 from app.services.trust_service_assess import DERIVED_FINDING_RULES
 from tests.integration.ingestion_support import GITHUB_TOKEN, decide, event, run_tool, tool_requested
 
@@ -184,6 +185,14 @@ def test_stats_backlog_trend_top_sources_and_mttr(client, seeded_org):
 
 
 # -- detail --------------------------------------------------------------------------------------------
+
+
+def test_exfiltration_remediation_does_not_assume_data_left():
+    # An exfiltration instruction found in content is not proof that anything was sent: the advice
+    # must ask the reader to check before treating a credential as compromised.
+    text = remediation_for(FindingCategory.EXFILTRATION)
+    assert text and "check whether data actually left" in text.lower()
+    assert "if a credential or private data was sent" in text.lower()
 
 
 def test_detail_resolves_evidence_and_related_records(client, seeded_org):

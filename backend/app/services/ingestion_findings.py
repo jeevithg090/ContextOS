@@ -35,8 +35,9 @@ REMEDIATION: dict[str, str] = {
         "it, and add the destination to the allowlist only if it is expected."
     ),
     F.EXFILTRATION: (
-        "Treat the credential as compromised: rotate it now. Then review how it reached the agent's context and "
-        "which content or instruction preceded the outbound call."
+        "Check whether data actually left (the session's tool calls and decisions): if a credential or private data "
+        "was sent, treat it as compromised and rotate it now. Then review how it reached the agent's context and "
+        "which content or instruction preceded any outbound call."
     ),
     F.UNTRUSTED_SOURCE: (
         "Content from a source that may not instruct the agent contained instructions. If the source is "

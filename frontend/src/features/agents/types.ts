@@ -10,7 +10,6 @@ export type AgentSort = "last_seen" | "risk" | "name" | "created";
 export type SessionSort = "recent" | "risk";
 
 export const ENVIRONMENTS: Environment[] = ["development", "staging", "production"];
-export const AGENT_STATUSES: AgentStatus[] = ["active", "inactive", "quarantined"];
 export const QUARANTINE_LABEL = "quarantined";
 
 export const TOOL_CATEGORIES = [

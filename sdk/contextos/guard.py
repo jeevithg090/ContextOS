@@ -42,7 +42,7 @@ from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
 from contextos._args import BoundCall, bind_call, destination_from, to_jsonable, truncate_result
-from contextos.client import ContextOSClient, approval_status_of
+from contextos.client import ContextOSClient, approval_status_of, withdraw_approval
 from contextos.errors import (
     APIError,
     ApprovalRequired,
@@ -301,7 +301,15 @@ class ToolGuard:
         try:
             approval = client.wait_for_approval(decision.approval_id, timeout_s=timeout, poll_s=self.poll_s)
         except ApprovalTimeout:
-            raise ToolDenied(f"no approval decision within {timeout:.0f}s (approval {decision.approval_id})",
+            # Nothing waits on the request any more, so withdraw it (a decision made a moment ago wins).
+            after = withdraw_approval(client, decision.approval_id,
+                                      f"guard() for '{self.tool_name}' stopped waiting after {timeout:.0f}s.")
+            if after == ApprovalStatus.APPROVED:
+                return
+            state = {ApprovalStatus.CANCELLED: "; the request was withdrawn"}.get(after or "", "")
+            if after in (ApprovalStatus.REJECTED, ApprovalStatus.EXPIRED):
+                state = f"; it was {after}"
+            raise ToolDenied(f"no approval decision within {timeout:.0f}s (approval {decision.approval_id}){state}",
                              decision, tool_name=self.tool_name) from None
         except ContextOSError as exc:  # auth / API errors while polling: fail closed
             raise ToolDenied(f"could not check approval {decision.approval_id} ({exc})", decision,

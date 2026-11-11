@@ -227,11 +227,6 @@ def lookup_field(path: str) -> dict[str, Any] | None:
     return _BY_PATH.get(canon) if canon else None
 
 
-def has_wildcard(path: str) -> bool:
-    segs = parse_path(path) or []
-    return any(isinstance(s, int) or s == WILDCARD for s in segs)
-
-
 def rank_of(spec: dict[str, Any] | None, value: Any) -> int | None:
     """Rank of an ordered enum value (case-insensitive), else None."""
     if not spec or not spec.get("ordered") or not isinstance(value, str):

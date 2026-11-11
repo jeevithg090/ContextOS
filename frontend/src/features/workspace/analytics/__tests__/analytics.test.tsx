@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui";
+import { TestRouter } from "@/test/router";
 import { KpiTile, formatHours, percent } from "../KpiTile";
 import { RemediationPipeline } from "../RemediationPipeline";
 import { TaskRowList } from "../TaskRowList";
@@ -28,11 +28,11 @@ describe("analytics helpers", () => {
 describe("KpiTile", () => {
   it("shows the value, what was counted and the definition", () => {
     render(
-      <MemoryRouter>
+      <TestRouter>
         <TooltipProvider>
           <KpiTile label="Remediation completion" value="50%" detail="2 of 4 findings with a linked task" definition="Done ÷ linked." href="/work/remediation" hrefLabel="Pipeline" />
         </TooltipProvider>
-      </MemoryRouter>,
+      </TestRouter>,
     );
     expect(screen.getByText("50%")).toBeInTheDocument();
     expect(screen.getByText("2 of 4 findings with a linked task")).toBeInTheDocument();
@@ -73,9 +73,9 @@ describe("TaskRowList", () => {
 
   it("links each row to its task page and marks overdue work", () => {
     render(
-      <MemoryRouter>
+      <TestRouter>
         <TaskRowList tasks={[task]} aria-label="My tasks" />
-      </MemoryRouter>,
+      </TestRouter>,
     );
     const row = screen.getByRole("link", { name: /CTX-7/ });
     expect(row).toHaveAttribute("href", "/work/tasks/tsk_1");
@@ -86,9 +86,9 @@ describe("TaskRowList", () => {
 
   it("drops badges in the compact layout", () => {
     render(
-      <MemoryRouter>
+      <TestRouter>
         <TaskRowList tasks={[task]} compact aria-label="Due soon" />
-      </MemoryRouter>,
+      </TestRouter>,
     );
     const row = screen.getByRole("link", { name: /CTX-7/ });
     expect(row).not.toHaveTextContent("Urgent");

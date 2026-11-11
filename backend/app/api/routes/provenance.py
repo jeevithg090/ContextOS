@@ -14,7 +14,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import Principal, require
+from app.api.deps import Principal, require_org_wide
 from app.database.session import get_db
 from app.domain.enums import Permission
 from app.schemas.provenance import NodeDetailOut, ProvenanceGraphOut, ScopeOptionsOut
@@ -22,7 +22,7 @@ from app.services import provenance_service
 
 router = APIRouter(prefix="/provenance", tags=["provenance"])
 
-READ = Depends(require(Permission.READ.value))
+READ = Depends(require_org_wide(Permission.READ.value))  # bound API keys: 403
 _ID = {"default": None, "max_length": 64}
 
 

@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.events.envelope import EventEnvelope
-from app.models import ContextSource
+from app.models import ContextSource, Destination, Tool
 from app.services.ingestion import IngestContext, decide_tool_request, ingest_event
 from tests.integration.ingestion_support import decide, event, post_events, tool_requested
 
@@ -102,8 +102,51 @@ def test_simulation_only_destination_is_hidden_from_trust_lists(client, seeded_o
     assert client.get("/api/v1/trust/summary", headers=h).json()["destinations"]["total"] == 1
 
 
+def test_simulated_calls_never_change_tool_or_destination_counters(client, seeded_org, db):
+    """Destination history (``transfer_count``) feeds the trust engine's first-seen check and the tool
+    usage counts feed the agent inventory, so Simulation Lab traffic must leave both untouched."""
+    real = decide(client, seeded_org.api_headers, tool_requested("WebFetch", WEBHOOK, agent="coder", session="real-1"))
+    assert real["decision"] in ("ALLOW", "AUDIT")
+    db.rollback()
+    dest = db.scalar(select(Destination).where(Destination.organization_id == seeded_org.org_id))
+    tool = db.scalar(select(Tool).where(Tool.organization_id == seeded_org.org_id, Tool.name == "WebFetch"))
+    before = (dest.transfer_count, dest.blocked_count, dest.sensitive_transfer_count, tool.invocation_count)
+    assert before == (1, 0, 0, 1)
+
+    secret = {**WEBHOOK, "body": "token=ghp_" + "Zq8RtY2uV4wX6yA1bC3dE5fG7hJ9kL0mN2pQ"}
+    for args in (WEBHOOK, secret):
+        envelope = EventEnvelope.model_validate(tool_requested("WebFetch", args, agent="sim-agent", session="sim-1"))
+        decide_tool_request(db, _sim(seeded_org.org_id), envelope)
+        db.commit()
+    db.expire_all()
+    dest, tool = db.get(Destination, dest.id), db.get(Tool, tool.id)
+    assert (dest.transfer_count, dest.blocked_count, dest.sensitive_transfer_count, tool.invocation_count) == before
+    listed = client.get("/api/v1/trust/destinations", headers=seeded_org.user_headers).json()["items"]
+    assert [(d["transfer_count"], d["blocked_count"]) for d in listed] == [(1, 0)]
+
+
 def test_other_org_never_sees_simulated_sources(client, seeded_org, other_org, db):
     source_id = _simulated_page(db, seeded_org.org_id)
     for path in ("/trust/sources", "/context/sources"):
         assert _ids(client, path, other_org.user_headers, include_simulated="true") == []
     assert client.get(f"/api/v1/trust/sources/{source_id}", headers=other_org.user_headers).status_code == 404
+
+
+def test_recent_downgrades_hide_simulation_only_records_unless_included(client, seeded_org, db):
+    from app.services.audit import append_audit
+
+    h = seeded_org.user_headers
+    simulated = _simulated_page(db, seeded_org.org_id)
+    real = post_events(client, seeded_org.api_headers, event(
+        "context.ingested", source={"type": "web", "identifier": "https://real.example.net/docs"},
+        content="Real documentation page."))[0]["refs"]["source_id"]
+    for source_id in (simulated, real):
+        append_audit(db, seeded_org.org_id, action="trust.source_reclassified", target_type="context_source",
+                     target_id=source_id, details={"from": "EXTERNAL", "to": "SUSPICIOUS", "event_id": "evt_x"})
+    db.commit()
+
+    default = client.get("/api/v1/trust/summary", headers=h).json()["recently_downgraded"]
+    assert [(d["target_id"], d["is_simulation"]) for d in default] == [(real, False)]
+    included = client.get("/api/v1/trust/summary", headers=h,
+                          params={"include_simulated": "true"}).json()["recently_downgraded"]
+    assert {(d["target_id"], d["is_simulation"]) for d in included} == {(real, False), (simulated, True)}

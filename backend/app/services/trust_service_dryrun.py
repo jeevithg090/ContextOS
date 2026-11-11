@@ -23,9 +23,9 @@ from app.engines.trust import (
     canonicalize_source,
 )
 from app.engines.trust.destinations import parse_destination
-from app.models import ContextSource, Destination
+from app.models import ContextSource, Destination, TrustRule
 from app.services.loaders import load_trust_rule_specs
-from app.services.scoping import scoped
+from app.services.scoping import get_scoped, scoped
 from app.services.trust_service import rule_errors
 from app.services.trust_service_assess import (
     assess_destination_row,
@@ -126,6 +126,7 @@ def run_rule_test(db: Session, org_id: str, body: dict[str, Any]) -> dict[str, A
     rules = list(load_trust_rule_specs(db, org_id))
     replace_id = body.get("replace_rule_id")
     if replace_id:
+        get_scoped(db, TrustRule, replace_id, org_id, label="Trust rule")  # 404 for unknown and other orgs' ids
         rules = [r for r in rules if r.id != replace_id]
     draft_errors: list[str] = []
     draft: TrustRuleSpec | None = None

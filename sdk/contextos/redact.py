@@ -213,6 +213,8 @@ def sensitive_path_reason(path: str) -> str | None:
     if not segments:
         return None
     name = segments[-1]
+    if name.endswith(".pub") and len(name) > 4 and ".ssh" in segments[:-1] and "*" not in name:
+        return None  # an SSH public key is meant to be shared (mirrors the server's is_sensitive_path)
     checks: list[Callable[[], str | None]] = [
         lambda: _env_reason(name),
         lambda: next((reason for d, reason in _DIRS.items() if d in segments[:-1] or name == d), None),

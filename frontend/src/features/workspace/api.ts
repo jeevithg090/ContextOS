@@ -17,7 +17,7 @@
  *   POST   /workspace/tasks                              -> TaskDetail (201)
  *   GET    /workspace/tasks/labels | POST                -> LabelWithUsage[] | Label
  *   POST   /workspace/tasks/from-finding                 -> FromFindingResult (201 created / 200 existing)
- *   POST   /workspace/tasks/from-incident                -> FromIncidentResult
+ *   (POST /workspace/tasks/from-incident is called by features/incidents/api.ts useCreateRemediationTasks)
  *   GET|PATCH|DELETE /workspace/tasks/{id}               -> TaskDetail | TaskDetail | 204 (archive)
  *   POST   /workspace/tasks/{id}/move                    -> TaskCard (409 on WIP / verification gates)
  *   PUT    /workspace/tasks/{id}/assignees               -> Assignee[]
@@ -52,8 +52,6 @@ import type {
   FixAttemptInput,
   FixAttemptPatch,
   FromFindingResult,
-  FromIncidentResult,
-  IncidentTaskMode,
   Label,
   LabelWithUsage,
   LinkInput,
@@ -373,18 +371,6 @@ export function useCreateTaskFromFinding() {
     mutationFn: (body: { finding_id: string; board_id?: string }) => api.post<FromFindingResult>(`${TASKS}/from-finding`, body),
     onSuccess: (result) => {
       qc.setQueryData(workspaceKeys.task(result.task.id), result.task);
-      invalidateTask(qc);
-      void qc.invalidateQueries({ queryKey: ["workspace", "remediation"] });
-    },
-  });
-}
-
-export function useCreateTasksFromIncident() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: { incident_id: string; board_id?: string; mode?: IncidentTaskMode }) =>
-      api.post<FromIncidentResult>(`${TASKS}/from-incident`, body),
-    onSuccess: () => {
       invalidateTask(qc);
       void qc.invalidateQueries({ queryKey: ["workspace", "remediation"] });
     },

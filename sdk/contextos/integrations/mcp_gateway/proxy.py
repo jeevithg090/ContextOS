@@ -27,7 +27,6 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import quote
 
 import anyio
 import anyio.to_thread
@@ -94,17 +93,6 @@ def host_info(ctx: Any) -> dict[str, str] | None:
     if not isinstance(name, str) or not name.strip():
         return None
     return {"name": name.strip()[:200], "version": str(version or "")[:64]}
-
-
-def trust_level_of(source: Any) -> str | None:
-    """``trust_level`` of a context source payload (``{"trust_level": ...}`` or ``{"trust": {"level": ...}}``)."""
-    if not isinstance(source, Mapping):
-        return None
-    level = source.get("trust_level")
-    trust = source.get("trust")
-    if not level and isinstance(trust, Mapping):
-        level = trust.get("level")
-    return str(level).upper() if level else None
 
 
 def _page(params: types.PaginatedRequestParams | None) -> types.PaginatedRequestParams | None:
@@ -231,18 +219,15 @@ class Gateway:
                 self._server_blocked = await self._is_server_blocked(result)
 
     async def _is_server_blocked(self, result: SendResult) -> bool:
-        source_id = next((r.refs.get("source_id") for r in result.results if r.refs.get("source_id")), None)
-        if not source_id:
+        """The server's trust classification of this MCP server after the listing, from the
+        ``mcp.server_connected`` result (``refs.source_trust_level``): no extra request, no read scope."""
+        level = next((r.refs.get("source_trust_level") for r in result.results if r.refs.get("source_trust_level")),
+                     None)
+        if not level:
+            log.debug("ContextOS returned no trust level for MCP server '%s'; its tools stay listed",
+                      self.settings.server_name)
             return self._server_blocked
-        try:
-            # ContextOSClient has no public context-source reader yet; this is the same request it builds.
-            source = await anyio.to_thread.run_sync(
-                lambda: self.client._request("GET", f"/context/sources/{quote(str(source_id), safe='')}"))  # noqa: SLF001
-        except ContextOSError as exc:
-            log.warning("Could not read the ContextOS trust classification of MCP server '%s' (%s); its tools stay "
-                        "listed and every call is still decided by ContextOS", self.settings.server_name, exc)
-            return self._server_blocked
-        blocked = trust_level_of(source) == "BLOCKED"
+        blocked = str(level).upper() == "BLOCKED"
         if blocked:
             log.warning("ContextOS classifies MCP server '%s' as BLOCKED; its tools are hidden from the host",
                         self.settings.server_name)
@@ -491,4 +476,4 @@ async def serve_stdio(settings: GatewaySettings, upstream: StdioServerParameters
                 await gateway.close()
 
 
-__all__ = ["DEFAULT_AGENT_NAME", "Gateway", "GatewaySettings", "host_info", "serve_stdio", "trust_level_of"]
+__all__ = ["DEFAULT_AGENT_NAME", "Gateway", "GatewaySettings", "host_info", "serve_stdio"]

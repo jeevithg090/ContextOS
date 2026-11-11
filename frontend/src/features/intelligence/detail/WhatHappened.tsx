@@ -185,7 +185,7 @@ export function chainItems(f: FindingDetail): TimelineItem[] {
             <span className="flex flex-wrap items-center gap-1.5">
               <span className="text-fg-faint">Matched</span>
               {d.matched_policies.map((p, i) => (
-                <span key={`${p.policy_id ?? p.name}-${i}`} className="inline-flex items-center gap-1">
+                <span key={`${p.policy_id ?? p.name}-${i}`} className="inline-flex min-w-0 max-w-full items-center gap-1">
                   {p.policy_id ? <EntityLink type="policy" id={p.policy_id} label={p.name} showIcon={false} /> : <span className="text-fg">{p.name}</span>}
                   {p.mode && <span className="text-fg-faint">({p.mode})</span>}
                 </span>

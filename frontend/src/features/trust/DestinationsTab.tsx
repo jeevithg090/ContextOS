@@ -1,7 +1,7 @@
 /** Destinations tab: everywhere agents tried to send data, its classification and what happened. */
 import { useEffect, useMemo } from "react";
 import { Globe, Pin } from "lucide-react";
-import { TrustBadge } from "@/components/ui";
+import { SimulationBadge, TrustBadge } from "@/components/ui";
 import { DataTable, FilterBar, FilterSelect, Pagination, SearchInput, type DataTableColumn, type SortState } from "@/components/data";
 import { usePagination } from "@/hooks";
 import { TRUST_LEVELS, TRUST_META, type TrustLevel } from "@/lib/domain";
@@ -10,7 +10,7 @@ import { useTrustDestinations } from "./api";
 import { CheckIcon } from "./components";
 import { DESTINATION_KIND_LABELS } from "./meta";
 import type { DestinationFilters, DestinationSort, TrustDestination } from "./types";
-import { boolParam, type SetParams } from "./urlState";
+import { boolParam, includeSimulatedParam, type SetParams } from "./urlState";
 
 const SORT_FIELDS: Record<string, string> = {
   destination: "identifier",
@@ -53,8 +53,11 @@ const COLUMNS: Array<DataTableColumn<TrustDestination>> = [
     sortable: true,
     render: (d) => (
       <div className="min-w-0 max-w-[380px]">
-        <div className="truncate font-mono text-[12.5px] text-fg" title={d.identifier}>
-          {d.identifier}
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-mono text-[12.5px] text-fg" title={d.identifier}>
+            {d.identifier}
+          </span>
+          {d.is_simulation && <SimulationBadge />}
         </div>
         <div className="text-2xs text-fg-faint">{DESTINATION_KIND_LABELS[d.kind] ?? d.kind}</div>
       </div>
@@ -102,9 +105,10 @@ export function DestinationsTab({ params, set, onOpen }: { params: URLSearchPara
   const kind = params.get("dkind") ?? "";
   const blocked = params.get("dblocked") ?? "";
   const sort = (params.get("dsort") ?? "-last_seen") as DestinationSort;
+  const includeSimulated = includeSimulatedParam(params);
   const page = usePagination(50);
   const { reset } = page;
-  const filterKey = [q, level, kind, blocked, sort].join("|");
+  const filterKey = [q, level, kind, blocked, sort, includeSimulated].join("|");
   useEffect(() => reset(), [filterKey, reset]);
 
   const filters: DestinationFilters = useMemo(
@@ -113,11 +117,12 @@ export function DestinationsTab({ params, set, onOpen }: { params: URLSearchPara
       classification: level ? [level as TrustLevel] : undefined,
       kind: kind || undefined,
       has_blocked: boolParam(blocked),
+      include_simulated: includeSimulated || undefined,
       sort,
       limit: page.limit,
       offset: page.offset,
     }),
-    [q, level, kind, blocked, sort, page.limit, page.offset],
+    [q, level, kind, blocked, includeSimulated, sort, page.limit, page.offset],
   );
   const destinations = useTrustDestinations(filters);
   const filtered = !!(q || level || kind || blocked);

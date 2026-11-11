@@ -8,6 +8,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Activity, ArrowLeft, GitBranch, History, Network } from "lucide-react";
 import { Badge, DecisionBadge, EmptyState, ErrorState, LoadingRows, Mono, PageHeader, SeverityBadge, SimulationBadge, StatusBadge } from "@/components/ui";
 import { EntityLink, InlineStat, RiskMeter, Section, provenanceHref } from "@/components/data";
+import { useDocumentTitle } from "@/hooks";
 import { ApiError } from "@/lib/api";
 import { FINDING_CATEGORY_LABELS } from "@/lib/domain";
 import { formatDateTime, timeAgo } from "@/lib/format";
@@ -25,6 +26,7 @@ export function SessionDetailPage() {
   const { sessionId } = useParams();
   const [params] = useSearchParams();
   const session = useSession(sessionId);
+  useDocumentTitle(session.data ? `Session ${session.data.external_session_id}` : null);
 
   if (session.isLoading) return <LoadingRows rows={8} />;
   if (session.error instanceof ApiError && session.error.status === 404) {

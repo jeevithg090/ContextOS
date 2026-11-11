@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider, TooltipProvider } from "@/components/ui";
+import { TestRouter } from "@/test/router";
 import { utcDayLabel } from "../ActivityCharts";
 import { buildKpis, claudeCodeCommands, formatRemaining, formatShare, includeSimulatedFrom, onboardingStage, windowFrom, withSim } from "../meta";
 import { OverviewPage } from "../OverviewPage";
@@ -144,7 +145,7 @@ function renderAt(path = "/") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[path]}>
+      <TestRouter initialEntries={[path]}>
         <TooltipProvider>
           <ToastProvider>
             <Routes>
@@ -152,7 +153,7 @@ function renderAt(path = "/") {
             </Routes>
           </ToastProvider>
         </TooltipProvider>
-      </MemoryRouter>
+      </TestRouter>
     </QueryClientProvider>,
   );
 }

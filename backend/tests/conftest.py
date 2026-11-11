@@ -67,6 +67,16 @@ def _reset_tables(eng: Engine) -> None:
                 conn.execute(table.delete())
 
 
+@pytest.fixture(autouse=True)
+def _reset_login_limits() -> Iterator[None]:
+    """Login failure counters are process-wide; no test may inherit another test's failures."""
+    from app.services.auth_service import clear_login_limits
+
+    clear_login_limits()
+    yield
+    clear_login_limits()
+
+
 @pytest.fixture(scope="session")
 def _external_engine() -> Iterator[Engine | None]:
     if TEST_DATABASE_URL is None:

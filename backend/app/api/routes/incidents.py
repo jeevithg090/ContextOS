@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import Principal, require
+from app.api.deps import Principal, require, require_org_wide
 from app.database.session import get_db
 from app.domain.enums import IncidentStatus, Permission, Severity
 from app.schemas.common import Page
@@ -35,7 +35,7 @@ from app.services.incidents_timeline import incident_timeline
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
-READ = Depends(require(Permission.READ.value))
+READ = Depends(require_org_wide(Permission.READ.value))  # bound API keys: 403
 WRITE = Depends(require(Permission.WRITE.value))
 
 

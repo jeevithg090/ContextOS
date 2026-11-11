@@ -2,12 +2,14 @@
  * Engineering Workspace AI data hooks — context packs, fix-context prompts, templates and breakdown.
  * Backend contract: backend/app/api/routes/workspace_ai.py (all under /api/v1/workspace/ai).
  *
- *   GET    /modes                                   -> AiCatalogue (modes, presets, profiles, options, sections)
+ *   GET    /modes[?task_id=]                        -> AiCatalogue (modes, presets, profiles, options, sections;
+ *                                                     with task_id also the suggested pack profile per mode)
  *   POST   /context-packs                           -> ContextPack (201)
  *   GET    /context-packs[?task_id]                 -> Page<ContextPackSummary>
  *   GET    /context-packs/{id}                      -> ContextPack
  *   PATCH  /context-packs/{id}  {items:[{key,included}]} -> ContextPack (token estimate recomputed)
  *   DELETE /context-packs/{id}                      -> 204
+ *   GET    /context-packs/{id}/export               -> JSON attachment (re-redacted; audited) — hooks.useExportContextPack
  *   POST   /fix-context                             -> FixContextResult (200 preview / 201 when save=true)
  *   GET    /prompts[?task_id]                       -> Page<PromptSummary>
  *   GET    /prompts/{id}                            -> SavedPrompt
@@ -79,11 +81,16 @@ function invalidateTaskActivity(qc: QueryClient, taskId: string | null | undefin
 
 // ---------------------------------------------------------------------------- catalogue
 
-export function useAiCatalogue() {
+/**
+ * The generation catalogue. With a task id it also carries the context-pack profile the server picks
+ * for that task in each mode (`suggested_profiles`), so the UI never re-implements that rule.
+ */
+export function useAiCatalogue(taskId?: string | null) {
   return useQuery({
-    queryKey: workspaceAiKeys.catalogue,
-    queryFn: () => api.get<AiCatalogue>(`${AI}/modes`),
+    queryKey: taskId ? [...workspaceAiKeys.catalogue, "task", taskId] : workspaceAiKeys.catalogue,
+    queryFn: () => api.get<AiCatalogue>(`${AI}/modes`, { task_id: taskId ?? undefined }),
     staleTime: 5 * 60_000,
+    retry: retryUnlessNotFound,
   });
 }
 

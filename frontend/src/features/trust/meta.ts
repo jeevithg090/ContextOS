@@ -2,7 +2,7 @@
  * Trust Centre vocabulary and the capability rules mirrored from
  * backend/app/services/trust_service_common.py (the server re-validates everything).
  */
-import { TRUST_LEVELS, type TrustLevel } from "@/lib/domain";
+import type { TrustLevel } from "@/lib/domain";
 import { pluralize } from "@/lib/format";
 import type { AppliesTo, Capability, CheckResult, ReassessSummary, SourceType } from "./types";
 
@@ -130,7 +130,6 @@ export const LEVEL_HELP: Record<TrustLevel, string> = {
   BLOCKED: "Must not be consumed or contacted. Grants nothing.",
 };
 
-export const LEVEL_OPTIONS = TRUST_LEVELS.map((l) => ({ value: l, label: l.charAt(0) + l.slice(1).toLowerCase() }));
 
 export function reassessMessage(summary: ReassessSummary | null | undefined): string | undefined {
   if (!summary) return undefined;

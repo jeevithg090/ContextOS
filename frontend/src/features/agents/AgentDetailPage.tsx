@@ -8,6 +8,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Bot, Pencil } from "lucide-react";
 import { Badge, Button, Card, EmptyState, EnforcementBadge, ErrorState, LoadingRows, PageHeader, SimulationBadge, StatusBadge, TabPanel, Tabs } from "@/components/ui";
 import { FilterBar, FilterSelect, InlineStat, Pagination } from "@/components/data";
+import { useDocumentTitle } from "@/hooks";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { formatDateTime, timeAgo } from "@/lib/format";
@@ -28,6 +29,7 @@ const SESSION_PAGE = 25;
 export function AgentDetailPage() {
   const { agentId } = useParams();
   const agent = useAgent(agentId);
+  useDocumentTitle(agent.data?.name);
   const { can } = useAuth();
   const [editOpen, setEditOpen] = useState(false);
 

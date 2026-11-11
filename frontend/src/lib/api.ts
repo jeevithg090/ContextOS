@@ -99,5 +99,14 @@ export function downloadFile(filename: string, content: string, mime = "applicat
   a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  revokeSoon(url);
+}
+
+/**
+ * Revoke a download's object URL on the next task: revoking synchronously after click() can cancel the
+ * download in Firefox and Safari, which start reading the blob asynchronously.
+ */
+export function revokeSoon(url: string) {
+  const revoke = URL.revokeObjectURL.bind(URL);
+  window.setTimeout(() => revoke(url), 0);
 }

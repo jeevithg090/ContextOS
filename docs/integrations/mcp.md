@@ -33,7 +33,7 @@ invocation → returned item) are observed relationships, not causation.
 |---|---|
 | `ALLOW`, `AUDIT` | Forward the call. |
 | `DENY` | Do not forward. The host gets `isError: true` with `Blocked by ContextOS policy '<name>': <reason> (decision <id>). The tool was not run.` |
-| `REQUIRE_APPROVAL` | Poll `GET /decide/approvals/{id}` for up to `--approval-timeout` seconds (default 300). The host gets MCP progress notifications while it waits (if it asked for them). Forward only when the approval is `approved`. Rejected, expired, cancelled or still pending means blocked. The reviewer's note is included in the message. |
+| `REQUIRE_APPROVAL` | Poll `GET /decide/approvals/{id}` for up to `--approval-timeout` seconds (default 300). The host gets MCP progress notifications while it waits (if it asked for them). Forward only when the approval is `approved`. Rejected, expired, cancelled or still pending means blocked. The reviewer's note is included in the message. When the gateway stops waiting (timeout, `--approval-timeout 0`, or the host cancels the call) it withdraws the request with `POST /decide/approvals/{id}/cancel`, so it can no longer be approved; if a person decided it a moment earlier, that decision is used. |
 | `RESTRICT` | Apply every restriction, then forward the restricted arguments. Any restriction the gateway cannot apply blocks the call (fail closed): <br>• `redact_secrets`: secrets are masked, then the masked arguments are re-checked with `POST /scan`. That needs the `read` scope; without it the call is blocked. <br>• `allowed_path_globs` / `deny_path_globs`: checked against path-like arguments. A call with a program-like argument (`command`, `cmd`, `script`, `code`, `shell`, …) is blocked, because the gateway cannot see which files it touches. <br>• `max_argument_bytes`: checked. <br>• Unknown restriction keys: blocked. |
 | anything else | Blocked (fail closed). |
 
@@ -56,8 +56,8 @@ Requirements:
 
 - The `contextos` package with the MCP extra: `pip install -e 'sdk[mcp]'`. The gateway needs the
   MCP Python SDK **2.x**; it refuses to start on 1.x and says so. The example servers run on both.
-- A ContextOS API key with the scopes `ingest` and `decide`. Add `read` if you want
-  `--hide-blocked-tools` or `RESTRICT` with `redact_secrets`.
+- A ContextOS API key with the scopes `ingest` and `decide`. Add `read` if your policies use
+  `RESTRICT` with `redact_secrets` (the re-check calls `POST /scan`).
 
 Configure ContextOS once per machine or project. The key is stored with mode 0600:
 
@@ -135,7 +135,7 @@ Any other stdio MCP host works the same way: replace the server command with
 | `--approval-timeout SECONDS` | `CONTEXTOS_APPROVAL_TIMEOUT_S`, else 300 | Wait for approvals. `0` blocks immediately. Check that the host's own tool timeout is at least this long. |
 | `--poll-interval SECONDS` | 2 | Approval polling interval. |
 | `--session-id ID` | a new id per process | One gateway process is one ContextOS session. |
-| `--hide-blocked-tools` | off | List no tools when ContextOS classifies this server's `mcp_server` source as `BLOCKED`. The gateway reads `GET /context/sources/{id}`, which needs the `read` scope. If that read fails, the tools stay listed. This only filters the listing. Every call is decided by ContextOS either way. |
+| `--hide-blocked-tools` | off | List no tools when ContextOS classifies this server's `mcp_server` source as `BLOCKED`. The gateway takes the level from the `mcp.server_connected` result (`refs.source_trust_level`), so no extra request or `read` scope is needed. Without a level the tools stay listed. This only filters the listing. Every call is decided by ContextOS either way. |
 | `--no-context-reports` | off | Do not report resource reads and prompts. |
 | `--max-result-chars N` | 100000 | Characters of each result, resource or prompt that are reported. Longer text is cut with a visible marker, the number of omitted characters is recorded, and the cut-off part is not scanned. |
 | `--startup-timeout SECONDS` | 60 | Time the upstream server has to finish MCP initialization. |
@@ -162,19 +162,24 @@ the first argument that is not a gateway option.
 
 ## Verified behaviour
 
-Run from `backend/`:
+Run from `sdk/` (or `make test-sdk` for the whole SDK suite):
 
 ```bash
-.venv/bin/python -m pytest -q ../sdk/tests/test_mcp_gateway_mapping.py ../sdk/tests/test_mcp_gateway_enforcement.py \
-  ../sdk/tests/test_mcp_gateway_proxy.py ../sdk/tests/test_mcp_gateway_cli.py ../sdk/tests/test_mcp_gateway_integration.py
+../backend/.venv/bin/python -m pytest -q -p no:cacheprovider tests/test_mcp_gateway_mapping.py \
+  tests/test_mcp_gateway_enforcement.py tests/test_mcp_gateway_proxy.py tests/test_mcp_gateway_cli.py \
+  tests/test_mcp_gateway_integration.py
 ```
+
+`backend/tests/e2e/test_live_mcp_gateway.py` additionally runs the gateway as a subprocess against a
+real `contextos-server` process (part of `make test-backend`).
 
 - **Mapping (pure):** server-name rules; truncation markers and byte budgets; text of every MCP
   content block; schema-text extraction; listings split across events without losing any
   description; request/result pairing by correlation id. Every event validates against the
   server's `EventEnvelope`.
 - **Enforcement:** every decision outcome; both fail modes; 401/403/422 always blocked; approvals
-  (approved, rejected with note, timeout, `0`, already approved, revoked key while polling);
+  (approved, rejected with note, timeout, `0`, already approved, revoked key while polling,
+  withdrawal when the gateway stops waiting or the host cancels);
   RESTRICT (redaction with re-check, missing `read` scope, path globs, command arguments, unknown
   keys).
 - **Proxy:** host ↔ gateway ↔ example server over the real MCP stack, in memory. Covers:
@@ -212,11 +217,11 @@ Run from `backend/`:
   upstream pages so the whole listing can be scanned. Resource and prompt lists keep the
   upstream's pagination.
 - **Text-only scanning.** Images, audio and binary resources are labelled
-  "not inspected by ContextOS". Tool error text (`tool.failed`) is stored redacted but is not
-  scanned as context by the server.
-- **Approvals stay open after a timeout.** When the gateway stops waiting, the approval stays
-  pending in ContextOS. Approving it later does not run the old call; the agent must call again,
-  which creates a new approval.
+  "not inspected by ContextOS". (Tool error text from `tool.failed` is recorded and scanned as
+  context like any result.)
+- **Approvals belong to one call.** When the gateway stops waiting it withdraws the approval; if
+  ContextOS cannot be reached at that moment, the request stays pending until it expires, and
+  approving it then runs nothing. The agent must call again, which creates a new approval.
 - **Fail open is not enforcement.** Calls forwarded under `--fail-mode open` ran without a
   decision. ContextOS shows them as observed once the spool is delivered.
 - **Path restrictions are only as good as the arguments.** They can be enforced only where the

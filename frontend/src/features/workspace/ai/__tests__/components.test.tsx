@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
 import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider, TooltipProvider } from "@/components/ui";
+import { TestRouter } from "@/test/router";
 import { ChipsInput, PRIVACY_HEADLINE, PrivacyNote, TokenBudgetMeter } from "../controls";
 import { ModeCards } from "../ModeCards";
 import { OptionsFields } from "../OptionsFields";
@@ -35,11 +35,11 @@ function wrap(ui: ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter>
+      <TestRouter>
         <TooltipProvider>
           <ToastProvider>{ui}</ToastProvider>
         </TooltipProvider>
-      </MemoryRouter>
+      </TestRouter>
     </QueryClientProvider>,
   );
 }

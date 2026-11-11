@@ -26,7 +26,7 @@ export { DonutChart, type DonutChartProps, type DonutDatum } from "./charts/Donu
 export { Sparkline, type SparklineProps } from "./charts/Sparkline";
 export { ChartTooltipCard, seriesColor, toneColor, type TooltipRow } from "./charts/chartTheme";
 
-export { RiskMeter, riskLevelFromScore, type RiskLevel, type RiskMeterProps } from "./RiskMeter";
+export { RiskMeter, type RiskLevel, type RiskMeterProps } from "./RiskMeter";
 export { ScoreRing, gradeFromScore, type ScoreRingProps } from "./ScoreRing";
 export { ConfirmDialog, type ConfirmDialogProps } from "./ConfirmDialog";
 export { Markdown, type MarkdownProps } from "./markdown/Markdown";

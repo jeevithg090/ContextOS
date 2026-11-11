@@ -10,6 +10,7 @@ import { InlineStat } from "@/components/data";
 import { Badge, Button, EmptyState, ErrorState, PageHeader, Skeleton, useToast } from "@/components/ui";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useMembers } from "@/features/settings/api";
+import { useDocumentTitle } from "@/hooks";
 import { ApiError } from "@/lib/api";
 import { pluralize } from "@/lib/format";
 import { useBoard, useLabels, useUpdateBoard } from "../api";
@@ -51,6 +52,7 @@ export function BoardPage() {
   const { me, can } = useAuth();
   const toast = useToast();
   const board = useBoard(boardId);
+  useDocumentTitle(board.data?.name);
   const labels = useLabels();
   const members = useMembers();
   const restore = useUpdateBoard();

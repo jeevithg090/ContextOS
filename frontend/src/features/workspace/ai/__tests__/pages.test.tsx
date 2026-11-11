@@ -1,12 +1,13 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider, TooltipProvider } from "@/components/ui";
+import { TestRouter } from "@/test/router";
 import { ContextPacksPage } from "../ContextPacksPage";
 import { FixContextPage } from "../FixContextPage";
 import { PromptLibraryPage } from "../PromptLibraryPage";
-import { CATALOGUE, DRAFT, PACK, page, SAVED, TASK, TEMPLATES } from "./fixtures";
+import { CATALOGUE, DRAFT, PACK, page, SAVED, TASK, TASK_CATALOGUE, TEMPLATES } from "./fixtures";
 
 let permissions = ["read", "write"];
 vi.mock("@/features/auth/AuthProvider", () => ({
@@ -21,7 +22,7 @@ function route(call: Call): { status?: number; body?: unknown } {
   const custom = override(call);
   if (custom) return custom;
   const { path, method } = call;
-  if (path === "/workspace/ai/modes") return { body: CATALOGUE };
+  if (path === "/workspace/ai/modes") return { body: call.query.get("task_id") === "tsk_1" ? TASK_CATALOGUE : CATALOGUE };
   if (path === "/workspace/ai/templates" && method === "GET") return { body: TEMPLATES };
   if (path === "/workspace/tasks" && method === "GET") return { body: page([TASK]) };
   if (path === "/workspace/tasks/tsk_1") return { body: TASK };
@@ -66,7 +67,7 @@ function renderAt(path: string) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[path]}>
+      <TestRouter initialEntries={[path]}>
         <TooltipProvider>
           <ToastProvider>
             <Routes>
@@ -78,7 +79,7 @@ function renderAt(path: string) {
             </Routes>
           </ToastProvider>
         </TooltipProvider>
-      </MemoryRouter>
+      </TestRouter>
     </QueryClientProvider>,
   );
 }
@@ -112,6 +113,19 @@ describe("FixContextPage", () => {
     expect(posts("/workspace/ai/fix-context")[1].body).toMatchObject({ ...preview, save: true });
     expect(await screen.findByText("Saved to task · v1")).toBeInTheDocument();
     expect(screen.queryByText(/changed since this prompt was generated/)).not.toBeInTheDocument();
+  });
+
+  it("asks the server which pack profile suits the task and sends that profile", async () => {
+    // The server, not a client-side rule, decides the suggestion (here: deep for implementing this task).
+    override = (call) =>
+      call.path === "/workspace/ai/modes" && call.query.get("task_id") === "tsk_1"
+        ? { body: { ...TASK_CATALOGUE, suggested_profile: "deep", suggested_profiles: { ...TASK_CATALOGUE.suggested_profiles, implement_fix: "deep" } } }
+        : undefined;
+    renderAt("/work/fix-context/tsk_1");
+    fireEvent.click(await generateButton());
+    await waitFor(() => expect(posts("/workspace/ai/fix-context")).toHaveLength(1));
+    expect(posts("/workspace/ai/fix-context")[0].body).toMatchObject({ mode: "implement_fix", profile: "deep" });
+    expect(calls.some((c) => c.path === "/workspace/ai/modes" && c.query.get("task_id") === "tsk_1")).toBe(true);
   });
 
   it("saves a draft and records a fix attempt linked to the prompt", async () => {

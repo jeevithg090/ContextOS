@@ -71,6 +71,6 @@ def summary(db: Session, org_id: str, *, include_simulated: bool = False) -> dic
             "destination": sum(1 for applies, _enabled in rules if applies in ("destination", "both")),
         },
         "sources_with_findings": sources_out(db, org_id, candidates[:TOP_SOURCES]),
-        "recently_downgraded": recently_downgraded(db, org_id),
+        "recently_downgraded": recently_downgraded(db, org_id, include_simulated=include_simulated),
         "downgrade_window_days": DOWNGRADE_WINDOW_DAYS,
     }

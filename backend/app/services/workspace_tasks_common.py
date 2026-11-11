@@ -6,7 +6,9 @@ inside the request transaction (``get_db`` commits on success).
 
 Workflow gates (applied to every move, including automation and column deletion):
 - **WIP limit** — entering a column whose ``wip_limit`` is already reached is refused with a 409
-  unless the caller explicitly overrides it (the override is written to the task activity).
+  unless the caller explicitly overrides it (the override is written to the task activity). The
+  column is counted under the organisation write lock (``org_counters.lock_org``), so concurrent
+  moves cannot all pass the check.
 - **Verification gate** — entering a column with ``requires_verification``, or a done column that
   comes *after* such a column on the same board, requires ``task.verification_status == "passed"``.
   A fix attempt marked ``claimed_complete`` is a claim, never verification.
@@ -21,14 +23,15 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.errors import ConflictError, NotFoundError
+from app.core.errors import ConflictError
 from app.core.ids import new_id
 from app.core.timeutil import isoformat, utcnow
 from app.domain.enums import Permission
 from app.engines.redaction import redact_text, redact_value
-from app.models import BoardColumn, Organization, Task, TaskActivity
+from app.models import BoardColumn, Task, TaskActivity
 from app.services.audit import append_audit
 from app.services.notify import notify
+from app.services.org_counters import lock_org, reserve
 from app.services.scoping import get_scoped
 
 TASK_KEY_PREFIX = "CTX"
@@ -105,9 +108,7 @@ def task_key(task: Task) -> str:
 
 
 def next_task_number(db: Session, org_id: str) -> int:
-    org = db.execute(select(Organization).where(Organization.id == org_id).with_for_update()).scalar_one()
-    org.task_seq = (org.task_seq or 0) + 1
-    return org.task_seq
+    return int(reserve(db, org_id, "task_seq")[0])  # atomic: concurrent creates never share a task key
 
 
 def get_task(db: Session, org_id: str, task_id: str) -> Task:
@@ -233,15 +234,22 @@ def check_entry(
         )
     if target.wip_limit is None:
         return False
+    # Count under the organisation write lock: concurrent entries are checked one after the other, and
+    # the limit is re-read in case it was changed meanwhile.
+    lock_org(db, target.organization_id)
+    limit = db.scalar(select(BoardColumn.wip_limit).where(
+        BoardColumn.organization_id == target.organization_id, BoardColumn.id == target.id))
+    if limit is None:
+        return False
     current = column_task_count(db, target, exclude_task_id=task_id)
-    if current + incoming <= target.wip_limit:
+    if current + incoming <= limit:
         return False
     if not override_wip:
         raise ConflictError(
-            f"'{target.name}' has a WIP limit of {target.wip_limit} and already holds {current} task"
+            f"'{target.name}' has a WIP limit of {limit} and already holds {current} task"
             f"{'s' if current != 1 else ''}. Finish or move work out of it first, or override the limit "
             "explicitly (the override is recorded on the task).",
-            details={"reason": "wip_limit_exceeded", "column_id": target.id, "wip_limit": target.wip_limit,
+            details={"reason": "wip_limit_exceeded", "column_id": target.id, "wip_limit": limit,
                      "task_count": current},
         )
     return True
@@ -269,8 +277,3 @@ def reposition(db: Session, task: Task, column: BoardColumn, index: int | None) 
     siblings.insert(at, task)
     for pos, row in enumerate(siblings):
         row.position = float(pos)
-
-
-def ensure_same_org(obj: Any, org_id: str, label: str, obj_id: str) -> None:
-    if obj is None or getattr(obj, "organization_id", None) != org_id:
-        raise NotFoundError(f"{label} '{obj_id}' not found")

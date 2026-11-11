@@ -57,6 +57,24 @@ export const CATALOGUE: AiCatalogue = {
   privacy_note: "Generated on the ContextOS server from records in your organisation.",
 };
 
+/** The catalogue as GET /modes?task_id=tsk_1 returns it: suggestions computed by the server for TASK. */
+export const TASK_CATALOGUE: AiCatalogue = {
+  ...CATALOGUE,
+  task_id: "tsk_1",
+  mode: "implement_fix",
+  suggested_profile: "standard",
+  suggested_profiles: {
+    investigate_only: "standard",
+    root_cause_analysis: "standard",
+    implementation_plan: "standard",
+    implement_fix: "standard",
+    security_harden: "security_critical",
+    refactor: "standard",
+    test_and_verify: "standard",
+    full_autonomous_remediation: "deep",
+  },
+};
+
 export const TASK: TaskDetail = {
   id: "tsk_1", key: "CTX-12", number: 12, board_id: "brd_1", column_id: "col_1", column_name: "In Progress", status_key: "in_progress",
   is_done: false, position: 0, title: "Redact bearer tokens in webhook logs", task_type: "backend", priority: "high", severity: null,

@@ -120,7 +120,18 @@ export interface AiCatalogue {
   repository_configured: boolean;
   external_transfer: false;
   privacy_note: string;
+  /** Set when the catalogue was requested for a task (`GET /modes?task_id=`). */
+  task_id?: string | null;
+  /** The mode `suggested_profile` was computed for (implement_fix unless `?mode=` was sent). */
+  mode?: PromptMode | null;
+  /** The context-pack profile the server would pick for that task in `mode`. */
+  suggested_profile?: PackProfile | null;
+  /** The profile the server would pick for that task in every mode. */
+  suggested_profiles?: Partial<Record<PromptMode, PackProfile>>;
 }
+
+/** The server's profile suggestions for one task (from the task-scoped catalogue). */
+export type ProfileSuggestions = Pick<AiCatalogue, "mode" | "suggested_profile" | "suggested_profiles">;
 
 // ---------------------------------------------------------------------------- context packs
 

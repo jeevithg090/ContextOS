@@ -11,6 +11,7 @@ import { ArrowLeft, GitBranch, History, Radar } from "lucide-react";
 import { EntityLink, EvidenceList, InlineStat, Section, type EvidenceItem } from "@/components/data";
 import { Badge, EmptyState, ErrorState, LoadingRows, Mono, PageHeader, SeverityBadge, SimulationBadge, StatusBadge } from "@/components/ui";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { useDocumentTitle } from "@/hooks";
 import { formatDateTime, formatNumber, timeAgo } from "@/lib/format";
 import { isNotFound, useFinding } from "./api";
 import { IncidentPanel } from "./detail/IncidentPanel";
@@ -132,6 +133,7 @@ function Header({ finding, actions }: { finding: FindingDetail; actions: ReactNo
 export function FindingDetailPage() {
   const { findingId } = useParams();
   const query = useFinding(findingId);
+  useDocumentTitle(query.data?.title);
   const { can } = useAuth();
   const canWrite = can("write");
   const triage = useTriage();

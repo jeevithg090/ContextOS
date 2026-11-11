@@ -25,6 +25,11 @@ export function useTrustParams(): { params: URLSearchParams; set: SetParams } {
   return { params, set };
 }
 
+/** Page-wide "include simulated" switch (`?sim=1`): Simulation Lab-only sources and destinations are hidden by default. */
+export function includeSimulatedParam(params: URLSearchParams): boolean {
+  return params.get("sim") === "1";
+}
+
 export function boolParam(value: string | null): boolean | undefined {
   if (value === "yes") return true;
   if (value === "no") return false;

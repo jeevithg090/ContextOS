@@ -125,7 +125,10 @@ def handle_tool_result(st: PipelineState, started: float) -> None:
     if not first_seen and not failed and prior_status not in FINISHED:
         _count_late_transfer(st, inv)
     if not first_seen and prior_status in NOT_ALLOWED:
-        _decision_not_honoured(st, inv, tool, prior_status)
+        if _approved_at_host_prompt(st, inv, prior_status):
+            _ran_after_host_prompt(st, inv, tool, prior_status)
+        else:
+            _decision_not_honoured(st, inv, tool, prior_status)
 
 
 def _count_late_transfer(st: PipelineState, inv: ToolInvocation) -> None:
@@ -135,8 +138,8 @@ def _count_late_transfer(st: PipelineState, inv: ToolInvocation) -> None:
     Calls decided ALLOW / AUDIT / RESTRICT, and every observed call, were counted at request time
     (``ingestion_tools``); ``blocked_count`` keeps recording the decision itself.
     """
-    if not inv.destination_id:
-        return
+    if not inv.destination_id or inv.is_simulation or st.ctx.is_simulation:
+        return  # simulated calls never count as transfers (the destination history feeds trust checks)
     held = inv.decision == Decision.REQUIRE_APPROVAL and inv.enforcement != "observed"
     blocked = inv.decision == Decision.DENY and inv.enforcement == "enforced"
     if not (held or blocked):
@@ -151,6 +154,49 @@ def _count_late_transfer(st: PipelineState, inv: ToolInvocation) -> None:
     if sensitive:
         dest.sensitive_transfer_count = (dest.sensitive_transfer_count or 0) + 1
     st.refs["destination_id"] = dest.id
+
+
+# Integrations whose own UI can ask the person at the keyboard after ContextOS stops waiting: the
+# Claude Code hook answers "ask" when an approval is not decided in time (it never answers "allow").
+HOST_PROMPT_INTEGRATIONS = frozenset({"claude_code"})
+
+
+def _approved_at_host_prompt(st: PipelineState, inv: ToolInvocation, prior_status: str) -> bool:
+    """The integration reports that the call ran because a person approved it at the host's own
+    permission prompt after the ContextOS approval went undecided. Only a held approval qualifies, and
+    the report must name the same approval; anything else is treated as a decision not honoured."""
+    meta = st.env.metadata or {}
+    prompt = meta.get("host_prompt")
+    return (meta.get("approved_at_host_prompt") is True and isinstance(prompt, dict)
+            and st.integration_kind in HOST_PROMPT_INTEGRATIONS and inv.decision == Decision.REQUIRE_APPROVAL
+            and prior_status in ("pending_approval", "cancelled") and bool(inv.approval_id)
+            and prompt.get("approval_id") == inv.approval_id)
+
+
+def _ran_after_host_prompt(st: PipelineState, inv: ToolInvocation, tool: Tool, prior_status: str) -> None:
+    """Recorded, not hidden: the call ran without a decision in the Approval Centre. ContextOS cannot
+    verify the approval the integration reports, so it is a low-severity finding to review."""
+    st.refs["executed_despite"] = prior_status
+    st.refs["approved_at_host_prompt"] = True
+    raise_finding(
+        st,
+        category=FindingCategory.POLICY_VIOLATION.value,
+        rule_id="CTX-APPROVED-AT-HOST-PROMPT",
+        title=f"{tool.name} ran after approval at the Claude Code prompt, not in ContextOS"[:400],
+        explanation=(
+            "ContextOS held this call for approval. Nobody decided it in the Approval Centre in time, so the "
+            "Claude Code hook withdrew the request and handed the decision to Claude Code's own permission prompt. "
+            "The integration reports that a person approved the call there and it ran. ContextOS cannot verify "
+            "that approval; review whether it was intended."
+        ),
+        severity=Severity.LOW.value,
+        confidence=0.6,
+        evidence=[{"type": "tool_invocation", "id": inv.id, "excerpt": None,
+                   "detail": f"status before the result: {prior_status}; approval {inv.approval_id}"}],
+        tool_invocation_id=inv.id,
+        policy_decision_id=inv.policy_decision_id,
+        destination_id=inv.destination_id,
+    )
 
 
 def _decision_not_honoured(st: PipelineState, inv: ToolInvocation, tool: Tool, prior_status: str) -> None:

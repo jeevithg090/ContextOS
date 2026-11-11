@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.middleware import RequestLimitsMiddleware, apply_security_headers
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
@@ -66,20 +67,19 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_credentials=True,
+        # A wildcard origin with credentials would let any site make cookie-authenticated requests and
+        # read the answers; production refuses "*" outright (Settings.validate_for_production).
+        allow_credentials="*" not in settings.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Body size (with or without Content-Length) and JSON nesting are checked before authentication.
+    app.add_middleware(RequestLimitsMiddleware, max_body_bytes=lambda: get_settings().max_event_bytes * 4)
 
     @app.middleware("http")
     async def _security_headers(request: Request, call_next):  # type: ignore[no-untyped-def]
-        content_length = request.headers.get("content-length")
-        if content_length and content_length.isdigit() and int(content_length) > settings.max_event_bytes * 4:
-            return JSONResponse(status_code=413, content={"error": {"code": "payload_too_large", "message": "Request body too large", "details": None}})
         response = await call_next(request)
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("Referrer-Policy", "no-referrer")
-        response.headers.setdefault("X-Frame-Options", "DENY")
+        apply_security_headers(response.headers, request.url.path, settings)
         return response
 
     register_error_handlers(app)

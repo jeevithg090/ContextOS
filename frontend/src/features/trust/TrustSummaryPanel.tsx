@@ -1,7 +1,7 @@
 /** Header summary: how sources and destinations are classified, which sources carry findings and
  * what was downgraded recently (read from the audit trail). */
 import { ArrowRight, Database, Globe } from "lucide-react";
-import { ErrorState, Skeleton, SeverityBadge, TrustBadge } from "@/components/ui";
+import { ErrorState, Skeleton, SeverityBadge, SimulationBadge, TrustBadge } from "@/components/ui";
 import { InlineStat } from "@/components/data";
 import type { TrustLevel } from "@/lib/domain";
 import { cn, pluralize, timeAgo, truncate } from "@/lib/format";
@@ -10,17 +10,20 @@ import { LevelDistribution } from "./components";
 import { displayIdentifier, sourceTypeLabel } from "./meta";
 
 export function TrustSummaryPanel({
+  includeSimulated = false,
   onSourceLevel,
   onDestinationLevel,
   onOpenSource,
   onOpenDestination,
 }: {
+  /** Count sources and destinations only Simulation Lab traffic observed (the page's "Include simulated"). */
+  includeSimulated?: boolean;
   onSourceLevel: (level: TrustLevel) => void;
   onDestinationLevel: (level: TrustLevel) => void;
   onOpenSource: (id: string) => void;
   onOpenDestination: (id: string) => void;
 }) {
-  const summary = useTrustSummary();
+  const summary = useTrustSummary(includeSimulated);
   if (summary.isLoading)
     return (
       <div className="grid gap-3 lg:grid-cols-2" aria-busy="true" aria-label="Loading summary">
@@ -82,6 +85,7 @@ export function TrustSummaryPanel({
                         </span>
                         <span className="block text-2xs text-fg-faint">{sourceTypeLabel(src.source_type)}</span>
                       </span>
+                      {src.is_simulation && <SimulationBadge />}
                       {src.max_finding_severity && <SeverityBadge severity={src.max_finding_severity} />}
                       <span className="num w-20 shrink-0 text-right text-xs text-fg-muted">{pluralize(src.finding_count, "finding")}</span>
                     </button>

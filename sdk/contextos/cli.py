@@ -1,8 +1,9 @@
 """``contextos`` command-line interface.
 
 Setup:        init, status, doctor, flush
-Data (read):  agents, events, policies, incidents, replay, simulate
-Detection:    scan
+Data:         agents, events, policies, incidents, replay (``read`` scope); simulate (``read`` to list,
+              ``ingest`` to run a scenario)
+Detection:    scan (``read`` scope; nothing is stored)
 Integrations: hook (Claude Code), mcp-gateway (MCP proxy) — implemented by integration packages
 
 Exit codes: 0 success, 1 error (unreachable server, rejected key, failed check), 2 usage error,

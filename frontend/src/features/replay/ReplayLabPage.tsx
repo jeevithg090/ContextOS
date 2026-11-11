@@ -11,6 +11,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Activity, ArrowLeft, FlaskConical, History, Network } from "lucide-react";
 import { EmptyState, ErrorState, LoadingRows, PageHeader, SimulationBadge, StatusBadge, TabPanel, Tabs } from "@/components/ui";
 import { EntityLink, InlineStat, RiskMeter } from "@/components/data";
+import { useDocumentTitle } from "@/hooks";
 import { ApiError } from "@/lib/api";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import { useCounterfactual, useReplay, useReplayLiveRefresh } from "./api";
@@ -27,6 +28,8 @@ type Tab = "replay" | "counterfactual";
 
 export function ReplayLabPage() {
   const { sessionId } = useParams();
+  // The list and a replay share one route title; restore it when coming back from a session.
+  useDocumentTitle(sessionId ? null : "Replay Lab");
   if (!sessionId) {
     return (
       <>
@@ -47,6 +50,7 @@ function SessionReplay({ sessionId }: { sessionId: string }) {
   const decisionId = params.get("decision");
   const offset = Math.max(0, Number(params.get("offset")) || 0);
   const replay = useReplay(sessionId, { offset, decisionId });
+  useDocumentTitle(replay.data ? `Replay ${replay.data.session.external_session_id}` : null);
   const [policySet, setPolicySet] = useState<PolicySetState>(EMPTY_POLICY_SET);
   const run = useCounterfactual();
   useReplayLiveRefresh(sessionId);

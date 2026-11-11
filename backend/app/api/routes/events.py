@@ -3,14 +3,20 @@ cancellation, stateless scanning (POST /scan), the event log (GET /events) and t
 (GET /stream).
 
 Authorisation: ``ingest`` for /events, ``decide`` for /decide and approval polling/cancellation,
-``read`` for everything else. Scopes are checked before the body is validated. Writes are committed before the response is returned so a decision the
-integration receives is always durable (and its approval pollable).
+``read`` for everything else. Scopes are checked before the body is validated. Writes are committed
+before the response is returned so a decision the integration receives is always durable (and its
+approval pollable).
+
+The live stream carries every agent's notifications, so API keys bound to one agent get 403 there. It
+re-checks its credential every ``PING_SECONDS``: a revoked or expired session or API key, a disabled
+user or a removed membership ends the stream.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime
 from typing import Any
@@ -20,7 +26,7 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
-from app.api.deps import Principal, require
+from app.api.deps import Principal, recheck_credential, require, require_org_wide
 from app.core.config import get_settings
 from app.core.errors import PayloadTooLargeError
 from app.database.session import get_db
@@ -47,6 +53,7 @@ router = APIRouter(prefix="", tags=["events"])
 INGEST = Depends(require(Permission.INGEST.value))
 DECIDE = Depends(require(Permission.DECIDE.value))
 READ = Depends(require(Permission.READ.value))
+ORG_WIDE_READ = Depends(require_org_wide(Permission.READ.value))
 PING_SECONDS = 15
 
 
@@ -150,31 +157,52 @@ def get_event(event_id: str, principal: Principal = READ, db: Session = Depends(
 
 
 async def live_messages(
-    org_id: str, is_disconnected: Callable[[], Awaitable[bool]], *, idle_check_s: float = PING_SECONDS
+    org_id: str, is_disconnected: Callable[[], Awaitable[bool]], *, idle_check_s: float = PING_SECONDS,
+    still_authorized: Callable[[], Awaitable[bool]] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
-    """SSE payloads for one subscriber: ``stream.connected`` first, then bus notifications (ids only)."""
+    """SSE payloads for one subscriber: ``stream.connected`` first, then bus notifications (ids only).
+
+    ``still_authorized`` is awaited at least every ``idle_check_s`` (on idle and before delivering a
+    message); the stream ends as soon as it answers False.
+    """
     queue = bus.subscribe(org_id)
+    last_check = time.monotonic()
+
+    async def authorized() -> bool:
+        nonlocal last_check
+        if still_authorized is None:
+            return True
+        last_check = time.monotonic()
+        return await still_authorized()
+
     try:
         yield {"data": json.dumps({"type": "stream.connected"})}
         while True:
             try:
                 message = await asyncio.wait_for(queue.get(), timeout=idle_check_s)
             except TimeoutError:
-                if await is_disconnected():
+                if await is_disconnected() or not await authorized():
                     return
                 continue
+            if time.monotonic() - last_check >= idle_check_s and not await authorized():
+                return
             yield {"data": json.dumps(message, default=str)}
     finally:
         bus.unsubscribe(org_id, queue)
 
 
 @router.get("/stream")
-async def stream(request: Request, principal: Principal = READ, db: Session = Depends(get_db)) -> EventSourceResponse:
+async def stream(request: Request, principal: Principal = ORG_WIDE_READ,
+                 db: Session = Depends(get_db)) -> EventSourceResponse:
     """Server-Sent Events: small notifications ({"type", "id", ...}); clients refetch details."""
     org_id = principal.org_id
     await run_in_threadpool(db.commit)  # end the auth transaction; the stream holds no DB connection
+
+    async def still_authorized() -> bool:
+        return await run_in_threadpool(recheck_credential, principal, Permission.READ.value)
+
     return EventSourceResponse(
-        live_messages(org_id, request.is_disconnected),
+        live_messages(org_id, request.is_disconnected, still_authorized=still_authorized),
         ping=PING_SECONDS,
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )

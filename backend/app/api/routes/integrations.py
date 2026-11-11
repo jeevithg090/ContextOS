@@ -14,7 +14,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import Principal, require
+from app.api.deps import Principal, require_org_wide
 from app.core.errors import NotFoundError
 from app.database.session import get_db
 from app.schemas.integrations import IntegrationsOut, SetupGuideOut
@@ -22,7 +22,7 @@ from app.services import integrations_service
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
-READ = Depends(require("read"))
+READ = Depends(require_org_wide("read"))  # bound API keys: 403
 
 
 @router.get("", response_model=IntegrationsOut)

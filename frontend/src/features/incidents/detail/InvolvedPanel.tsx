@@ -75,7 +75,7 @@ export function InvolvedPanel({ involved }: { involved: Involved }) {
               <span>{s.agent_name}</span>
               <span>started {timeAgo(s.started_at)}</span>
               <span className="num">{formatNumber(s.event_count)} events</span>
-              <RiskMeter score={s.risk_score} size="sm" className="ml-auto w-28" />
+              <RiskMeter score={s.risk_score} level={s.risk_level} size="sm" label={`Risk of session ${s.external_session_id}`} className="ml-auto w-28" />
             </div>
           </li>
         ))}

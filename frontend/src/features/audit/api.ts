@@ -5,7 +5,7 @@
  *   GET /audit/export   -> JSON Lines download (admin; recorded as "audit.exported")
  */
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, API_BASE, ApiError, type Page } from "@/lib/api";
+import { api, API_BASE, ApiError, revokeSoon, type Page } from "@/lib/api";
 import { useThrottledLiveRefresh } from "@/features/integrations/liveRefresh";
 import type { AuditEntry, AuditExportResult, AuditFilters, AuditVerifyResult } from "./types";
 
@@ -67,7 +67,7 @@ export async function downloadAuditExport(): Promise<AuditExportResult> {
   a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  revokeSoon(url);
   return {
     filename,
     throughSeq: response.headers.get("X-ContextOS-Audit-Through-Seq"),

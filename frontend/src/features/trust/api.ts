@@ -1,17 +1,17 @@
 /**
  * Trust Centre data hooks. Backend contract: backend/app/api/routes/trust.py (prefix /trust).
- *   GET    /trust/summary                    -> TrustSummary (read)
+ *   GET    /trust/summary                    -> TrustSummary (read; ?include_simulated)
  *   GET    /trust/rules                      -> Page<TrustRule> (read; precedence order)
  *   POST   /trust/rules                      -> TrustRule (trust:manage; re-assesses stored rows)
  *   GET    /trust/rules/{id}                 -> TrustRule
  *   PATCH  /trust/rules/{id}                 -> TrustRule (trust:manage)
  *   DELETE /trust/rules/{id}                 -> RuleDeleteResult (trust:manage)
  *   POST   /trust/rules/test                 -> RuleTestResult (read; dry run, optional draft rule)
- *   GET    /trust/sources                    -> Page<TrustSource>
+ *   GET    /trust/sources                    -> Page<TrustSource> (?include_simulated)
  *   GET    /trust/sources/{id}               -> TrustSourceDetail
  *   PATCH  /trust/sources/{id}               -> TrustSourceDetail (trust:manage; manual classification)
  *   POST   /trust/sources/{id}/reassess      -> TrustSourceDetail (trust:manage; ?reset_manual)
- *   GET    /trust/destinations               -> Page<TrustDestination>
+ *   GET    /trust/destinations               -> Page<TrustDestination> (?include_simulated)
  *   GET    /trust/destinations/{id}          -> TrustDestinationDetail
  *   PATCH  /trust/destinations/{id}          -> TrustDestinationDetail (trust:manage; exact-match rule)
  *   POST   /trust/destinations/verify        -> DestinationVerifyResult (read; dry run)
@@ -43,7 +43,7 @@ const enc = encodeURIComponent;
 
 export const trustKeys = {
   all: ["trust"] as const,
-  summary: ["trust", "summary"] as const,
+  summary: (includeSimulated: boolean) => ["trust", "summary", { includeSimulated }] as const,
   rules: ["trust", "rules"] as const,
   sources: (filters: SourceFilters) => ["trust", "sources", filters] as const,
   source: (id: string) => ["trust", "source", id] as const,
@@ -70,8 +70,13 @@ export function errorMessage(error: unknown): string {
 
 /* ----------------------------------------------------------------------------- reads */
 
-export function useTrustSummary() {
-  return useQuery({ queryKey: trustKeys.summary, queryFn: () => api.get<TrustSummary>("/trust/summary") });
+/** Sources and destinations only Simulation Lab traffic observed are left out unless `includeSimulated`. */
+export function useTrustSummary(includeSimulated = false) {
+  return useQuery({
+    queryKey: trustKeys.summary(includeSimulated),
+    queryFn: () => api.get<TrustSummary>("/trust/summary", { include_simulated: includeSimulated || undefined }),
+    placeholderData: keepPreviousData,
+  });
 }
 
 export function useTrustRules() {
@@ -89,6 +94,7 @@ export function useTrustSources(filters: SourceFilters) {
         manual: filters.manual,
         has_findings: filters.has_findings,
         capability: filters.capability,
+        include_simulated: filters.include_simulated || undefined,
         sort: filters.sort,
         limit: filters.limit,
         offset: filters.offset,
@@ -115,6 +121,7 @@ export function useTrustDestinations(filters: DestinationFilters) {
         kind: filters.kind,
         q: filters.q,
         has_blocked: filters.has_blocked,
+        include_simulated: filters.include_simulated || undefined,
         sort: filters.sort,
         limit: filters.limit,
         offset: filters.offset,

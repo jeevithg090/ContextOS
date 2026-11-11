@@ -196,7 +196,9 @@ def test_secret_key_classification(key: str, secret: bool) -> None:
 
 @pytest.mark.parametrize(("path", "sensitive"), [(".env", True), ("config/.env.production", True), (".env.example", False),
                                                   ("~/.ssh/id_ed25519", True), ("deploy/server.pem", True),
-                                                  ("home/.aws/credentials", True), ("src/app.py", False), ("README.md", False)])
+                                                  ("home/.aws/credentials", True), ("src/app.py", False), ("README.md", False),
+                                                  ("~/.ssh/id_ed25519.pub", False), ("~/.ssh/known_hosts", True),
+                                                  ("~/.ssh/*.pub", True)])
 def test_sensitive_paths(path: str, sensitive: bool) -> None:
     assert (sensitive_path_reason(path) is not None) is sensitive
 

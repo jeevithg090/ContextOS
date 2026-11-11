@@ -46,7 +46,7 @@ export function FixContextWorkspace({
   const toast = useToast();
   const canWrite = useCanWrite();
   const modes = useMemo(() => new Map<string, ModeInfo>(catalogue.modes.map((m) => [m.key, m])), [catalogue.modes]);
-  const state = useFixContextState(initial, task, modes);
+  const state = useFixContextState(initial, task, modes, catalogue);
   const generate = useGenerateFixContext();
   const saveGen = useGenerateFixContext();
   const update = useUpdatePrompt();

@@ -19,6 +19,7 @@ import type {
   GenerationOptions,
   ModeInfo,
   PackProfile,
+  ProfileSuggestions,
   PromptMode,
   PromptTemplate,
   SavedPrompt,
@@ -94,14 +95,14 @@ export function initialFixState({
     preset: DEFAULT_PRESET,
     options: defaults,
     templateId: null,
-    profile: suggestedProfile(task, DEFAULT_MODE),
+    profile: suggestedProfile(catalogue, DEFAULT_MODE),
     profileChosen: false,
   };
   if (prompt) {
     const knownTemplate = prompt.template_id && templates.some((t) => t.id === prompt.template_id) ? prompt.template_id : null;
-    config = { ...config, mode: prompt.mode, preset: prompt.preset, options: completeOptions(prompt.options, defaults), templateId: knownTemplate, profile: suggestedProfile(task, prompt.mode) };
+    config = { ...config, mode: prompt.mode, preset: prompt.preset, options: completeOptions(prompt.options, defaults), templateId: knownTemplate, profile: suggestedProfile(catalogue, prompt.mode) };
   } else if (template) {
-    config = { ...config, mode: template.mode, preset: template.preset, options: completeOptions(template.options, defaults), templateId: template.id, profile: suggestedProfile(task, template.mode) };
+    config = { ...config, mode: template.mode, preset: template.preset, options: completeOptions(template.options, defaults), templateId: template.id, profile: suggestedProfile(catalogue, template.mode) };
   }
   if (usablePack) config = { ...config, profile: usablePack.profile, profileChosen: true };
   const modeInfo = catalogue.modes.find((m) => m.key === config.mode);
@@ -111,7 +112,8 @@ export function initialFixState({
   return { config, pack: usablePack, preview };
 }
 
-export function useFixContextState(initial: InitialFixState, task: TaskLike, modes: Map<string, ModeInfo>) {
+/** `suggestions`: the task-scoped catalogue's profile per mode, followed until the user picks a profile. */
+export function useFixContextState(initial: InitialFixState, task: TaskLike, modes: Map<string, ModeInfo>, suggestions?: ProfileSuggestions) {
   const [config, setConfig] = useState<FixConfig>(initial.config);
   const [pack, setPack] = useState<PackRef | null>(initial.pack);
   const [packRev, setPackRev] = useState(0);
@@ -132,11 +134,11 @@ export function useFixContextState(initial: InitialFixState, task: TaskLike, mod
 
   const setMode = useCallback(
     (mode: PromptMode) => {
-      const profile = config.profileChosen ? config.profile : suggestedProfile(task, mode);
+      const profile = config.profileChosen ? config.profile : suggestedProfile(suggestions, mode);
       withProfile(profile);
       setConfig((c) => ({ ...c, mode, profile }));
     },
-    [config.profileChosen, config.profile, task, withProfile],
+    [config.profileChosen, config.profile, suggestions, withProfile],
   );
 
   const setPreset = useCallback((preset: AgentPreset) => setConfig((c) => ({ ...c, preset })), []);
@@ -153,11 +155,11 @@ export function useFixContextState(initial: InitialFixState, task: TaskLike, mod
 
   const applyTemplate = useCallback(
     (template: PromptTemplate, defaults: GenerationOptions) => {
-      const profile = config.profileChosen ? config.profile : suggestedProfile(task, template.mode);
+      const profile = config.profileChosen ? config.profile : suggestedProfile(suggestions, template.mode);
       withProfile(profile);
       setConfig((c) => ({ ...c, mode: template.mode, preset: template.preset, options: completeOptions(template.options, defaults), templateId: template.id, profile }));
     },
-    [config.profileChosen, config.profile, task, withProfile],
+    [config.profileChosen, config.profile, suggestions, withProfile],
   );
 
   const clearTemplate = useCallback(() => {

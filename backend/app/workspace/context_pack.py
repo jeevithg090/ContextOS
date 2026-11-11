@@ -124,7 +124,7 @@ def _file_item(root: Path | None, raw: object, *, kind_hint: str | None, origin:
     res = rf.resolve_repo_path(root, raw)
     kind = kind_hint or _kind_for(res.rel)
     name = title or DOC_TITLES.get(res.rel) or PurePosixPath(res.rel).name or res.rel
-    common = {"title": name, "origin": origin, "priority": priority}
+    common: dict[str, Any] = {"title": name, "origin": origin, "priority": priority}
     if res.status == "sensitive":
         return _item(kind, res.rel, category="assumption", verified=False, status="excluded_sensitive",
                      reason=f"Excluded: {res.reason}. Sensitive files are never read.", **common)

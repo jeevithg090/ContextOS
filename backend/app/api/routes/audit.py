@@ -23,7 +23,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import Principal, require
+from app.api.deps import Principal, require, require_org_wide
 from app.core.errors import NotFoundError, ValidationFailedError
 from app.core.logging import get_logger
 from app.core.timeutil import ensure_utc, isoformat, utcnow
@@ -38,7 +38,7 @@ from app.services.scoping import paginate, scoped
 log = get_logger(__name__)
 router = APIRouter(prefix="/audit", tags=["audit"])
 
-READ = Depends(require("read"))
+READ = Depends(require_org_wide("read"))  # bound API keys: 403
 ADMIN = Depends(require("admin"))
 _EXPORT_BATCH = 500
 

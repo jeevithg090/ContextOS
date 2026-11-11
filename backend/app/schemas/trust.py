@@ -429,6 +429,7 @@ class DowngradeOut(BaseModel):
     at: datetime
     actor_label: str
     summary: str
+    is_simulation: bool = Field(False, description="Only Simulation Lab traffic observed this record")
 
 
 class TrustSummaryOut(BaseModel):

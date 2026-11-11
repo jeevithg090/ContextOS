@@ -343,7 +343,7 @@ def upsert_tool(
         metadata["category_hint"] = str(category_hint)
         metadata["category_hint_mismatch"] = str(category_hint) != inherent.category
     tool.tool_metadata = metadata
-    if count_invocation:
+    if count_invocation and not st.ctx.is_simulation:  # Simulation Lab calls never inflate real usage counts
         tool.invocation_count = (tool.invocation_count or 0) + 1
     db.flush()
     return tool

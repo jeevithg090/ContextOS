@@ -21,9 +21,10 @@ const STORED: Array<{ icon: ReactNode; title: string; body: ReactNode }> = [
     title: "Redacted previews",
     body: (
       <>
-        A short, truncated preview of each piece of context and each tool call&apos;s arguments and result, after secret redaction. Recognised
-        secrets are replaced with markers of the form <code className="font-mono text-fg">[REDACTED:type:fingerprint]</code>. Redaction is
-        pattern-based, so unusual secret formats can slip through — treat previews as sensitive.
+        A short, truncated preview of each piece of context and each tool call&apos;s result, after secret redaction. Tool-call arguments are
+        always kept in redacted form, because policy decisions, approvals and replay evaluate them. Recognised secrets are replaced with
+        markers of the form <code className="font-mono text-fg">[REDACTED:type:fingerprint]</code>. Redaction is pattern-based, so unusual
+        secret formats can slip through — treat previews and arguments as sensitive.
       </>
     ),
   },
@@ -150,7 +151,7 @@ export function PrivacyTab({ org, canAdmin }: { org: Org; canAdmin: boolean }) {
             </div>
             <SettingRow
               title="Store redacted previews"
-              description="When off, new context and tool calls are recorded without preview text — as hashes, fingerprints and metadata only. Existing previews are not removed."
+              description="When off, new context and tool results are recorded without preview text — as hashes, fingerprints and metadata only. Redacted tool-call arguments are still kept, because policy decisions, approvals and replay need them. Existing previews are not removed."
             >
               <Checkbox
                 label={values.store_previews ? "Previews are stored" : "Previews are not stored"}

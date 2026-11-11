@@ -60,8 +60,3 @@ def trust_rule_specs(db: Session, org_id: str, applies_to: str) -> list[TrustRul
     version = _version(db, TrustRule, org_id)
     rules = _cached((org_id, "trust_rules"), version, lambda: tuple(load_trust_rule_specs(db, org_id)))
     return [r for r in rules if r.applies_to in (applies_to, "both")]
-
-
-def clear_cache() -> None:
-    with _lock:
-        _cache.clear()

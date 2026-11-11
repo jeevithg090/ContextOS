@@ -40,7 +40,7 @@ export function SegmentedControl<T extends string>({ value, onChange, options, "
   };
 
   return (
-    <div role="radiogroup" aria-label={ariaLabel} className={cn("inline-flex items-center gap-0.5 rounded-md border border-border bg-surface-2 p-0.5", className)}>
+    <div role="radiogroup" aria-label={ariaLabel} className={cn("inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-md border border-border bg-surface-2 p-0.5", className)}>
       {options.map((option, i) => {
         const selected = option.value === value;
         return (

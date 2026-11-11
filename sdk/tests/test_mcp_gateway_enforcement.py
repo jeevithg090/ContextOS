@@ -135,19 +135,59 @@ def test_rejected_approval_blocks_with_the_reviewer_note(server: FakeServer, cli
     assert "approval apr_1 was rejected: not during the freeze" in verdict.message
 
 
-def test_pending_approval_times_out_and_blocks(server: FakeServer, client) -> None:
+CANCEL = "/api/v1/decide/approvals/apr_1/cancel"
+
+
+def test_pending_approval_times_out_is_withdrawn_and_blocks(server: FakeServer, client) -> None:
     _approval(server, "pending")
+    server.route("POST", CANCEL, {"approval_id": "apr_1", "status": "cancelled"})
     clock = FakeClock()
     verdict = _authorize(Enforcer(client, approval_timeout_s=10, poll_s=3, clock=clock.time, sleep=clock.sleep))
     assert not verdict.allowed and verdict.outcome == "approval_timeout"
-    assert "not decided within 10s" in verdict.message and sum(clock.sleeps) == pytest.approx(10)
+    assert "not decided within 10s and was withdrawn from ContextOS" in verdict.message
+    assert sum(clock.sleeps) == pytest.approx(10)
+    assert server.bodies("POST", CANCEL) == [{"reason": "The MCP gateway stopped waiting after 10s."}]
 
 
-def test_approval_timeout_zero_blocks_without_polling(server: FakeServer, client) -> None:
+def test_a_failed_withdrawal_says_the_request_is_still_pending(server: FakeServer, client) -> None:
+    _approval(server, "pending")  # no cancel route: the fake answers 404
+    clock = FakeClock()
+    verdict = _authorize(Enforcer(client, approval_timeout_s=4, poll_s=2, clock=clock.time, sleep=clock.sleep))
+    assert not verdict.allowed and "still pending in ContextOS (approving it now will not run this call)" in verdict.message
+
+
+def test_an_approval_granted_just_before_the_withdrawal_forwards(server: FakeServer, client) -> None:
+    _approval(server, "pending")
+    server.route("POST", CANCEL, {"error": {"code": "conflict", "message": "already approved",
+                                            "details": {"status": "approved"}}}, status=409)
+    clock = FakeClock()
+    verdict = _authorize(Enforcer(client, approval_timeout_s=4, poll_s=2, clock=clock.time, sleep=clock.sleep))
+    assert verdict.allowed and verdict.outcome == "approved"
+
+
+def test_approval_timeout_zero_blocks_without_polling_and_withdraws(server: FakeServer, client) -> None:
     _approval(server, "approved")
+    server.route("POST", CANCEL, {"approval_id": "apr_1", "status": "cancelled"})
     verdict = _authorize(Enforcer(client, approval_timeout_s=0))
     assert not verdict.allowed and verdict.outcome == "approval_not_awaited"
+    assert "was withdrawn from ContextOS: this gateway is configured not to wait" in verdict.message
     assert server.calls("GET", "/api/v1/decide/approvals/apr_1") == []
+    assert len(server.calls("POST", CANCEL)) == 1
+
+
+def test_a_host_cancellation_withdraws_the_waiting_approval(server: FakeServer, client) -> None:
+    _approval(server, "pending")
+    server.route("POST", CANCEL, {"approval_id": "apr_1", "status": "cancelled"})
+    enforcer = Enforcer(client, approval_timeout_s=60, poll_s=0.05)
+
+    async def scenario() -> None:
+        with anyio.move_on_after(0.3):  # the host gives up while the call waits
+            await enforcer.authorize(_request())
+            raise AssertionError("the wait should have been cancelled")
+
+    anyio.run(scenario)
+    assert server.bodies("POST", CANCEL) == [
+        {"reason": "The MCP host cancelled the tool call while it waited for approval."}]
 
 
 def test_already_approved_needs_no_polling(server: FakeServer, client) -> None:

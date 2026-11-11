@@ -59,6 +59,8 @@ export interface IntegrationsOverview {
   connected: ConnectedIntegration[];
   catalog: CatalogEntry[];
   stale_after_minutes: number;
+  /** The same window in hours (24 by default); prefer it for display. */
+  stale_after_hours?: number;
   generated_at: string;
 }
 

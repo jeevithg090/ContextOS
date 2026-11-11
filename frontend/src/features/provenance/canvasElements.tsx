@@ -3,7 +3,7 @@ import { memo } from "react";
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, Handle, Position, type EdgeProps, type NodeProps } from "@xyflow/react";
 import { AlertTriangle, FlaskConical, KeyRound, Lock } from "lucide-react";
 import { toneColor } from "@/components/data";
-import { Badge, DecisionBadge, SeverityBadge, TrustBadge } from "@/components/ui";
+import { Badge, DecisionBadge, EnforcementBadge, SeverityBadge, TrustBadge } from "@/components/ui";
 import { TONE_CLASSES } from "@/lib/domain";
 import { cn } from "@/lib/format";
 import { edgeDash, type LaneFlowNode, type ProvenanceFlowEdge, type ProvenanceFlowNode } from "./graphModel";
@@ -42,14 +42,10 @@ function StatusLine({ node }: { node: GraphNode }) {
         <>
           {node.decision ? <DecisionBadge decision={node.decision} /> : <Badge>No decision</Badge>}
           {node.attributes.ran_despite_block === true ? (
-            <Badge tone="danger" title="The tool reported a result although ContextOS blocked it — nothing was prevented">
+            <Badge tone="danger" title="The tool reported a result although ContextOS denied it or held it for an approval that was never granted — the decision was not honoured">
               Ran anyway
             </Badge>
-          ) : node.enforcement && node.enforcement !== "enforced" && (
-            <Badge tone={node.enforcement === "advisory" ? "warn" : "neutral"} title="The decision could not be enforced at an execution boundary">
-              {node.enforcement === "advisory" ? "Advisory" : "Observed"}
-            </Badge>
-          )}
+          ) : node.enforcement && node.enforcement !== "enforced" && <EnforcementBadge mode={node.enforcement} />}
         </>
       );
     case "session":

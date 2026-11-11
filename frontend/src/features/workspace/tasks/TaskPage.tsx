@@ -5,6 +5,7 @@
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, SquareCheck } from "lucide-react";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/ui";
+import { useDocumentTitle } from "@/hooks";
 import { ApiError } from "@/lib/api";
 import { useTask } from "../api";
 import { TaskDetailView } from "./TaskDetailView";
@@ -12,6 +13,7 @@ import { TaskDetailView } from "./TaskDetailView";
 export function TaskPage() {
   const { taskId = "" } = useParams();
   const task = useTask(taskId);
+  useDocumentTitle(task.data ? `${task.data.key} ${task.data.title}` : null);
 
   if (task.isLoading) return <LoadingRows rows={10} />;
   if (task.error instanceof ApiError && task.error.status === 404) {

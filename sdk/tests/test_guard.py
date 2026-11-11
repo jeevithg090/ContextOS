@@ -110,8 +110,21 @@ def test_require_approval_times_out_closed(server: FakeServer, tmp_path: Path) -
     server.route("GET", "/api/v1/decide/approvals/apr_1", {"status": "pending"})
     now = [0.0]
     client = server.client(tmp_path, sleep=lambda s: now.__setitem__(0, now[0] + s), clock=lambda: now[0])
-    with pytest.raises(ToolDenied, match="no approval decision within 10s"):
+    server.route("POST", "/api/v1/decide/approvals/apr_1/cancel", {"approval_id": "apr_1", "status": "cancelled"})
+    with pytest.raises(ToolDenied, match=r"no approval decision within 10s \(approval apr_1\); the request was withdrawn"):
         guard("deploy", client=client, approval_timeout_s=10, poll_s=2)(lambda: "ran")()
+    assert server.bodies("POST", "/api/v1/decide/approvals/apr_1/cancel") == [
+        {"reason": "guard() for 'deploy' stopped waiting after 10s."}]
+
+
+def test_an_approval_granted_as_the_wait_ends_still_runs(server: FakeServer, tmp_path: Path) -> None:
+    _decide(server, "REQUIRE_APPROVAL", approval_id="apr_1", approval_status="pending")
+    server.route("GET", "/api/v1/decide/approvals/apr_1", {"status": "pending"})
+    server.route("POST", "/api/v1/decide/approvals/apr_1/cancel",
+                 {"error": {"code": "conflict", "message": "decided", "details": {"status": "approved"}}}, status=409)
+    now = [0.0]
+    client = server.client(tmp_path, sleep=lambda s: now.__setitem__(0, now[0] + s), clock=lambda: now[0])
+    assert guard("deploy", client=client, approval_timeout_s=4, poll_s=2)(lambda: "ran")() == "ran"
 
 
 def test_zero_approval_timeout_hands_the_approval_to_the_host(server: FakeServer, client) -> None:

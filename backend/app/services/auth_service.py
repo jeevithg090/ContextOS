@@ -3,7 +3,9 @@
 Security properties:
 - Passwords are verified with scrypt; unknown emails are checked against a dummy hash so response
   time does not reveal whether an account exists. Every credential failure returns the same message.
-- Repeated failures are rate limited per (email, client IP): 5 failures in 5 minutes → HTTP 429.
+- Repeated failures are rate limited per (email, client IP): 5 failures in 5 minutes → HTTP 429; and
+  per client IP across all emails (password spraying): 50 failures in 5 minutes → HTTP 429. A success
+  clears only the per-email counter, so one valid account cannot reset a spraying address.
 - Session tokens and API keys are random; only their SHA-256 hashes are stored. A raw API key is
   returned exactly once, at creation.
 - Role changes that touch the ``owner`` role require an owner, and an organisation can never lose its
@@ -49,7 +51,7 @@ from app.domain.enums import API_KEY_SCOPES, ROLE_PERMISSIONS, Role
 from app.models import Agent, ApiKey, AuthSession, Membership, Organization, User
 from app.schemas.auth import MeMembership, MeOrganization, MeOut, MeUser
 from app.services.audit import append_audit
-from app.services.bootstrap import validate_password
+from app.services.bootstrap import redact_name, validate_password
 from app.services.scoping import get_scoped
 
 INVALID_CREDENTIALS = "Invalid email or password"
@@ -144,10 +146,19 @@ class LoginRateLimiter:
 
 
 login_limiter = LoginRateLimiter()
+# Behind a reverse proxy the client address must be forwarded (uvicorn FORWARDED_ALLOW_IPS), or every user
+# shares the proxy's address and this limit.
+ip_login_limiter = LoginRateLimiter(max_failures=50)
 
 
 def rate_limit_key(email: str, client_ip: str | None) -> str:
     return f"{(email or '').strip().lower()}|{client_ip or '-'}"
+
+
+def clear_login_limits() -> None:
+    """Forget every recorded failure (tests and the CLI)."""
+    login_limiter.clear()
+    ip_login_limiter.clear()
 
 
 # ----------------------------------------------------------------------------- sessions & login
@@ -216,7 +227,8 @@ def login(db: Session, *, email: str, password: str, client_ip: str | None, user
     raised (the request transaction is rolled back on errors, which would otherwise drop them).
     """
     key = rate_limit_key(email, client_ip)
-    wait = login_limiter.retry_after(key)
+    ip_key = client_ip or "-"
+    wait = max(login_limiter.retry_after(key), ip_login_limiter.retry_after(ip_key))
     if wait:
         raise RateLimitedError(
             f"Too many failed sign-in attempts. Try again in {wait} seconds.", details={"retry_after_s": wait}
@@ -226,11 +238,13 @@ def login(db: Session, *, email: str, password: str, client_ip: str | None, user
     if user is None:
         verify_password(password, _dummy_password_hash())  # equalise timing with the known-user path
         login_limiter.record_failure(key)
+        ip_login_limiter.record_failure(ip_key)
         raise AuthenticationError(INVALID_CREDENTIALS)
 
     memberships = user_memberships(db, user.id)
     if not verify_password(password, user.password_hash) or not user.is_active:
         login_limiter.record_failure(key)
+        ip_login_limiter.record_failure(ip_key)
         reason = "inactive_user" if user.is_active is False else "bad_password"
         _audit_each_org(
             db, (m.organization_id for m, _ in memberships), action="auth.login_failed",
@@ -312,6 +326,7 @@ def add_member(
     _check_role(role)
     if role == Role.OWNER and not actor.is_owner:
         raise PermissionDeniedError("Only an owner can add another owner")
+    name = redact_name(name)
     user = db.scalar(select(User).where(User.email == email))
     created = False
     if user is None:
@@ -439,6 +454,7 @@ def create_api_key(
     if expires_in_days is not None and not 1 <= expires_in_days <= 3650:
         raise ValidationFailedError("Expiry must be between 1 and 3650 days")
     agent = get_scoped(db, Agent, agent_id, org_id, label="Agent") if agent_id else None
+    name = redact_name(name)
     raw, prefix, key_hash = generate_api_key()
     key = ApiKey(
         id=new_id("api_key"),

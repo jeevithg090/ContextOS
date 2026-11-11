@@ -17,7 +17,8 @@ from typing import Any
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.domain.enums import ProvenanceNodeType
+from app.domain.enums import ProvenanceNodeType, RiskLevel
+from app.engines.risk.session import LEVEL_THRESHOLDS
 from app.models import Agent, AgentSession, ContextItem, ContextSource, ProvenanceEdge, SecurityFinding
 from app.schemas.provenance import GraphScopeOut
 from app.services import provenance_nodes as nodes_mod
@@ -26,7 +27,8 @@ from app.services.scoping import find_scoped, scoped
 N = ProvenanceNodeType
 PE = ProvenanceEdge
 FINDING_EVIDENCE = "finding_evidence"
-HIGH_RISK_SCORE = 50  # engines.risk: score >= 50 is "high"
+# Lowest score the risk engine calls "high" (taken from the engine, never re-stated here).
+HIGH_RISK_SCORE = next(t for t, level in LEVEL_THRESHOLDS if level == RiskLevel.HIGH)
 MAX_EDGES = 3000
 _MAX_SCOPE_SESSIONS = 40
 _MAX_FINDINGS = 200
