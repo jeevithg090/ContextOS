@@ -1,0 +1,31 @@
+{
+  "//": "Example .claude/settings.json after `contextos init --claude-code`. The command points at the contextos CLI; `contextos init` writes the absolute interpreter path so the hook never depends on PATH. PreToolUse is the enforcement point (deny/ask, never allow); the rest are observation only. Merge this into an existing file rather than replacing it; `contextos init --claude-code` does that for you and keeps other hooks.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "contextos hook PreToolUse", "timeout": 60, "statusMessage": "ContextOS policy check" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "contextos hook PostToolUse", "timeout": 15 } ] }
+    ],
+    "PostToolUseFailure": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "contextos hook PostToolUseFailure", "timeout": 15 } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "contextos hook UserPromptSubmit", "timeout": 15 } ] }
+    ],
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "contextos hook SessionStart", "timeout": 15 } ] }
+    ],
+    "SubagentStop": [
+      { "hooks": [ { "type": "command", "command": "contextos hook SubagentStop", "timeout": 15 } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "contextos hook SessionEnd", "timeout": 15 } ] }
+    ]
+  }
+}
