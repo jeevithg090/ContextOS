@@ -5,15 +5,8 @@ export type RiskLevel = "low" | "medium" | "high" | "critical";
 
 const LEVEL_TONE: Record<RiskLevel, Tone> = { low: "low", medium: "medium", high: "high", critical: "critical" };
 
-/**
- * Display-only fallback used when the API did not send a level. The server-computed level
- * (risk engine) is authoritative — always pass it when you have it.
- */
-export function riskLevelFromScore(score: number): RiskLevel {
-  if (score >= 80) return "critical";
-  if (score >= 60) return "high";
-  if (score >= 30) return "medium";
-  return "low";
+function knownLevel(level: string | null | undefined): RiskLevel | null {
+  return level && Object.prototype.hasOwnProperty.call(LEVEL_TONE, level) ? (level as RiskLevel) : null;
 }
 
 function clampScore(score: number): number {
@@ -23,6 +16,8 @@ function clampScore(score: number): number {
 export interface RiskMeterProps {
   /** 0-100, higher is riskier. */
   score: number;
+  /** The server-computed level (risk engine thresholds). Without one the meter is drawn neutral — the
+   * client never derives a level from the score, so it cannot drift from the server's thresholds. */
   level?: string | null;
   segments?: number;
   showValue?: boolean;
@@ -35,8 +30,8 @@ export interface RiskMeterProps {
 /** Segmented 0-100 risk bar with the numeric score and level. */
 export function RiskMeter({ score, level, segments = 10, showValue = true, showLevel = false, size = "md", label = "Risk score", className }: RiskMeterProps) {
   const value = clampScore(score);
-  const resolved: RiskLevel = level && Object.prototype.hasOwnProperty.call(LEVEL_TONE, level) ? (level as RiskLevel) : riskLevelFromScore(value);
-  const tone = TONE_CLASSES[LEVEL_TONE[resolved]];
+  const resolved = knownLevel(level);
+  const tone = TONE_CLASSES[resolved ? LEVEL_TONE[resolved] : "neutral"];
   const filled = value === 0 ? 0 : Math.max(1, Math.ceil((value / 100) * segments));
 
   return (
@@ -46,7 +41,7 @@ export function RiskMeter({ score, level, segments = 10, showValue = true, showL
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={value}
-      aria-valuetext={`${value} out of 100, ${resolved} risk`}
+      aria-valuetext={resolved ? `${value} out of 100, ${resolved} risk` : `${value} out of 100`}
       className={cn("inline-flex items-center gap-2", className)}
     >
       <div className={cn("flex gap-[2px]", size === "sm" ? "w-16" : "w-24")} aria-hidden>
@@ -55,7 +50,7 @@ export function RiskMeter({ score, level, segments = 10, showValue = true, showL
         ))}
       </div>
       {showValue && <span className={cn("num font-mono font-medium", size === "sm" ? "text-2xs" : "text-xs", tone.text)}>{value}</span>}
-      {showLevel && <span className={cn("text-xs", tone.text)}>{humanize(resolved)}</span>}
+      {showLevel && resolved && <span className={cn("text-xs", tone.text)}>{humanize(resolved)}</span>}
     </div>
   );
 }

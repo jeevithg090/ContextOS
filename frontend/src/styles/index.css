@@ -91,6 +91,13 @@
       scroll-behavior: auto !important;
     }
   }
+  /* A grid's implicit `auto` column grows to its widest item's min-content (a no-wrap table, a long
+     path), which pushed whole pages wider than the viewport below the breakpoint where a responsive
+     `md:grid-cols-*` applies. Default the template to one shrinkable column; any `grid-cols-*` utility
+     (utilities come after this layer) still overrides it. */
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
   /* Scrollbars */
   * {
     scrollbar-width: thin;

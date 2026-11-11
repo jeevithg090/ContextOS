@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeftRight, ExternalLink, SearchX } from "lucide-react";
 import { Button, EmptyState, ErrorState, LoadingRows, PageHeader, SeverityBadge, Skeleton } from "@/components/ui";
+import { useDocumentTitle } from "@/hooks";
 import { ApiError } from "@/lib/api";
 import { useTask } from "../api";
 import { PriorityBadge, taskTypeLabel } from "../analytics/taskMeta";
@@ -71,8 +72,10 @@ function FixContextLoader({ taskId }: { taskId: string }) {
     }
   }, [promptParam]);
 
-  const catalogue = useAiCatalogue();
+  // Task-scoped: carries the server's suggested context-pack profile for this task in every mode.
+  const catalogue = useAiCatalogue(taskId);
   const task = useTask(taskId);
+  useDocumentTitle(task.data ? `Fix context · ${task.data.key}` : null);
   const templates = useTemplates();
   const prompt = usePrompt(boot.promptId);
   const packId = boot.packId ?? prompt.data?.context_pack_id ?? null;
@@ -180,8 +183,11 @@ export function FixContextPage() {
   const { taskId } = useParams();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const catalogue = useAiCatalogue();
+  // Same query as the loader's when a task is open, so the catalogue is fetched once.
+  const catalogue = useAiCatalogue(taskId);
   const template = params.get("template");
+  // The picker and a task share one route title; restore it when coming back from a task.
+  useDocumentTitle(taskId ? null : "AI Fix Context");
 
   return (
     <>

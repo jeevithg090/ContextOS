@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import Principal, require
+from app.api.deps import Principal, require, require_org_wide
 from app.database.session import get_db
 from app.domain.enums import Permission
 from app.engines.policy import FIELD_CATALOG, OPERATORS, explain_conditions
@@ -39,6 +39,8 @@ from app.services.policy_service import Actor
 router = APIRouter(prefix="/policies", tags=["policies"])
 
 READ = Depends(require(Permission.READ.value))
+# Recorded decisions span every agent: API keys bound to one agent get 403.
+DECISIONS_READ = Depends(require_org_wide(Permission.READ.value))
 MANAGE = Depends(require(Permission.POLICY_MANAGE.value))
 
 
@@ -98,7 +100,7 @@ def validate_policy(body: ValidateIn, principal: Principal = READ) -> ValidateOu
 
 
 @router.post("/test", response_model=PolicyTestOut)
-def test_policy(body: PolicyTestIn, principal: Principal = READ, db: Session = Depends(get_db)) -> PolicyTestOut:
+def test_policy(body: PolicyTestIn, principal: Principal = DECISIONS_READ, db: Session = Depends(get_db)) -> PolicyTestOut:
     """Dry run: evaluate a draft and/or saved policies against an input. Nothing is persisted."""
     result = policy_testing.run_policy_test(
         db,
@@ -114,7 +116,7 @@ def test_policy(body: PolicyTestIn, principal: Principal = READ, db: Session = D
 
 @router.get("/recent-decisions", response_model=Page[DecisionSummaryOut])
 def recent_decisions(
-    principal: Principal = READ,
+    principal: Principal = DECISIONS_READ,
     db: Session = Depends(get_db),
     decision: DecisionName | None = None,
     session_id: str | None = None,
@@ -195,7 +197,7 @@ def delete_policy(policy_id: str, principal: Principal = MANAGE, db: Session = D
 @router.get("/{policy_id}/decisions", response_model=Page[PolicyDecisionMatchOut])
 def policy_decisions(
     policy_id: str,
-    principal: Principal = READ,
+    principal: Principal = DECISIONS_READ,
     db: Session = Depends(get_db),
     days: int = Query(30, ge=1, le=365),
     include_simulation: bool = True,

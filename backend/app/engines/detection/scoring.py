@@ -11,7 +11,7 @@ EXCERPT_CAP = 240
 _CONTEXT = 60  # chars of context kept on each side of a match before the cap
 
 # Severity weights for the noisy-OR aggregation: a critical hit dominates, info barely moves it.
-_SEV_WEIGHT = {
+_SEV_WEIGHT: dict[str, float] = {
     Severity.CRITICAL: 1.0,
     Severity.HIGH: 0.85,
     Severity.MEDIUM: 0.55,

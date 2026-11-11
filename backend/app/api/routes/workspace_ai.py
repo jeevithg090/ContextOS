@@ -11,7 +11,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import Principal, require
+from app.api.deps import Principal, require, require_org_wide
 from app.database.session import get_db
 from app.domain.enums import Permission
 from app.models import ContextPack
@@ -53,7 +53,7 @@ from app.workspace.text import estimate_tokens
 
 router = APIRouter(prefix="/workspace/ai", tags=["workspace"])
 
-READ = Depends(require(Permission.READ.value))
+READ = Depends(require_org_wide(Permission.READ.value))  # bound API keys: 403
 WRITE = Depends(require(Permission.WRITE.value))
 
 

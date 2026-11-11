@@ -88,6 +88,7 @@ describe("context explorer presentation helpers", () => {
   it("describes detection techniques and clock skew in words", () => {
     expect(techniqueLabel("html_comment")).toBe("Hidden in an HTML comment");
     expect(techniqueLabel("multilingual:de")).toBe("Non-English text (de)");
+    expect(techniqueLabel("reflowed")).toBe("Hard-wrapped lines re-joined");
     expect(describeSkew(1.5)).toBe("Received 1.5 s after the reported collection time");
     expect(describeSkew(-300)).toContain("client clock ahead");
   });

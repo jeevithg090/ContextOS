@@ -14,6 +14,8 @@ export function BuildPackDialog({ open, onOpenChange, onBuilt }: { open: boolean
   const catalogue = useAiCatalogue();
   const build = useCreateContextPack();
   const [task, setTask] = useState<TaskCard | null>(null);
+  // The server's suggested profile for the chosen task (packs built here are for implementing a fix).
+  const taskCatalogue = useAiCatalogue(task?.id);
   const [profile, setProfile] = useState<PackProfile>("standard");
   const [chosen, setChosen] = useState(false);
   const [paths, setPaths] = useState<string[]>([]);
@@ -31,12 +33,13 @@ export function BuildPackDialog({ open, onOpenChange, onBuilt }: { open: boolean
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const pick = (t: TaskCard) => {
-    setTask(t);
-    if (!chosen) setProfile(suggestedProfile(t, "implement_fix"));
-  };
+  const suggested = task && taskCatalogue.data ? suggestedProfile(taskCatalogue.data, "implement_fix") : null;
+  // Follow the suggestion for the picked task until the user chooses a profile themselves.
+  useEffect(() => {
+    if (suggested && !chosen) setProfile(suggested);
+  }, [suggested, chosen]);
+  const pick = (t: TaskCard) => setTask(t);
   const selected = catalogue.data?.profiles.find((p) => p.key === profile);
-  const suggested = task ? suggestedProfile(task, "implement_fix") : null;
 
   const submit = () => {
     if (!task) return setError("Choose a task first.");

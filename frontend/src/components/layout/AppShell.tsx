@@ -137,8 +137,10 @@ export function AppShell() {
             </IconButton>
           </div>
         </header>
-        <main id="main-content" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto focus:outline-none">
+        <main id="main-content" tabIndex={-1} className="relative min-h-0 flex-1 overflow-y-auto focus:outline-none">
           {/* Each route renders inside its own Suspense and error boundary (src/app/routes.tsx). */}
+          {/* `relative` on <main>: absolutely positioned descendants without a positioned ancestor (e.g. sr-only
+              live regions) would otherwise be placed against the document and make the whole page scroll. */}
           <div key={location.pathname} className="mx-auto w-full max-w-[1480px] px-4 py-6 sm:px-6 animate-fade-in">
             <Outlet />
           </div>

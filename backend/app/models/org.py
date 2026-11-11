@@ -25,6 +25,7 @@ class Organization(TimestampMixin, Base):
     audit_seq: Mapped[int] = mapped_column(Integer, default=0)
     event_seq: Mapped[int] = mapped_column(Integer, default=0)
     task_seq: Mapped[int] = mapped_column(Integer, default=0)
+    incident_seq: Mapped[int] = mapped_column(Integer, default=0)  # INC-<n> numbers (migration 0002)
     audit_head_hash: Mapped[str | None] = mapped_column(String(64), default=None)
 
 

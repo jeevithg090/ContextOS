@@ -75,6 +75,10 @@ class Settings(BaseSettings):
             problems.append("CONTEXTOS_SECRET_KEY must be set to a random value of at least 32 characters")
         if not self.cookie_secure:
             problems.append("CONTEXTOS_COOKIE_SECURE must be true in production")
+        if any(origin.strip() == "*" for origin in self.cors_origins):
+            problems.append("CONTEXTOS_CORS_ORIGINS must list explicit origins in production, not '*'")
+        if self.session_ttl_hours < 1 or self.session_ttl_hours > 24 * 30:
+            problems.append("CONTEXTOS_SESSION_TTL_HOURS must be between 1 and 720 in production")
         if problems:
             raise RuntimeError("Refusing to start in production: " + "; ".join(problems))
 

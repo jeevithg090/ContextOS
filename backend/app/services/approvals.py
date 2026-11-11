@@ -60,12 +60,18 @@ def create_approval(
 
 
 def get_approval_status(db: Session, org_id: str, approval_id: str) -> Approval:
-    """Fetch an approval, lazily expiring it if its deadline passed."""
+    """Fetch an approval, lazily expiring it if its deadline passed.
+
+    The expiry is a conditional UPDATE like every other transition out of ``pending``: a reviewer's
+    decision committed after this request read the row is never overwritten with ``expired``.
+    """
     approval = get_scoped(db, Approval, approval_id, org_id, label="Approval")
-    if approval.status == ApprovalStatus.PENDING and approval.expires_at and approval.expires_at <= utcnow():
-        approval.status = ApprovalStatus.EXPIRED
-        approval.decided_at = utcnow()
-        notify(db, org_id, "approval.decided", id=approval.id, status=approval.status)
+    now = utcnow()
+    if _overdue(approval, now):
+        closed = _close(db, org_id, approval.id, {"status": ApprovalStatus.EXPIRED, "decided_at": now})
+        db.refresh(approval)
+        if closed:
+            notify(db, org_id, "approval.decided", id=approval.id, status=ApprovalStatus.EXPIRED.value)
     return approval
 
 

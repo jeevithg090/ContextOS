@@ -5,6 +5,8 @@ Use ``get_logger(__name__)`` and pass context as keyword ``extra`` fields:
     log.info("event.ingested", extra={"event_id": ..., "org_id": ...})
 
 Never log raw context content, tool arguments or secrets — log ids and redacted summaries only.
+As defence in depth both formatters pass every finished line (message, extra fields and any
+traceback, which can quote the input being processed) through the redaction engine.
 """
 
 from __future__ import annotations
@@ -17,8 +19,17 @@ from typing import Any
 _RESERVED = set(logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()) | {"message", "asctime"}
 
 
+def _redacted(line: str) -> str:
+    from app.engines.redaction import redact_text  # local: the engines import app.core at load time
+
+    return redact_text(line).text
+
+
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
+        return _redacted(self._format(record))
+
+    def _format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
             "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
             "level": record.levelname,
@@ -35,6 +46,9 @@ class JsonFormatter(logging.Formatter):
 
 class KeyValueFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
+        return _redacted(self._format(record))
+
+    def _format(self, record: logging.LogRecord) -> str:
         base = f"{self.formatTime(record, '%H:%M:%S')} {record.levelname:<5} {record.name}: {record.getMessage()}"
         extras = [f"{k}={v}" for k, v in record.__dict__.items() if k not in _RESERVED and not k.startswith("_")]
         line = base + (" " + " ".join(extras) if extras else "")

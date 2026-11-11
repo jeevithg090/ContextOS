@@ -337,17 +337,17 @@ def extract_destination(
             if res.get("kind") == "email":
                 return {"kind": "email", "identifier": res["id"]}
     for res in resources:
-        kind, ident = res.get("kind"), res.get("id") or ""
-        if kind == "url":
+        res_kind, ident = res.get("kind"), res.get("id") or ""
+        if res_kind == "url":
             scheme = ident.split("://", 1)[0]
             if scheme in _OBJECT_STORAGE_SCHEMES:
                 return {"kind": "service", "identifier": "/".join(ident.split("/")[:3])}
             host = san.url_host(ident)
             if scheme != "file" and host and not san.is_loopback(host):
                 return _host_destination(host)
-        elif kind == "host" and not san.is_loopback(ident):
+        elif res_kind == "host" and not san.is_loopback(ident):
             return _host_destination(ident)
-        elif kind == "email":
+        elif res_kind == "email":
             return {"kind": "email", "identifier": ident}
     if category == ToolCategory.MESSAGING:
         for res in resources:

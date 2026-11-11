@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui";
+import { TestRouter } from "@/test/router";
 import { CounterfactualResults } from "../counterfactual/CounterfactualResults";
 import { SimulationBanner } from "../counterfactual/SimulationBanner";
 import { ReplayPlayer } from "../player/ReplayPlayer";
@@ -65,9 +65,9 @@ function replay(steps: ReplayStep[]): Replay {
 
 function renderUi(ui: React.ReactNode) {
   return render(
-    <MemoryRouter>
+    <TestRouter>
       <TooltipProvider>{ui}</TooltipProvider>
-    </MemoryRouter>,
+    </TestRouter>,
   );
 }
 

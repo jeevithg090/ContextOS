@@ -11,16 +11,28 @@ import { useAiCatalogue, useTemplates } from "./api";
 import { safeFilename } from "./meta";
 import type { ContextPack, ModeInfo, PresetInfo, ProfileInfo, PromptMode, PromptTemplate } from "./types";
 
+/** Body of GET /workspace/ai/context-packs/{id}/export (services.workspace_ai_packs.export_pack). */
+interface ContextPackExport {
+  context_pack: Pick<ContextPack, "id" | "profile">;
+  task: { id: string; key: string; title: string } | null;
+}
+
+/** Filename the server puts in Content-Disposition for a pack export. */
+export function packExportFilename(doc: ContextPackExport): string {
+  return safeFilename(`context-pack-${doc.task?.key ?? doc.context_pack.id}-${doc.context_pack.profile}`, "json");
+}
+
 /**
- * Download a stored context pack as JSON (items, verification status, reasons and excerpts as the
- * server stored them — sensitive files never have content). Fetches the current version first.
+ * Download a stored context pack through the server's export endpoint, which re-redacts the pack
+ * (items, verification status, reasons and excerpts — sensitive files never have content) and writes
+ * a `context_pack.exported` audit entry. The current version is exported.
  */
 export function useExportContextPack() {
   return useMutation({
     mutationFn: async (packId: string) => {
-      const pack = await api.get<ContextPack>(`/workspace/ai/context-packs/${encodeURIComponent(packId)}`);
-      const filename = safeFilename(`${pack.task_key ?? "task"}-${pack.profile}-context-pack-${pack.id.slice(-6)}`, "json");
-      downloadFile(filename, JSON.stringify(pack, null, 2), "application/json");
+      const doc = await api.get<ContextPackExport>(`/workspace/ai/context-packs/${encodeURIComponent(packId)}/export`);
+      const filename = packExportFilename(doc);
+      downloadFile(filename, JSON.stringify(doc, null, 2), "application/json");
       return { filename };
     },
   });

@@ -239,6 +239,7 @@ def decide_request(st: PipelineState, *, started: float, completed: bool = False
     risk = compute_session_risk(view.signals)
     inp = build_input(st, a, risk, view.context)
     result = evaluate(inp, st.policies(), default_decision=str(st.settings.get("default_decision") or "ALLOW"))
+    result = replace(result, explanation=_prospective_note(result.explanation, view, pending, risk))
     enforcement = st.enforcement
 
     decision = PolicyDecision(
@@ -278,7 +279,8 @@ def decide_request(st: PipelineState, *, started: float, completed: bool = False
         )
         invocation.approval_id = approval.id
         st.refs["approval_id"] = approval.id
-    _count_transfer(a, result.decision, enforcement)
+    if not st.ctx.is_simulation:  # simulated calls never inflate a destination's transfer history
+        _count_transfer(a, result.decision, enforcement)
     _edges(st, a, invocation, decision)
     if result.decision in (Decision.DENY, Decision.REQUIRE_APPROVAL):
         append_audit(
@@ -299,6 +301,28 @@ def approval_summary(st: PipelineState, a: ToolAnalysis) -> str:
     agent = st.agent.name if st.agent else "An agent"
     target = a.target
     return f"{agent} wants to {a.tool_name} {target}"[:1000] if target else f"{agent} wants to use {a.tool_name}"
+
+
+PROSPECTIVE_TRIFECTA_NOTE = (
+    " Note: session.trifecta counts this requested call as the session's outbound channel; the session's "
+    "recorded trifecta becomes true only if the call runs."
+)
+
+
+def _prospective_note(explanation: str, view: SessionView, pending: dict[str, Any], risk: SessionRisk) -> str:
+    """Say so when the trifecta holds only because this (not yet executed) call is counted.
+
+    The request is evaluated as if it ran — that is what is being decided — while the session's
+    persisted state counts executed calls only, so an explanation citing ``session.trifecta`` would
+    otherwise contradict every other view of a session whose call was held or denied.
+    """
+    if not risk.trifecta or "session.trifecta" not in explanation:
+        return explanation
+    others = [i for i in view.signals.tool_invocations if i is not pending]
+    if compute_session_risk(replace(view.signals, tool_invocations=others)).trifecta:
+        return explanation
+    text = explanation.rstrip()
+    return text + ("" if text.endswith(".") else ".") + PROSPECTIVE_TRIFECTA_NOTE
 
 
 def _risk_summary(a: ToolAnalysis, risk: SessionRisk, result: EvaluationResult) -> dict[str, Any]:

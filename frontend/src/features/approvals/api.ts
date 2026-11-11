@@ -28,10 +28,6 @@ export function isNotFound(err: unknown): boolean {
   return err instanceof ApiError && err.status === 404;
 }
 
-export function isConflict(err: unknown): boolean {
-  return err instanceof ApiError && err.status === 409;
-}
-
 function listQuery(params: ApprovalListParams) {
   return {
     status: params.view === "queue" ? ["pending"] : HISTORY_STATUSES,

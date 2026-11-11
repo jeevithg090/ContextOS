@@ -27,6 +27,7 @@ from app.core.security import keyed_hmac
 from app.core.timeutil import isoformat, utcnow
 from app.engines.redaction import redact_value
 from app.models import AuditEvent, Organization
+from app.services.org_counters import reserve
 
 _PURPOSE = "audit-chain-v1"
 
@@ -69,13 +70,17 @@ def append_audit(
     target_id: str | None = None,
     details: dict[str, Any] | None = None,
 ) -> AuditEvent:
-    """Append one audit entry in the caller's transaction. Pass ids and short metadata, not content."""
-    org = db.execute(select(Organization).where(Organization.id == org_id).with_for_update()).scalar_one()
-    org.audit_seq = (org.audit_seq or 0) + 1
+    """Append one audit entry in the caller's transaction. Pass ids and short metadata, not content.
+
+    The sequence number and the previous head are reserved atomically (``org_counters.reserve``): the
+    organisation row stays write-locked until the caller's transaction ends, so concurrent appends
+    form one unbroken chain instead of racing for the same sequence number.
+    """
+    seq, prev_hash = reserve(db, org_id, "audit_seq", "audit_head_hash")
     entry = AuditEvent(
         id=new_id("audit_event"),
         organization_id=org_id,
-        seq=org.audit_seq,
+        seq=seq,
         occurred_at=utcnow(),
         actor_type=actor_type,
         actor_id=actor_id,
@@ -83,9 +88,10 @@ def append_audit(
         target_type=target_type,
         target_id=target_id,
         details=_safe_details(details),
-        prev_hash=org.audit_head_hash,
+        prev_hash=prev_hash,
     )
     entry.hash = _compute_hash(entry)
+    org = db.execute(select(Organization).where(Organization.id == org_id)).scalar_one()
     org.audit_head_hash = entry.hash
     db.add(entry)
     db.flush()

@@ -17,6 +17,7 @@ from app.domain.enums import SEVERITY_RANK, IncidentStatus, Severity
 from app.models import Incident, IncidentActivity, SecurityFinding
 from app.services.audit import append_audit
 from app.services.notify import notify
+from app.services.org_counters import reserve
 
 # Findings at or above this severity open (or join) an incident automatically.
 AUTO_ESCALATION_SEVERITY = Severity.CRITICAL
@@ -54,11 +55,11 @@ def create_incident(
     created_by: str = "system",
     is_simulation: bool = False,
 ) -> Incident:
-    count = db.scalar(select(Incident.number).where(Incident.organization_id == org_id).order_by(Incident.number.desc()).limit(1)) or 0
+    number = int(reserve(db, org_id, "incident_seq")[0])  # atomic: concurrent creates never share INC-<n>
     incident = Incident(
         id=new_id("incident"),
         organization_id=org_id,
-        number=count + 1,
+        number=number,
         title=title[:400],
         summary=summary,
         severity=severity,

@@ -243,3 +243,67 @@ def test_actor_from_another_org_is_not_resolved(client, org, other_org, db):
     entry = _list(client, org.user_headers, action="test.foreign_actor")["items"][0]
     assert entry["actor_id"] == other_org.user_id
     assert entry["actor_label"] is None and entry["actor_detail"] is None
+
+
+def _concurrently(count: int, work) -> list[str]:
+    """Run ``work(session, i)`` in ``count`` threads that all start together; return the errors."""
+    import threading
+
+    from app.database.session import session_factory
+
+    errors: list[str] = []
+    barrier = threading.Barrier(count)
+
+    def run(i: int) -> None:
+        session = session_factory()()
+        try:
+            work(session, i, barrier)
+            session.commit()
+        except Exception as exc:  # noqa: BLE001 - collected and asserted on below
+            errors.append(f"{type(exc).__name__}: {exc}")
+            session.rollback()
+        finally:
+            session.close()
+
+    threads = [threading.Thread(target=run, args=(i,)) for i in range(count)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(60)
+    return errors
+
+
+def test_concurrent_appends_form_one_unbroken_chain(org, db):
+    """Each writer loads the organisation first (as every request does), then appends: a read-then-write
+    counter would hand several of them the same sequence number."""
+    def work(session, i, barrier):
+        session.get(Organization, org.org_id)
+        barrier.wait()
+        append_audit(session, org.org_id, action=f"test.concurrent_{i}")
+
+    assert _concurrently(6, work) == []
+    db.rollback()
+    seqs = sorted(db.scalars(select(AuditEvent.seq).where(AuditEvent.organization_id == org.org_id)))
+    assert seqs == list(range(1, 7))
+    from app.services.audit import verify_chain
+
+    assert verify_chain(db, org.org_id)["valid"] is True
+
+
+def test_concurrent_ingestion_assigns_distinct_event_sequences(seeded_org, db):
+    from app.events.envelope import EventEnvelope
+    from app.models import IngestedEvent
+    from app.services.ingestion import IngestContext, ingest_batch
+    from tests.integration.ingestion_support import event
+
+    def work(session, i, barrier):
+        ctx = IngestContext(org_id=seeded_org.org_id, actor_type="api_key", actor_id=seeded_org.api_key_id,
+                            api_key_id=seeded_org.api_key_id)
+        session.get(Organization, seeded_org.org_id)
+        barrier.wait()
+        ingest_batch(session, ctx, [EventEnvelope.model_validate(event("session.started", session=f"s-{i}"))])
+
+    assert _concurrently(5, work) == []
+    db.rollback()
+    sequences = list(db.scalars(select(IngestedEvent.sequence).where(IngestedEvent.organization_id == seeded_org.org_id)))
+    assert sorted(sequences) == list(range(1, 6))

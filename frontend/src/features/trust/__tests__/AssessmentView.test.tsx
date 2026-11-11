@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui";
+import { TestRouter } from "@/test/router";
 import { AssessmentView } from "../AssessmentView";
 import { CapabilityChips } from "../components";
 import type { Assessment } from "../types";
@@ -26,7 +26,7 @@ const DESTINATION: Assessment = {
   not_verified: ["Who operates this destination, or who will receive the data."],
 };
 
-const renderUi = (ui: React.ReactElement) => render(<MemoryRouter><TooltipProvider>{ui}</TooltipProvider></MemoryRouter>);
+const renderUi = (ui: React.ReactElement) => render(<TestRouter><TooltipProvider>{ui}</TooltipProvider></TestRouter>);
 
 describe("AssessmentView", () => {
   it("shows the deciding rule, overridden rules, failing checks first and what was not verified", () => {

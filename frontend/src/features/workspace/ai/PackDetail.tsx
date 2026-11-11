@@ -28,7 +28,7 @@ export function RepositoryNotice({ verified, configured }: { verified: boolean; 
       <p className="text-fg-muted">
         <span className="font-medium text-fg">File references are unverified. </span>
         {configured === false
-          ? "No repository root is configured on the ContextOS server, so files could not be checked or read. Only ContextOS records are verified."
+          ? "No repository root configured on the ContextOS server (CONTEXTOS_WORKSPACE_REPO_ROOT), so files could not be checked or read. Only ContextOS records are verified."
           : "The repository was not readable when this pack was built, so files could not be checked or read. Only ContextOS records are verified."}
       </p>
     </div>

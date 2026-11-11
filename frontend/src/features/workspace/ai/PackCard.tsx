@@ -38,7 +38,7 @@ export function PackCard({
   const taskPacks = useContextPacks({ taskId: task.id, limit: 5 });
   const build = useCreateContextPack();
   const profile = catalogue.profiles.find((p) => p.key === config.profile);
-  const suggested = suggestedProfile(task, config.mode);
+  const suggested = suggestedProfile(catalogue, config.mode);
   const latest = (taskPacks.data?.items ?? []).find((p) => p.id !== packRef?.id);
   const deleted = pack.error instanceof ApiError && pack.error.status === 404;
 

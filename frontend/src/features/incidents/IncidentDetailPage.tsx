@@ -11,6 +11,7 @@ import { ArrowLeft, Siren } from "lucide-react";
 import { EntityLink, InlineStat, Section } from "@/components/data";
 import { Badge, EmptyState, ErrorState, LoadingRows, Mono, PageHeader, SeverityBadge, SimulationBadge, StatusBadge } from "@/components/ui";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { useDocumentTitle } from "@/hooks";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import { isNotFound, useIncident } from "./api";
 import { ActionsBar } from "./detail/ActionsBar";
@@ -63,6 +64,7 @@ function Facts({ incident }: { incident: IncidentDetail }) {
 export function IncidentDetailPage() {
   const { incidentId } = useParams();
   const query = useIncident(incidentId);
+  useDocumentTitle(query.data ? `${query.data.key} ${query.data.title}` : null);
   const { can } = useAuth();
   const canWrite = can("write");
 

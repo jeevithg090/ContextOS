@@ -15,7 +15,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import Principal, require
+from app.api.deps import Principal, require_org_wide
 from app.database.session import get_db
 from app.domain.enums import Permission
 from app.schemas.workspace import SeverityName
@@ -24,7 +24,7 @@ from app.services import workspace_analytics as analytics
 
 router = APIRouter(prefix="/workspace/analytics", tags=["workspace"])
 
-READ = Depends(require(Permission.READ.value))
+READ = Depends(require_org_wide(Permission.READ.value))  # bound API keys: 403
 
 
 @router.get("", response_model=EngineeringAnalyticsOut)

@@ -41,7 +41,7 @@ function BoardTile({ board, canWrite }: { board: BoardSummary; canWrite: boolean
         <div className="min-w-0 flex-1">
           <Link
             to={`/work/boards/${encodeURIComponent(board.id)}`}
-            className="block truncate text-[14px] font-semibold text-fg after:absolute after:inset-0 after:rounded-lg after:content-[''] hover:text-accent focus-visible:outline-none"
+            className="block truncate text-[14px] font-semibold text-fg after:absolute after:inset-0 after:rounded-lg after:content-[''] hover:text-accent focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-accent"
           >
             {board.name}
           </Link>

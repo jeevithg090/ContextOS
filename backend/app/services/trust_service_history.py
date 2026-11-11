@@ -19,6 +19,7 @@ from app.domain.enums import TRUST_RANK, TrustCapability
 from app.models import AuditEvent, ContextSource, Destination
 from app.services.scoping import scoped
 from app.services.trust_service_common import actor_label, user_labels
+from app.services.trust_service_simulation import simulation_only_destinations
 
 SOURCE_TARGET = "context_source"
 DESTINATION_TARGET = "destination"
@@ -127,7 +128,10 @@ def manual_details(db: Session, org_id: str, source: ContextSource) -> dict[str,
     }
 
 
-def recently_downgraded(db: Session, org_id: str, *, limit: int = 10) -> list[dict[str, Any]]:
+def recently_downgraded(db: Session, org_id: str, *, limit: int = 10,
+                        include_simulated: bool = False) -> list[dict[str, Any]]:
+    """Latest downgrade per source/destination in the window. Records only Simulation Lab traffic
+    observed are left out unless ``include_simulated``; every row says whether it is simulated."""
     since = utcnow() - timedelta(days=DOWNGRADE_WINDOW_DAYS)
     rows = db.scalars(
         select(AuditEvent)
@@ -152,21 +156,26 @@ def recently_downgraded(db: Session, org_id: str, *, limit: int = 10) -> list[di
     dest_ids = [e.target_id for e in picked if e.target_type == DESTINATION_TARGET]
     sources = {s.id: s for s in db.scalars(scoped(ContextSource, org_id).where(ContextSource.id.in_(source_ids)))} if source_ids else {}
     dests = {d.id: d for d in db.scalars(scoped(Destination, org_id).where(Destination.id.in_(dest_ids)))} if dest_ids else {}
+    simulated_dests = simulation_only_destinations(db, org_id, dests)
     users = user_labels(db, [e.actor_id for e in picked if e.actor_type == "user"])
     out: list[dict[str, Any]] = []
     for entry in picked:
         d = entry.details or {}
         if entry.target_type == SOURCE_TARGET and entry.target_id in sources:
             src = sources[entry.target_id]
-            target_type, label = "source", src.display_name or src.identifier
+            target_type, label, simulated = "source", src.display_name or src.identifier, bool(src.is_simulation)
         elif entry.target_type == DESTINATION_TARGET and entry.target_id in dests:
             target_type, label = "destination", dests[entry.target_id].identifier
+            simulated = entry.target_id in simulated_dests
         else:
             continue  # the record was deleted (retention); nothing to link to
+        if simulated and not include_simulated:
+            continue
         out.append({
             "target_type": target_type, "target_id": entry.target_id, "label": label[:400],
             "from_level": d["from"], "to_level": d["to"], "at": entry.occurred_at,
             "actor_label": actor_label(entry.actor_type, entry.actor_id, users), "summary": describe_entry(entry),
+            "is_simulation": simulated,
         })
         if len(out) >= limit:
             break

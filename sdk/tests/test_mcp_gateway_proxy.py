@@ -18,7 +18,7 @@ import anyio  # noqa: E402
 import mcp.types as types  # noqa: E402
 from mcp.shared.exceptions import MCPError  # noqa: E402
 
-from contextos.integrations.mcp_gateway.proxy import GatewaySettings, host_info, trust_level_of  # noqa: E402
+from contextos.integrations.mcp_gateway.proxy import GatewaySettings, host_info  # noqa: E402
 
 from .mcp_gateway_support import call_log, gateway_chain, text_of  # noqa: E402
 from .sdk_fakes import FakeServer, decision_body  # noqa: E402
@@ -207,28 +207,27 @@ def test_context_reports_can_be_disabled(server: FakeServer, client) -> None:
     assert server.events_of("context.ingested") == []
 
 
-def _events_with_source(request: httpx.Request) -> httpx.Response:
-    events = json.loads(request.content)["events"]
-    return httpx.Response(200, json={"results": [
-        {"event_id": e["event_id"], "status": "accepted", "refs": {"source_id": "src_1"}} for e in events]})
+def _events_with_trust(level: str | None):
+    def handler(request: httpx.Request) -> httpx.Response:
+        events = json.loads(request.content)["events"]
+        refs = {"source_id": "src_1", **({"source_trust_level": level} if level else {})}
+        return httpx.Response(200, json={"results": [
+            {"event_id": e["event_id"], "status": "accepted", "refs": refs} for e in events]})
+    return handler
 
 
-@pytest.mark.parametrize(("source_response", "visible"), [
-    ((200, {"id": "src_1", "trust_level": "BLOCKED"}), 0),
-    ((200, {"id": "src_1", "trust_level": "SUSPICIOUS"}), 3),
-    ((404, {"error": {"code": "not_found", "message": "Not found"}}), 3),
-])
-def test_hide_blocked_tools_follows_the_contextos_classification(server: FakeServer, client, source_response,
+@pytest.mark.parametrize(("level", "visible"), [("BLOCKED", 0), ("blocked", 0), ("SUSPICIOUS", 3), (None, 3)])
+def test_hide_blocked_tools_follows_the_contextos_classification(server: FakeServer, client, level: str | None,
                                                                  visible: int) -> None:
-    server.route("POST", "/api/v1/events", handler=_events_with_source)
-    status, body = source_response
-    server.route("GET", "/api/v1/context/sources/src_1", body, status=status)
+    """The classification comes from the mcp.server_connected result: no source read (no read scope)."""
+    server.route("POST", "/api/v1/events", handler=_events_with_trust(level))
 
     async def scenario(chain):
         return (await chain.host.list_tools()).tools
 
     tools = _run(scenario, client, GatewaySettings(server_name="notes", hide_blocked_tools=True))
     assert len(tools) == visible
+    assert [r for r in server.requests if r.method == "GET"] == []
 
 
 def test_configured_agent_name_wins_over_the_host_name(server: FakeServer, client) -> None:
@@ -284,8 +283,6 @@ def test_host_info_and_trust_level_helpers() -> None:
         meta = {types.CLIENT_INFO_META_KEY: {"name": "cursor", "version": "1"}}
 
     assert host_info(Modern()) == {"name": "cursor", "version": "1"}
-    assert trust_level_of({"trust_level": "blocked"}) == "BLOCKED"
-    assert trust_level_of({"trust": {"level": "TRUSTED"}}) == "TRUSTED" and trust_level_of([]) is None
 
 
 def test_the_benign_example_works_unchanged_through_the_gateway(server: FakeServer, client, _isolated: Path) -> None:

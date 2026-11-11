@@ -13,6 +13,7 @@ from rich.table import Table
 
 from contextos._cli.common import EXIT_ERROR, cli_errors, err, get_client, get_config, out, text
 from contextos._cli.delegates import load_optional
+from contextos.client import sends_credentials_in_clear
 from contextos.config import (
     CONFIG_FILE_NAME,
     FAIL_MODES,
@@ -29,9 +30,9 @@ from contextos.errors import AuthError, ContextOSError, Unreachable
 FAIL_MODE_MEANING = {"closed": "guarded tools are denied", "open": "guarded tools run unguarded", "ask": "a human is asked"}
 
 SCOPE_PURPOSE = {
-    "ingest": "report events (sessions, context, tool results)",
+    "ingest": "report events (sessions, context, tool results); run Simulation Lab scenarios (contextos simulate)",
     "decide": "enforce policy before tools run (guard(), Claude Code PreToolUse, MCP gateway)",
-    "read": "CLI read commands (agents, events, policies, incidents, replay, simulate)",
+    "read": "CLI data commands (agents, events, policies, incidents, replay, simulate --list) and scan",
 }
 
 
@@ -187,6 +188,9 @@ def doctor(project_dir: Path = typer.Option(Path("."), "--project-dir", help="Pr
         raise typer.Exit(EXIT_ERROR) from None
 
     client = get_client(cfg)
+    if sends_credentials_in_clear(cfg.url):
+        checks.append(("Transport", None, f"{cfg.url} is plain HTTP to another host: the API key and events travel "
+                                          "unencrypted. Use https://."))
     reachable = False
     try:
         started = time.perf_counter()

@@ -71,9 +71,9 @@ export function ContextPacksPage() {
           {p.counts.unverified > 0 && <span className="text-trust-unknown">{p.counts.unverified} unverified</span>}
           {p.counts.excluded_sensitive > 0 && <span className="text-danger">{p.counts.excluded_sensitive} sensitive excluded</span>}
           {!p.repository_verified && (
-            <span className="inline-flex items-center gap-1 text-warn" title="No readable repository when this pack was built: file references are unverified">
+            <span className="inline-flex items-center gap-1 text-warn" title="No repository root configured (or not readable) when this pack was built: file references are unverified">
               <AlertTriangle className="h-3 w-3" aria-hidden />
-              No repository
+              No repository root
             </span>
           )}
         </div>

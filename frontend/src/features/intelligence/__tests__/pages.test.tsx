@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider, TooltipProvider } from "@/components/ui";
+import { TestRouter } from "@/test/router";
 import { FindingDetailPage } from "../FindingDetailPage";
 import { IntelligencePage } from "../IntelligencePage";
 import type { FindingDetail, FindingStats, FindingSummary } from "../types";
@@ -114,7 +115,7 @@ function renderAt(path: string) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[path]}>
+      <TestRouter initialEntries={[path]}>
         <TooltipProvider>
           <ToastProvider>
             <Routes>
@@ -124,7 +125,7 @@ function renderAt(path: string) {
             </Routes>
           </ToastProvider>
         </TooltipProvider>
-      </MemoryRouter>
+      </TestRouter>
     </QueryClientProvider>,
   );
 }

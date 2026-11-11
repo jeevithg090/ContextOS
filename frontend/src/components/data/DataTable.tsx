@@ -122,7 +122,9 @@ export function DataTable<T>({
   };
 
   return (
-    <div className={cn("overflow-x-auto", className)}>
+    // `relative`: absolutely positioned cell content (sr-only status text) is clipped by this scroller
+    // instead of extending the page sideways.
+    <div className={cn("relative overflow-x-auto", className)}>
       <table className="w-full border-collapse text-left text-[13px]" aria-label={ariaLabel} aria-busy={loading || undefined}>
         <thead className="sticky top-0 z-[1] border-b border-border bg-surface text-2xs uppercase tracking-[0.06em] text-fg-faint">
           <tr>

@@ -73,6 +73,7 @@ export function techniqueLabel(technique: string): string {
     html_comment: "Hidden in an HTML comment",
     hidden_text: "Hidden (invisible) text",
     leetspeak: "Leetspeak spelling",
+    reflowed: "Hard-wrapped lines re-joined",
   };
   return labels[technique] ?? technique.replace(/_/g, " ");
 }

@@ -88,6 +88,15 @@ _NAME_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^ssh_host_.*_key$"), "SSH host private key"),
 )
 
+# Files in ~/.ssh that are not private keys but still security-relevant. Public keys (``*.pub``) are
+# not secrets and are handled before this table (``is_sensitive_path``).
+_SSH_FILES: dict[str, str] = {
+    "known_hosts": "SSH known_hosts — lists the servers this user connects to; changing it can enable interception",
+    "authorized_keys": "SSH authorized_keys — controls who can log in; adding a key grants access",
+    "authorized_keys2": "SSH authorized_keys — controls who can log in; adding a key grants access",
+    "config": "SSH client config — hosts, users and the private keys used for them",
+}
+
 _BROWSER_HINTS = ("chrome", "chromium", "edge", "brave", "vivaldi", "opera", "firefox", "mozilla", "safari", "user data")
 
 
@@ -123,7 +132,7 @@ def _env_reason(name: str) -> str | None:
 def _directory_reason(segments: list[str], name: str, low: str) -> str | None:
     dirs = segments[:-1]
     if name == ".ssh" or ".ssh" in dirs:
-        return "SSH directory — private keys, config and known hosts"
+        return _SSH_FILES.get(name, "SSH directory — private keys and client configuration")
     if ".aws" in dirs:
         if name == "credentials":
             return "AWS credentials file — access keys in plain text"
@@ -168,6 +177,8 @@ def is_sensitive_path(path: str) -> tuple[bool, str | None]:
     if not segments:
         return False, None
     name = segments[-1]
+    if name.endswith(".pub") and len(name) > 4 and ".ssh" in segments[:-1] and "*" not in name:
+        return False, None  # an SSH public key is meant to be shared; reading it exposes nothing secret
 
     for check in (_env_reason(name), _directory_reason(segments, name, low)):
         if check:

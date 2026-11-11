@@ -27,7 +27,7 @@ from app.engines.risk.tool_names import (
 )
 
 C = ToolCategory
-_RANK = {RiskLevel.LOW: 0, RiskLevel.MEDIUM: 1, RiskLevel.HIGH: 2, RiskLevel.CRITICAL: 3}
+_RANK: dict[str, int] = {RiskLevel.LOW: 0, RiskLevel.MEDIUM: 1, RiskLevel.HIGH: 2, RiskLevel.CRITICAL: 3}
 
 BASE_RISK: dict[str, str] = {
     C.SHELL: RiskLevel.HIGH, C.CODE_EXECUTION: RiskLevel.HIGH, C.INFRASTRUCTURE: RiskLevel.HIGH,
@@ -36,7 +36,7 @@ BASE_RISK: dict[str, str] = {
     C.MCP: RiskLevel.MEDIUM, C.FILE_READ: RiskLevel.LOW, C.SEARCH: RiskLevel.LOW, C.OTHER: RiskLevel.LOW,
 }
 
-_CATEGORY_TEXT = {
+_CATEGORY_TEXT: dict[str, str] = {
     C.SHELL: "runs shell commands", C.CODE_EXECUTION: "executes code", C.INFRASTRUCTURE: "changes cloud or "
     "cluster infrastructure", C.EMAIL: "sends or reads email", C.MESSAGING: "sends or reads chat messages",
     C.HTTP: "makes network requests", C.BROWSER: "drives a web browser", C.FILE_WRITE: "writes or deletes files",

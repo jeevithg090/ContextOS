@@ -84,6 +84,14 @@ describe("useLiveEvents", () => {
     expect(INVALIDATIONS["simulation.completed"]).toContainEqual(["simulations"]);
   });
 
+  it("refreshes the remediation pipeline and engineering analytics when findings or incidents change", () => {
+    // The workspace analytics hooks rely on this map; they no longer subscribe on their own.
+    for (const type of ["finding.created", "finding.updated", "incident.updated"]) {
+      expect(INVALIDATIONS[type]).toContainEqual(["workspace", "remediation"]);
+      expect(INVALIDATIONS[type]).toContainEqual(["workspace", "analytics"]);
+    }
+  });
+
   it("forwards messages to subscribers immediately and ignores keep-alives and malformed frames", () => {
     const { invalidate, source } = setup();
     const seen: string[] = [];

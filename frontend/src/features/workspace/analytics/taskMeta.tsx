@@ -58,7 +58,6 @@ export const REMEDIATION_META: Record<RemediationState, { label: string; tone: T
 
 export const taskTypeLabel = (type: string) => TASK_TYPE_LABELS[type as TaskType] ?? type;
 export const statusKeyLabel = (key: string) => STATUS_KEY_LABELS[key as StatusKey] ?? key;
-export const priorityLabel = (p: string) => PRIORITY_META[p as TaskPriority]?.label ?? p;
 
 export function PriorityBadge({ priority, className }: { priority: string; className?: string }) {
   const meta = PRIORITY_META[priority as TaskPriority];

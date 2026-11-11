@@ -2,7 +2,8 @@
 
 Reading needs ``read``. Starting a run writes simulated events through the pipeline, so it needs
 ``write`` for signed-in users or the ``ingest`` scope for API keys (the CLI's ``contextos simulate``).
-An API key bound to one agent may only run simulations against that agent.
+An API key bound to one agent may only run simulations against that agent and only sees that agent's
+runs (another agent's run is 404); suites span agents, so bound keys get 403 there.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import Principal, get_principal, require
+from app.api.deps import Principal, check_bound_agent, get_principal, require, require_org_wide
 from app.core.errors import PermissionDeniedError
 from app.database.session import get_db
 from app.domain.enums import Permission
@@ -92,6 +93,8 @@ def list_runs(
     db: Session = Depends(get_db),
 ) -> Page[SimulationRunOut]:
     query = scoped(SimulationRun, principal.org_id)
+    if principal.bound_agent_id:
+        query = query.where(SimulationRun.agent_id == principal.bound_agent_id)
     if scenario_id:
         query = query.where(SimulationRun.scenario_id == scenario_id)
     if suite_run_id:
@@ -108,7 +111,9 @@ def list_runs(
 @router.get("/runs/{run_id}", response_model=SimulationRunOut)
 def get_run(run_id: str, principal: Principal = Depends(require(Permission.READ.value)),
             db: Session = Depends(get_db)) -> SimulationRunOut:
-    return _run_out(get_scoped(db, SimulationRun, run_id, principal.org_id, label="Simulation run"))
+    run = get_scoped(db, SimulationRun, run_id, principal.org_id, label="Simulation run")
+    check_bound_agent(principal, run.agent_id, label="Simulation run", obj_id=run_id)
+    return _run_out(run)
 
 
 @router.post("/suites", response_model=SuiteOut, status_code=201)
@@ -123,7 +128,7 @@ def start_suite(body: SuiteIn, principal: Principal = Depends(_runner), db: Sess
 
 @router.get("/suites", response_model=Page[SuiteSummaryOut])
 def list_suites(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
-                principal: Principal = Depends(require(Permission.READ.value)),
+                principal: Principal = Depends(require_org_wide(Permission.READ.value)),
                 db: Session = Depends(get_db)) -> Page[SuiteSummaryOut]:
     rows, total = suites.list_suites(db, principal.org_id, limit=limit, offset=offset)
     return Page[SuiteSummaryOut](items=[SuiteSummaryOut(**r) for r in rows], total=total, limit=limit, offset=offset)
@@ -131,13 +136,13 @@ def list_suites(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=
 
 @router.get("/suites/compare", response_model=SuiteCompareOut)
 def compare(base: str = Query(..., max_length=40), head: str = Query(..., max_length=40),
-            principal: Principal = Depends(require(Permission.READ.value)),
+            principal: Principal = Depends(require_org_wide(Permission.READ.value)),
             db: Session = Depends(get_db)) -> SuiteCompareOut:
     return SuiteCompareOut(**suites.compare_suites(db, principal.org_id, base, head))
 
 
 @router.get("/suites/{suite_run_id}", response_model=SuiteOut)
-def get_suite(suite_run_id: str, principal: Principal = Depends(require(Permission.READ.value)),
+def get_suite(suite_run_id: str, principal: Principal = Depends(require_org_wide(Permission.READ.value)),
               db: Session = Depends(get_db)) -> SuiteOut:
     runs = suites.suite_runs(db, principal.org_id, suite_run_id)
     return SuiteOut(**suites.suite_summary(runs), runs=[_run_out(r) for r in runs])

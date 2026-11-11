@@ -27,7 +27,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.errors import ConflictError, ValidationFailedError
+from app.core.errors import ConflictError, PayloadTooLargeError, ValidationFailedError
 from app.core.ids import new_id
 from app.core.logging import get_logger
 from app.core.security import sha256_hex
@@ -36,7 +36,6 @@ from app.domain.enums import EventType
 from app.engines.redaction import redact_text, redact_value
 from app.events.envelope import DecisionResponse, EventEnvelope, EventResult
 from app.models import Agent, Approval, IngestedEvent, Organization, PolicyDecision
-from app.services import notify as notify_module
 from app.services.approvals import get_approval_status
 from app.services.audit import append_audit
 from app.services.bootstrap import effective_org_settings
@@ -53,6 +52,7 @@ from app.services.ingestion_handlers import (
     handle_message,
     handle_prompt,
 )
+from app.services.ingestion_identity import sanitize_identifiers
 from app.services.ingestion_known_secrets import find_known, redact_known
 from app.services.ingestion_results import handle_tool_result
 from app.services.ingestion_risk import update_session_risk
@@ -72,6 +72,7 @@ from app.services.ingestion_state import (
 )
 from app.services.ingestion_tools import decide_request
 from app.services.notify import notify
+from app.services.org_counters import reserve
 
 __all__ = [
     "AttributionRejectedError",
@@ -132,6 +133,9 @@ def decide_tool_request(db: Session, ctx: IngestContext, envelope: EventEnvelope
     if envelope.event_type != EventType.TOOL_REQUESTED:
         raise ValidationFailedError("POST /decide accepts only tool.requested events",
                                     details={"event_type": str(envelope.event_type)})
+    limit = get_settings().max_event_bytes  # same per-event limit as POST /events (also without Content-Length)
+    if len(raw_payload_json(envelope).encode()) > limit:
+        raise PayloadTooLargeError(f"Event exceeds the {limit}-byte limit")
     caches = Caches()
     outcome = _run(db, ctx, envelope, via_decide=True, caches=caches)
     result = outcome.result
@@ -163,6 +167,15 @@ def _org(db: Session, caches: Caches, org_id: str) -> Organization:
     return caches.org
 
 
+def _visible_to(ctx: IngestContext, row: IngestedEvent) -> bool:
+    """Whether the submitter may see ``row`` as its own duplicate (agent-bound keys: only their agent)."""
+    if not ctx.bound_agent_id:
+        return True
+    if row.agent_id is not None:
+        return row.agent_id == ctx.bound_agent_id
+    return row.api_key_id is not None and row.api_key_id == ctx.api_key_id  # failed before the agent was known
+
+
 def _attribution_error(db: Session, ctx: IngestContext, envelope: EventEnvelope) -> str | None:
     if not ctx.bound_agent_id:
         return None
@@ -176,30 +189,31 @@ def _attribution_error(db: Session, ctx: IngestContext, envelope: EventEnvelope)
 
 def _run(db: Session, ctx: IngestContext, env: EventEnvelope, *, via_decide: bool, caches: Caches) -> _Outcome:
     started = time.perf_counter()
-    org = _org(db, caches, ctx.org_id)
+    env = sanitize_identifiers(env)  # names and ids are stored and matched in redacted form
+    _org(db, caches, ctx.org_id)  # loads the organisation's settings for this request
     existing = db.scalar(select(IngestedEvent).where(
         IngestedEvent.organization_id == ctx.org_id, IngestedEvent.client_event_id == env.event_id))
-    if existing is not None:
-        return _duplicate(existing)
-
     problem = _attribution_error(db, ctx, env)
+    if existing is not None and not problem and not _visible_to(ctx, existing):
+        # A key bound to one agent re-used another agent's event id: never answer with that event's
+        # references or decision (the id is unique per organisation, so it cannot be stored either).
+        problem = "This event_id is already used by an event of another agent; send a new event_id."
+    elif existing is not None:
+        return _duplicate(existing)
     if problem:
         append_audit(
             db, ctx.org_id, action="ingest.attribution_rejected", actor_type=ctx.actor_type, actor_id=ctx.actor_id,
             target_type="api_key", target_id=ctx.api_key_id,
             details={"bound_agent_id": ctx.bound_agent_id, "reported_agent": redact_str(env.agent.name, limit=200),
-                     "event_type": str(env.event_type), "client_event_id": env.event_id},
+                     "event_type": str(env.event_type), "client_event_id": env.event_id,
+                     "reason": "event_id_of_another_agent" if existing is not None else "agent_mismatch"},
         )
         return _Outcome(EventResult(event_id=env.event_id, status="rejected", error=problem))
 
     # Reserve the sequence number OUTSIDE the savepoint: it is used by the processed row or by the
     # error row, and the write opens a real transaction before the SAVEPOINT on every backend.
-    org.event_seq = (org.event_seq or 0) + 1
-    sequence = org.event_seq
-    db.flush()
+    sequence = reserve(db, ctx.org_id, "event_seq")[0]  # atomic: concurrent requests never share a number
     now = utcnow()
-    pending = db.info.get(notify_module._KEY)  # noqa: SLF001 - roll back notices of a failed event
-    notices_before = len(pending) if pending else 0
     payload: dict[str, Any] | None = None
     try:
         with db.begin_nested():
@@ -210,15 +224,13 @@ def _run(db: Session, ctx: IngestContext, env: EventEnvelope, *, via_decide: boo
             st = PipelineState(db=db, ctx=ctx, env=env, event=row, caches=caches, now=now, via_decide=via_decide)
             _process(st, started)
             _finalize(st, row)
-    except IntegrityError:
-        _drop_notices(db, notices_before)
+    except IntegrityError:  # the savepoint rollback also dropped the notices this event queued
         again = db.scalar(select(IngestedEvent).where(
             IngestedEvent.organization_id == ctx.org_id, IngestedEvent.client_event_id == env.event_id))
         if again is not None:  # a concurrent request stored the same event first
             return _duplicate(again)
         raise
     except Exception as exc:  # noqa: BLE001 - recorded on the event and surfaced, never swallowed
-        _drop_notices(db, notices_before)
         return _record_failure(db, ctx, env, sequence=sequence, now=now, payload=payload, exc=exc)
     _queue_notices(db, ctx, caches, st)
     return _Outcome(EventResult(event_id=env.event_id, status="accepted", ingested_event_id=row.id, refs=row.refs),
@@ -321,12 +333,6 @@ def _record_failure(db: Session, ctx: IngestContext, env: EventEnvelope, *, sequ
 
 
 # -- notifications ---------------------------------------------------------------------------------
-
-
-def _drop_notices(db: Session, keep: int) -> None:
-    pending = db.info.get(notify_module._KEY)  # noqa: SLF001
-    if pending is not None:
-        del pending[keep:]
 
 
 def _queue_notices(db: Session, ctx: IngestContext, caches: Caches, st: PipelineState) -> None:

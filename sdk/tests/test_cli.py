@@ -130,6 +130,14 @@ def test_doctor_healthy(server: FakeServer, monkeypatch: pytest.MonkeyPatch) -> 
     assert API_KEY not in result.output
 
 
+def test_doctor_warns_when_the_api_key_travels_unencrypted(server: FakeServer, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configured(monkeypatch)  # the fake server's URL is plain HTTP to a non-local host
+    _grant_all_scopes(server)
+    result = runner.invoke(app, ["doctor"])
+    assert result.exit_code == 0, result.output  # a warning, not a failure
+    assert "Transport" in result.output and "unencrypted" in result.output
+
+
 def test_doctor_fails_on_rejected_key_and_reports_missing_scopes(server: FakeServer, monkeypatch: pytest.MonkeyPatch) -> None:
     _configured(monkeypatch)
     server.route("GET", "/api/v1/agents", {"error": {"code": "unauthenticated", "message": "Invalid or revoked API key"}}, status=401)
@@ -211,24 +219,86 @@ def test_read_command_without_read_scope_explains_itself(server: FakeServer, mon
     assert result.exit_code == 1 and "lacks the scope" in result.output
 
 
+# Shapes captured from a live server (GET /sessions/{id}, GET /sessions/{id}/timeline).
+SESSION = {"id": "asn_1", "external_session_id": "ses_ext_1", "agent": {"id": "agt_1", "name": "support-bot"},
+           "is_simulation": False}
+TIMELINE = {"items": [
+    {"id": "evt_1", "sequence": 1, "occurred_at": "2026-11-10T10:00:00Z", "received_at": "2026-11-10T10:00:00Z",
+     "event_type": "context.ingested", "title": "Read web https://evil.test/page", "summary": None,
+     "trust_level": "SUSPICIOUS", "decision": None, "enforcement": None, "severity": "high",
+     "explanation": "Hidden instructions found in an HTML comment"},
+    {"id": "evt_2", "sequence": 2, "occurred_at": "2026-11-10T10:00:05Z", "received_at": "2026-11-10T10:00:05Z",
+     "event_type": "tool.requested", "title": "Denied send_email to attacker@evil.test", "summary": None,
+     "trust_level": None, "decision": "DENY", "enforcement": "enforced", "severity": None, "explanation": None},
+], "total": 2, "limit": 200, "offset": 0, "focus_event_ids": []}
+
+
 def test_replay_prints_the_timeline(server: FakeServer, monkeypatch: pytest.MonkeyPatch) -> None:
     _configured(monkeypatch)
-    server.route("GET", "/api/v1/sessions/ses_1/timeline", {"items": [
-        {"timestamp": "2026-11-10T10:00:00Z", "kind": "context.ingested", "title": "Read https://evil.test/page",
-         "trust_level": "UNKNOWN", "severity": "high", "explanation": "Hidden instructions found in an HTML comment"},
-        {"timestamp": "2026-11-10T10:00:05Z", "kind": "tool.requested", "title": "send_email to attacker@evil.test",
-         "decision": "DENY", "enforcement": "enforced"},
-    ]})
-    result = runner.invoke(app, ["replay", "ses_1"])
+    server.route("GET", "/api/v1/sessions/asn_1", SESSION)
+    server.route("GET", "/api/v1/sessions/asn_1/timeline", TIMELINE)
+    result = runner.invoke(app, ["replay", "asn_1"])
     assert result.exit_code == 0, result.output
-    assert "Hidden instructions found" in result.output and "DENY" in result.output and "2 recorded step(s)" in result.output
-    assert "not proof" in result.output
+    assert "Session asn_1 of agent support-bot — 2 recorded step(s)" in result.output
+    assert "2026-11-10 10:00:00  context.ingested  Read web https://evil.test/page" in result.output
+    assert "Hidden instructions found" in result.output and "DENY" in result.output and "enforced" in result.output
+    assert "not proof" in result.output and "simulated" not in result.output
+
+
+def test_replay_accepts_the_integration_session_id(server: FakeServer, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The SDK and hooks print their own session id (ses_…); the API's id routes take asn_… ids."""
+    _configured(monkeypatch)
+    server.route("GET", "/api/v1/sessions", {"items": [{**SESSION, "id": "asn_other", "external_session_id": "ses_ext_10"},
+                                                       {**SESSION, "is_simulation": True}],
+                                             "total": 2, "limit": 50, "offset": 0})
+    server.route("GET", "/api/v1/sessions/asn_1", {**SESSION, "is_simulation": True})
+    server.route("GET", "/api/v1/sessions/asn_1/timeline", TIMELINE)
+    result = runner.invoke(app, ["replay", "ses_ext_1"])
+    assert result.exit_code == 0, result.output
+    assert "Session asn_1 of agent support-bot simulated (Simulation Lab)" in result.output
+    lookup = server.calls("GET", "/api/v1/sessions")[0].url.params
+    assert lookup["q"] == "ses_ext_1" and lookup["include_simulated"] == "true"
 
 
 def test_replay_unknown_session(server: FakeServer, monkeypatch: pytest.MonkeyPatch) -> None:
     _configured(monkeypatch)
+    server.route("GET", "/api/v1/sessions", {"items": [], "total": 0, "limit": 50, "offset": 0})
     result = runner.invoke(app, ["replay", "ses_missing"])
-    assert result.exit_code == 1 and "Not found" in result.output
+    assert result.exit_code == 1 and "Not found" in result.output and "ses_missing" in result.output
+
+
+def test_simulated_rows_are_labelled_and_hidden_unless_requested(server: FakeServer,
+                                                                 monkeypatch: pytest.MonkeyPatch) -> None:
+    _configured(monkeypatch)
+    real = {"id": "agt_1", "name": "billing-bot", "framework": "python_sdk", "environment": "production",
+            "status": "active", "risk_score": 0, "last_seen_at": "2026-11-10T10:00:00Z", "is_simulation": False}
+    server.route("GET", "/api/v1/agents", {"items": [real], "total": 1, "limit": 50, "offset": 0,
+                                           "facets": {"simulated": 2}})
+    hidden = runner.invoke(app, ["agents"])
+    assert hidden.exit_code == 0 and "2 simulated agent(s) hidden" in hidden.output
+    assert "include_simulated" not in server.calls("GET", "/api/v1/agents")[0].url.params
+    server.route("GET", "/api/v1/agents", {"items": [real, {**real, "id": "agt_2", "name": "sim-readme",
+                                                            "is_simulation": True}],
+                                           "total": 2, "limit": 50, "offset": 0, "facets": {"simulated": 2}})
+    shown = runner.invoke(app, ["agents", "--include-simulated"])
+    assert shown.exit_code == 0 and "sim-readme" in shown.output and "simulated" in shown.output
+    assert "hidden" not in shown.output
+    assert server.calls("GET", "/api/v1/agents")[-1].url.params["include_simulated"] == "true"
+
+    server.route("GET", "/api/v1/incidents", {"items": [{"id": "inc_1", "key": "INC-1", "title": "Sim incident",
+                                                         "severity": "critical", "status": "open",
+                                                         "opened_at": "2026-11-10T10:00:00Z", "is_simulation": True}],
+                                              "total": 1, "limit": 50, "offset": 0})
+    incidents = runner.invoke(app, ["incidents", "--include-simulated"])
+    assert "INC-1" in incidents.output and "simulated" in incidents.output
+    assert server.calls("GET", "/api/v1/incidents")[0].url.params["include_simulated"] == "true"
+
+    server.route("GET", "/api/v1/events", {"items": [{"id": "evt_1", "event_type": "session.started", "agent_name": "sim-readme",
+                                                      "session_id": "asn_9", "integration": "claude_code",
+                                                      "received_at": "2026-11-10T10:00:00Z", "is_simulation": True}],
+                                           "total": 1, "limit": 50, "offset": 0})
+    events = runner.invoke(app, ["events"])
+    assert "sim-readme" in events.output and "simulated" in events.output
 
 
 def test_simulate_list_and_run(server: FakeServer, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -250,6 +320,14 @@ def test_simulate_list_and_run(server: FakeServer, monkeypatch: pytest.MonkeyPat
     assert ran.exit_code == 0, ran.output
     assert "PASSED" in ran.output and "send_email denied" in ran.output and "contextos replay ses_sim" in ran.output
     assert server.bodies("POST", "/api/v1/simulations/runs") == [{"scenario_id": "pi-web"}]
+
+
+def test_simulate_without_the_ingest_scope_says_which_scope(server: FakeServer, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configured(monkeypatch)
+    server.route("POST", "/api/v1/simulations/runs", {"error": {"code": "permission_denied",
+                                                                "message": "Missing permission 'ingest'"}}, status=403)
+    result = runner.invoke(app, ["simulate", "pi-web"])
+    assert result.exit_code == 1 and "needs the 'ingest' scope" in result.output
 
 
 def test_simulate_failed_verdict_exits_non_zero(server: FakeServer, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -270,7 +270,8 @@ def test_assignee_must_be_an_active_member(client, seeded_org, other_org, db):
     foreign = _patch(client, iid, h, {"assignee_user_id": other_org.user_id}, expect=422)
     assert "member" in foreign["error"]["message"]
     _patch(client, iid, h, {"assignee_user_id": "usr_does_not_exist"}, expect=422)
-    db.execute(text("UPDATE users SET is_active = 0 WHERE id = :id"), {"id": analyst["user_id"]})
+    db.rollback()  # fresh snapshot after the API calls above
+    db.get(User, analyst["user_id"]).is_active = False  # ORM, so the boolean is portable (SQLite and PostgreSQL)
     db.commit()
     _patch(client, iid, h, {"assignee_user_id": seeded_org.user_id})
     _patch(client, iid, h, {"assignee_user_id": analyst["user_id"]}, expect=422)  # deactivated user

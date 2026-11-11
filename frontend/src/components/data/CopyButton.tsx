@@ -82,7 +82,9 @@ export function CopyButton({ value, label = "Copy to clipboard", children, class
       aria-label={children ? undefined : label}
       title={statusText || label}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-1.5 rounded transition-colors",
+        // `relative` keeps the sr-only status span inside the button (an unpositioned button would let it escape
+        // a scrolling table cell and widen the page).
+        "relative inline-flex shrink-0 items-center justify-center gap-1.5 rounded transition-colors",
         children ? (size === "xs" ? "h-6 px-2 text-2xs" : "h-7 px-2.5 text-xs") : size === "xs" ? "h-6 w-6" : "h-7 w-7",
         state === "copied" ? "text-ok" : state === "failed" ? "text-danger" : "text-fg-muted hover:bg-surface-2 hover:text-fg",
         children ? "border border-border-strong" : null,

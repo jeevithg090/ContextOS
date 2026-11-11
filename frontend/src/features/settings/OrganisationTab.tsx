@@ -88,8 +88,8 @@ export function OrganisationTab({ org, canAdmin, onShowTab }: { org: Org; canAdm
               {
                 label: "Organisation ID",
                 value: (
-                  <span className="inline-flex items-center gap-1">
-                    <Mono>{org.id}</Mono>
+                  <span className="inline-flex max-w-full items-center gap-1">
+                    <Mono className="min-w-0 break-all">{org.id}</Mono>
                     <CopyButton value={org.id} label="Copy organisation ID" size="xs" />
                   </span>
                 ),

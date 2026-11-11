@@ -107,8 +107,8 @@ def parse_tool_name(name: str, provider: str | None, server: str | None) -> Pars
         return ParsedName(name, name[5:] or name, server, True)
     prov = (provider or "").strip()
     if prov.lower().startswith("mcp"):
-        srv = server or (prov.split(":", 1)[1] if ":" in prov else None)
-        return ParsedName(name, name, srv or None, True)
+        mcp_server = server or (prov.split(":", 1)[1] if ":" in prov else None)
+        return ParsedName(name, name, mcp_server or None, True)
     if server:
         return ParsedName(name, name, server, True)
     return ParsedName(name, name, None, False)

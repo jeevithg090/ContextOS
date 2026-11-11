@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.enums import EventType, SourceType, ToolCategory
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION: Literal["1.0"] = "1.0"
 _ID_PATTERN = r"^[A-Za-z0-9_.:\-]{1,128}$"
 
 

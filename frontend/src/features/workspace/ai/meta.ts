@@ -7,7 +7,7 @@
  */
 import type { Tone } from "@/lib/domain";
 import { humanize } from "@/lib/domain";
-import type { AgentTool, TaskType } from "../types";
+import type { AgentTool } from "../types";
 import type {
   AgentPreset,
   AiCatalogue,
@@ -17,6 +17,7 @@ import type {
   PackItemKind,
   PackProfile,
   PresetInfo,
+  ProfileSuggestions,
   PromptMode,
   SectionKind,
 } from "./types";
@@ -200,15 +201,16 @@ export function presetLine(preset: PresetInfo): string {
   return "No product-specific notes — works with any coding agent that accepts a Markdown prompt.";
 }
 
-const SECURITY_TASK_TYPES: ReadonlySet<TaskType> = new Set(["security_vulnerability", "prompt_injection", "agent_misconfiguration", "data_exposure"]);
-
 /**
- * The profile the server would pick for this task and mode (mirrors
- * services.workspace_ai_packs.default_profile). The UI always sends the profile explicitly.
+ * The context-pack profile the server suggests for this task and mode (`GET /modes?task_id=` →
+ * `suggested_profiles`, computed by services.workspace_ai_packs.default_profile). Without
+ * suggestions (catalogue not loaded for a task) it falls back to the general-purpose profile; the UI
+ * always sends the chosen profile explicitly.
  */
-export function suggestedProfile(task: { task_type: TaskType | string; related_finding_id: string | null }, mode: PromptMode): PackProfile {
-  if (mode === "security_harden" || SECURITY_TASK_TYPES.has(task.task_type as TaskType) || task.related_finding_id) return "security_critical";
-  if (mode === "full_autonomous_remediation") return "deep";
+export function suggestedProfile(suggestions: ProfileSuggestions | null | undefined, mode: PromptMode): PackProfile {
+  const forMode = suggestions?.suggested_profiles?.[mode];
+  if (forMode) return forMode;
+  if (suggestions?.suggested_profile && suggestions.mode === mode) return suggestions.suggested_profile;
   return "standard";
 }
 

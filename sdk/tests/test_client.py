@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from contextos.client import MAX_BATCH_EVENTS, ContextOSClient
+from contextos.client import MAX_BATCH_EVENTS, ContextOSClient, withdraw_approval
 from contextos.errors import APIError, ApprovalTimeout, AuthError, ServerError, Unreachable
 from contextos.models import AgentRef, EventEnvelope, ToolRef
 
@@ -164,6 +164,38 @@ def test_wait_for_approval_times_out(tmp_path: Path) -> None:
     assert info.value.last_status == "pending" and now[0] == pytest.approx(5)
 
 
+def test_cancel_approval_posts_the_reason_once(tmp_path: Path) -> None:
+    server = FakeServer()
+    server.route("POST", "/api/v1/decide/approvals/apr_2/cancel", {"approval_id": "apr_2", "status": "cancelled"})
+    client = server.client(tmp_path)
+    assert client.cancel_approval("apr_2", "  stopped waiting  ")["status"] == "cancelled"
+    assert server.bodies("POST", "/api/v1/decide/approvals/apr_2/cancel") == [{"reason": "stopped waiting"}]
+    client.cancel_approval("apr_2", "x" * 900)
+    assert len(server.bodies("POST", "/api/v1/decide/approvals/apr_2/cancel")[1]["reason"]) == 500
+    client.cancel_approval("apr_2")
+    assert server.calls("POST", "/api/v1/decide/approvals/apr_2/cancel")[2].content == b""  # no body: no reason
+
+
+@pytest.mark.parametrize(("status", "body", "expected"), [
+    (200, {"approval_id": "apr_1", "status": "cancelled"}, "cancelled"),
+    (409, {"error": {"code": "conflict", "message": "decided", "details": {"status": "APPROVED"}}}, "approved"),
+    (409, {"error": {"code": "conflict", "message": "decided", "details": None}}, None),
+    (404, {"error": {"code": "not_found", "message": "Approval not found", "details": None}}, None),
+    (401, {"error": {"code": "unauthorized", "message": "revoked", "details": None}}, None),
+    (503, {}, None),
+])
+def test_withdraw_approval_never_raises(tmp_path: Path, status: int, body: dict, expected: str | None) -> None:
+    server = FakeServer()
+    server.route("POST", "/api/v1/decide/approvals/apr_1/cancel", body, status=status)
+    assert withdraw_approval(server.client(tmp_path, max_retries=0), "apr_1", "stopped waiting") == expected
+
+
+def test_withdraw_approval_when_unreachable(tmp_path: Path) -> None:
+    server = FakeServer()
+    server.down = True
+    assert withdraw_approval(server.client(tmp_path, max_retries=0), "apr_1", "stopped waiting") is None
+
+
 def test_probe_scopes_uses_requests_that_cannot_change_state(tmp_path: Path) -> None:
     server = FakeServer()
     server.route("GET", "/api/v1/agents", {"items": [], "total": 0, "limit": 1, "offset": 0})
@@ -200,6 +232,32 @@ def test_scan_and_read_helpers_hit_the_documented_endpoints(tmp_path: Path) -> N
     client.list_policies()
 
 
+def test_list_agents_search_uses_the_server_parameter(tmp_path: Path) -> None:
+    """GET /agents searches with ``q``; an unknown parameter would be ignored and list every agent."""
+    server = FakeServer()
+    server.route("GET", "/api/v1/agents", {"items": [], "total": 0, "limit": 50, "offset": 0})
+    client = server.client(tmp_path)
+    client.list_agents(search="billing", include_simulated=True)
+    params = server.calls("GET", "/api/v1/agents")[0].url.params
+    assert params["q"] == "billing" and "search" not in params and params["include_simulated"] == "true"
+    client.list_agents()
+    assert "q" not in server.calls("GET", "/api/v1/agents")[1].url.params
+
+
+def test_find_session_resolves_an_integration_session_id(tmp_path: Path) -> None:
+    server = FakeServer()
+    server.route("GET", "/api/v1/sessions", {"items": [{"id": "asn_2", "external_session_id": "ses_x2"},
+                                                       {"id": "asn_1", "external_session_id": "ses_x"}],
+                                             "total": 2, "limit": 50, "offset": 0})
+    server.route("GET", "/api/v1/sessions/asn_1", {"id": "asn_1", "external_session_id": "ses_x"})
+    client = server.client(tmp_path)
+    assert client.find_session("ses_x")["id"] == "asn_1"
+    assert client.find_session("asn_1")["id"] == "asn_1"
+    with pytest.raises(APIError) as info:
+        client.find_session("ses_nope")
+    assert info.value.status_code == 404
+
+
 def test_repr_never_contains_the_key(tmp_path: Path) -> None:
     client = FakeServer().client(tmp_path)
     assert API_KEY not in repr(client) and "ctxk_tes…" in repr(client)
@@ -212,3 +270,23 @@ def test_default_agent_comes_from_config(tmp_path: Path, monkeypatch: pytest.Mon
     cfg = load_config(tmp_path, env={"CONTEXTOS_AGENT_NAME": "invoice-agent", "CONTEXTOS_API_KEY": API_KEY})
     client = ContextOSClient.from_config(cfg, spool=False)
     assert client.agent == AgentRef(name="invoice-agent", framework="python_sdk")
+
+
+@pytest.mark.parametrize(("url", "in_clear"), [
+    ("http://contextos.example.com", True), ("http://10.0.0.5:8000/api/v1", True),
+    ("https://contextos.example.com", False), ("http://localhost:8000", False), ("http://127.0.0.1:8000", False),
+    ("http://[::1]:8000", False), ("http://app.localhost:8000", False), ("HTTPS://CONTEXTOS.EXAMPLE.COM", False),
+])
+def test_plain_http_to_another_host_is_detected(url: str, in_clear: bool) -> None:
+    from contextos.client import sends_credentials_in_clear
+
+    assert sends_credentials_in_clear(url) is in_clear
+
+
+def test_client_warns_once_when_the_key_would_travel_unencrypted(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level("WARNING", logger="contextos.client"):
+        ContextOSClient("http://contextos.example.com", "ctxk_" + "x" * 20, spool=False)
+        ContextOSClient("https://contextos.example.com", "ctxk_" + "x" * 20, spool=False)
+        ContextOSClient("http://contextos.example.com", None, spool=False)  # no key, nothing to protect
+    warnings = [r for r in caplog.records if "unencrypted" in r.getMessage()]
+    assert len(warnings) == 1 and "ctxk_" not in warnings[0].getMessage()

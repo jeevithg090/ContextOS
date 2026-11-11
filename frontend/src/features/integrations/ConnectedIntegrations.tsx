@@ -26,17 +26,18 @@ export function DecisionSplit({ counts }: { counts: EnforcementCounts }) {
 
 export function ConnectedIntegrations({
   items,
-  staleAfterMinutes,
+  staleWindow,
   onSetup,
 }: {
   items: ConnectedIntegration[];
-  staleAfterMinutes: number;
+  /** The staleness window in words, e.g. "24 hours" (see meta.staleWindowLabel). */
+  staleWindow: string;
   onSetup: (kind: string) => void;
 }) {
   return (
     <Section
       title="Connected integrations"
-      description={`Integrations that have sent real (non-simulated) events. Connected means an event arrived in the last ${staleAfterMinutes} minutes.`}
+      description={`Integrations that have sent real (non-simulated) events. Connected means an event arrived in the last ${staleWindow}.`}
       flush
     >
       {items.length === 0 ? (

@@ -24,6 +24,7 @@ from app.core.ids import new_id
 from app.core.timeutil import utcnow
 from app.models import Board, BoardColumn, Task
 from app.schemas.workspace_boards import CARD_FIELDS
+from app.services.org_counters import lock_org
 from app.services.scoping import get_scoped
 from app.services.workspace_tasks_common import (
     Actor,
@@ -93,7 +94,13 @@ def _create_from_template(
 
 def seed_default_board(db: Session, org_id: str, created_by: str | None = None) -> list[Board]:
     """Create the Engineering and Security Remediation boards when the organisation has no boards."""
-    if db.scalar(select(func.count()).select_from(Board).where(Board.organization_id == org_id)):
+    def has_boards() -> bool:
+        return bool(db.scalar(select(func.count()).select_from(Board).where(Board.organization_id == org_id)))
+
+    if has_boards():
+        return []
+    lock_org(db, org_id)  # concurrent first visits seed once: the second re-checks after the first commits
+    if has_boards():
         return []
     boards = [
         _create_from_template(db, org_id, name=ENGINEERING_BOARD[0], template=ENGINEERING_BOARD[1], description=None,

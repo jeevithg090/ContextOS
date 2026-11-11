@@ -1,4 +1,10 @@
-"""Read-only commands: agents, events, policies, incidents, replay, simulate (need the ``read`` scope)."""
+"""Data commands: agents, events, policies, incidents, replay (read-only, ``read`` scope) and
+simulate (``--list`` needs ``read``; running a scenario writes simulated events through the real
+pipeline, so it also needs ``ingest``).
+
+Simulation Lab data is labelled wherever it is shown, and lists leave it out unless
+``--include-simulated`` is given (the event log shows both, labelled).
+"""
 
 from __future__ import annotations
 
@@ -6,12 +12,14 @@ import time
 from typing import Any
 
 import typer
+from rich.markup import escape
 from rich.table import Table
 
 from contextos._cli.common import (
     EXIT_ERROR,
     cli_errors,
     decision,
+    err,
     fmt_time,
     get_client,
     get_config,
@@ -24,9 +32,16 @@ from contextos._cli.common import (
     text,
     total_of,
 )
+from contextos.errors import AuthError
 
 JSON_OPT = typer.Option(False, "--json", help="Print the raw JSON response.")
 LIMIT_OPT = typer.Option(50, "--limit", "-n", min=1, max=500, help="Maximum rows to show.")
+SIM_OPT = typer.Option(False, "--include-simulated", help="Also list Simulation Lab data (labelled).")
+SIMULATED = "[magenta]simulated[/magenta]"
+
+
+def _sim(row: Any) -> str:
+    return SIMULATED if isinstance(row, dict) and row.get("is_simulation") else ""
 
 
 def _footer(shown: int, total: int, noun: str) -> None:
@@ -34,26 +49,36 @@ def _footer(shown: int, total: int, noun: str) -> None:
         out().print(f"[dim]Showing {shown} of {total} {noun}. Use --limit to see more.[/dim]")
 
 
-def agents(limit: int = LIMIT_OPT, as_json: bool = JSON_OPT) -> None:
+def _hidden_simulated_agents(payload: Any, include_simulated: bool) -> int:
+    facets = payload.get("facets") if isinstance(payload, dict) else None
+    hidden = facets.get("simulated") if isinstance(facets, dict) else None
+    return hidden if isinstance(hidden, int) and not include_simulated else 0
+
+
+def agents(limit: int = LIMIT_OPT, include_simulated: bool = SIM_OPT, as_json: bool = JSON_OPT) -> None:
     """List agents known to ContextOS."""
     cfg = get_config()
     with cli_errors(cfg.url):
-        payload = get_client(cfg).list_agents(limit=limit)
+        payload = get_client(cfg).list_agents(limit=limit, include_simulated=include_simulated)
     if as_json:
         return print_json(payload)
     rows = items_of(payload)
+    hidden = _hidden_simulated_agents(payload, include_simulated)
     if not rows:
-        out().print("No agents yet. Agents register automatically when they send their first event.")
+        out().print("No agents yet. Agents register automatically when they send their first event."
+                    + (f" ({hidden} simulated agent(s) hidden: --include-simulated)" if hidden else ""))
         return
     table = Table(title="Agents", title_justify="left")
-    for col in ("Name", "Framework", "Environment", "Status", "Risk", "Last seen", "ID"):
+    for col in ("Name", "Framework", "Environment", "Status", "Risk", "Last seen", "ID", ""):
         table.add_column(col, no_wrap=col in ("ID", "Last seen"))
     for a in rows:
         table.add_row(text(pick(a, "name")), text(pick(a, "framework")), text(pick(a, "environment")),
                       status(pick(a, "status")), text(pick(a, "risk_score")), fmt_time(pick(a, "last_seen_at")),
-                      text(pick(a, "id")))
+                      text(pick(a, "id")), _sim(a))
     out().print(table)
     _footer(len(rows), total_of(payload, len(rows)), "agents")
+    if hidden:
+        out().print(f"[dim]{hidden} simulated agent(s) hidden; add --include-simulated to list them.[/dim]")
 
 
 def events(
@@ -73,12 +98,12 @@ def events(
         out().print("No events match." if session or event_type else "No events recorded yet.")
         return
     table = Table(title="Events" + (f" — session {session}" if session else ""), title_justify="left")
-    for col in ("Received", "Type", "Session", "Integration", "Processing", "ID"):
+    for col in ("Received", "Type", "Agent", "Session", "Integration", "Processing", "ID", ""):
         table.add_column(col, no_wrap=col in ("Received", "ID"))
     for e in rows:
-        table.add_row(fmt_time(pick(e, "received_at", "occurred_at", "timestamp")), text(pick(e, "event_type")),
-                      text(pick(e, "session_id")), text(pick(e, "integration")),
-                      text(pick(e, "processing_status", default="processed")), text(pick(e, "id")))
+        table.add_row(fmt_time(pick(e, "received_at", "occurred_at")), text(pick(e, "event_type")),
+                      text(pick(e, "agent_name")), text(pick(e, "session_id")), text(pick(e, "integration")),
+                      text(pick(e, "processing_status", default="processed")), text(pick(e, "id")), _sim(e))
     out().print(table)
     _footer(len(rows), total_of(payload, len(rows)), "events")
 
@@ -109,12 +134,13 @@ def policies(as_json: bool = JSON_OPT) -> None:
 def incidents(
     state: str | None = typer.Option(None, "--status", help="open, investigating, contained, resolved, false_positive."),
     limit: int = LIMIT_OPT,
+    include_simulated: bool = SIM_OPT,
     as_json: bool = JSON_OPT,
 ) -> None:
     """List incidents."""
     cfg = get_config()
     with cli_errors(cfg.url):
-        payload = get_client(cfg).list_incidents(status=state, limit=limit)
+        payload = get_client(cfg).list_incidents(status=state, limit=limit, include_simulated=include_simulated)
     if as_json:
         return print_json(payload)
     rows = items_of(payload)
@@ -122,19 +148,19 @@ def incidents(
         out().print("No incidents" + (f" with status {state}." if state else "."))
         return
     table = Table(title="Incidents", title_justify="left")
-    for col in ("#", "Title", "Severity", "Status", "Opened", "ID"):
-        table.add_column(col, no_wrap=col in ("#", "Opened", "ID"))
+    for col in ("Key", "Title", "Severity", "Status", "Opened", "ID", ""):
+        table.add_column(col, no_wrap=col in ("Key", "Opened", "ID"))
     for i in rows:
-        table.add_row(text(pick(i, "number")), text(pick(i, "title")), severity(pick(i, "severity")),
-                      status(pick(i, "status")), fmt_time(pick(i, "opened_at", "created_at")), text(pick(i, "id")))
+        table.add_row(text(pick(i, "key", "number")), text(pick(i, "title")), severity(pick(i, "severity")),
+                      status(pick(i, "status")), fmt_time(pick(i, "opened_at")), text(pick(i, "id")), _sim(i))
     out().print(table)
     _footer(len(rows), total_of(payload, len(rows)), "incidents")
 
 
 def _timeline_line(entry: dict[str, Any]) -> str:
-    when = fmt_time(pick(entry, "timestamp", "at", "occurred_at", "received_at"))
-    kind = pick(entry, "kind", "type", "event_type", default="event")
-    title = pick(entry, "title", "summary", "description", "label", default="")
+    when = fmt_time(pick(entry, "occurred_at", "received_at"))
+    kind = pick(entry, "event_type", default="event")
+    title = pick(entry, "title", "summary", default="")
     badges = []
     if pick(entry, "decision"):
         badges.append(decision(pick(entry, "decision")))
@@ -147,23 +173,29 @@ def _timeline_line(entry: dict[str, Any]) -> str:
     return f"[dim]{when}[/dim]  [bold]{text(kind)}[/bold]  {text(title, '')}  {' '.join(badges)}".rstrip()
 
 
-def replay(session_id: str = typer.Argument(..., help="Session id (as shown in the UI or `contextos events`)."),
+def replay(session_id: str = typer.Argument(..., help="ContextOS session id (asn_…, as in `contextos events`) or the "
+                                                        "integration's own session id (e.g. the SDK's ses_…)."),
            as_json: bool = JSON_OPT) -> None:
     """Print a session's recorded timeline in order (what happened, not why)."""
     cfg = get_config()
+    client = get_client(cfg)
     with cli_errors(cfg.url):
-        payload = get_client(cfg).session_timeline(session_id)
+        session = client.find_session(session_id)
+        payload = client.session_timeline(str(pick(session, "id", default=session_id)))
     if as_json:
         return print_json(payload)
-    entries = items_of(payload, "timeline", "events", "entries")
+    entries = items_of(payload)
     console = out()
-    console.print(f"[bold]Session {text(session_id)}[/bold] — {len(entries)} recorded step(s)")
+    agent = pick(pick(session, "agent", default={}), "name")
+    label = f" {SIMULATED} (Simulation Lab)" if pick(session, "is_simulation") else ""
+    console.print(f"[bold]Session {text(pick(session, 'id', default=session_id))}[/bold]"
+                  f"{f' of agent {text(agent)}' if agent else ''}{label} — {len(entries)} recorded step(s)")
     if not entries:
         console.print("Nothing was recorded for this session.")
         return
     for entry in entries:
         console.print(_timeline_line(entry if isinstance(entry, dict) else {"title": entry}))
-        explanation = pick(entry, "explanation", "reason") if isinstance(entry, dict) else None
+        explanation = pick(entry, "explanation") if isinstance(entry, dict) else None
         if explanation:
             console.print(f"    [dim]{text(explanation)}[/dim]")
     console.print("[dim]Steps are listed in recorded order. Steps that appear together were observed together; "
@@ -190,7 +222,10 @@ def simulate(
     wait_s: float = typer.Option(120.0, "--timeout", help="Seconds to wait for the run to finish."),
     as_json: bool = JSON_OPT,
 ) -> None:
-    """Run a Simulation Lab scenario through the real pipeline (results are flagged as simulation)."""
+    """Run a Simulation Lab scenario through the real pipeline (results are flagged as simulation).
+
+    Listing scenarios needs the ``read`` scope; running one writes simulated events, so the API key
+    also needs ``ingest``."""
     cfg = get_config()
     client = get_client(cfg)
     if list_only or not scenario_id:
@@ -198,7 +233,15 @@ def simulate(
             payload = client.list_scenarios()
         return print_json(payload) if as_json else _print_scenarios(payload)
     with cli_errors(cfg.url):
-        run = client.run_simulation(scenario_id)
+        try:
+            run = client.run_simulation(scenario_id)
+        except AuthError as exc:
+            if exc.status_code != 403:
+                raise
+            err().print(f"[red]Not authorised:[/red] {escape(exc.message)}. Running a scenario writes simulated "
+                        "events through the pipeline, so the API key needs the 'ingest' scope (and 'read' to list "
+                        "scenarios and fetch results).")
+            raise typer.Exit(EXIT_ERROR) from None
         deadline = time.monotonic() + wait_s
         while str(pick(run, "status", default="")).lower() == "running" and time.monotonic() < deadline:
             time.sleep(1.0)
@@ -234,5 +277,7 @@ def _print_run(run: Any) -> None:
             table.add_row(text(pick(r, "name", "check", "step")), text(pick(r, "expected")), text(pick(r, "actual", "observed")),
                           "[green]pass[/green]" if ok else "[red]fail[/red]" if ok is False else "—")
         console.print(table)
+    console.print(f"[dim]Everything this run recorded is {SIMULATED}[dim] (flagged is_simulation) and is left out of "
+                  "real metrics and lists unless simulated data is requested.[/dim]")
     if pick(run, "session_id"):
         console.print(f"[dim]Inspect it with: contextos replay {text(pick(run, 'session_id'))}[/dim]")

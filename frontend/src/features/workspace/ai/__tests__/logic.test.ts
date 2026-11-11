@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { budgetLevel, defaultOptions, effectiveOptions, formatTokens, mayModify, optionsEqual, safeFilename, suggestedProfile } from "../meta";
 import { buildRequest, initialFixState, useFixContextState } from "../useFixContextState";
 import type { ModeInfo } from "../types";
-import { CATALOGUE, OPTIONS, PACK, SAVED, TASK, TEMPLATES } from "./fixtures";
+import { CATALOGUE, OPTIONS, PACK, SAVED, TASK, TASK_CATALOGUE, TEMPLATES } from "./fixtures";
 
 const modes = new Map<string, ModeInfo>(CATALOGUE.modes.map((m) => [m.key, m]));
 const readOnly = modes.get("investigate_only");
@@ -34,13 +34,21 @@ describe("option rules", () => {
   });
 });
 
-describe("profile suggestion (mirrors the server's default_profile)", () => {
-  it("prefers security-critical for security work and deep for autonomous remediation", () => {
-    expect(suggestedProfile({ task_type: "backend", related_finding_id: null }, "implement_fix")).toBe("standard");
-    expect(suggestedProfile({ task_type: "prompt_injection", related_finding_id: null }, "implement_fix")).toBe("security_critical");
-    expect(suggestedProfile({ task_type: "backend", related_finding_id: "fnd_1" }, "refactor")).toBe("security_critical");
-    expect(suggestedProfile({ task_type: "backend", related_finding_id: null }, "security_harden")).toBe("security_critical");
-    expect(suggestedProfile({ task_type: "backend", related_finding_id: null }, "full_autonomous_remediation")).toBe("deep");
+describe("profile suggestion (from the server's task-scoped catalogue)", () => {
+  it("uses the server's suggestion for each mode instead of a client-side rule", () => {
+    expect(suggestedProfile(TASK_CATALOGUE, "implement_fix")).toBe("standard");
+    expect(suggestedProfile(TASK_CATALOGUE, "security_harden")).toBe("security_critical");
+    expect(suggestedProfile(TASK_CATALOGUE, "full_autonomous_remediation")).toBe("deep");
+    // A security task: the server says security_critical for every mode, and the client follows it.
+    const security = { suggested_profiles: { implement_fix: "security_critical", refactor: "security_critical" } } as const;
+    expect(suggestedProfile(security, "refactor")).toBe("security_critical");
+  });
+
+  it("uses the single suggestion only for the mode it was computed for, and falls back to standard", () => {
+    expect(suggestedProfile({ mode: "implement_fix", suggested_profile: "security_critical" }, "implement_fix")).toBe("security_critical");
+    expect(suggestedProfile({ mode: "implement_fix", suggested_profile: "security_critical" }, "refactor")).toBe("standard");
+    expect(suggestedProfile(CATALOGUE, "full_autonomous_remediation")).toBe("standard");
+    expect(suggestedProfile(undefined, "implement_fix")).toBe("standard");
   });
 });
 
@@ -68,7 +76,7 @@ describe("number and file helpers", () => {
 
 describe("initial state and requests", () => {
   it("starts a saved prompt with its settings and stored pack, and builds a pack request", () => {
-    const init = initialFixState({ catalogue: CATALOGUE, task: TASK, prompt: SAVED, pack: PACK, templates: TEMPLATES });
+    const init = initialFixState({ catalogue: TASK_CATALOGUE, task: TASK, prompt: SAVED, pack: PACK, templates: TEMPLATES });
     expect(init.config.mode).toBe("implement_fix");
     expect(init.pack).toEqual({ id: "cpk_1", profile: "standard" });
     expect(init.preview?.promptId).toBe("gpr_1");
@@ -77,7 +85,7 @@ describe("initial state and requests", () => {
   });
 
   it("applies a template from the link and sends a profile when no pack is stored", () => {
-    const init = initialFixState({ catalogue: CATALOGUE, task: TASK, template: TEMPLATES[1], templates: TEMPLATES });
+    const init = initialFixState({ catalogue: TASK_CATALOGUE, task: TASK, template: TEMPLATES[1], templates: TEMPLATES });
     expect(init.config).toMatchObject({ mode: "security_harden", preset: "claude_code", templateId: "pt_1", profile: "security_critical" });
     const req = buildRequest(TASK.id, init.config, init.pack, modes.get(init.config.mode));
     expect(req).toMatchObject({ template_id: "pt_1", profile: "security_critical" });
@@ -85,20 +93,20 @@ describe("initial state and requests", () => {
   });
 
   it("ignores a pack from another task", () => {
-    const init = initialFixState({ catalogue: CATALOGUE, task: TASK, pack: { ...PACK, task_id: "tsk_other" }, templates: [] });
+    const init = initialFixState({ catalogue: TASK_CATALOGUE, task: TASK, pack: { ...PACK, task_id: "tsk_other" }, templates: [] });
     expect(init.pack).toBeNull();
   });
 
   it("never forwards a template id that no longer exists", () => {
-    const init = initialFixState({ catalogue: CATALOGUE, task: TASK, prompt: { ...SAVED, template_id: "pt_deleted" }, templates: TEMPLATES });
+    const init = initialFixState({ catalogue: TASK_CATALOGUE, task: TASK, prompt: { ...SAVED, template_id: "pt_deleted" }, templates: TEMPLATES });
     expect(init.config.templateId).toBeNull();
   });
 });
 
 describe("useFixContextState", () => {
   it("marks a saved preview stale when settings change and offers to apply option-only changes", () => {
-    const init = initialFixState({ catalogue: CATALOGUE, task: TASK, prompt: SAVED, pack: PACK, templates: TEMPLATES });
-    const { result } = renderHook(() => useFixContextState(init, TASK, modes));
+    const init = initialFixState({ catalogue: TASK_CATALOGUE, task: TASK, prompt: SAVED, pack: PACK, templates: TEMPLATES });
+    const { result } = renderHook(() => useFixContextState(init, TASK, modes, TASK_CATALOGUE));
     expect(result.current.stale).toBe(false);
 
     act(() => result.current.setOptions({ technical_depth: "deep" }));
@@ -115,8 +123,8 @@ describe("useFixContextState", () => {
   });
 
   it("detaches the stored pack when the profile changes and follows the suggestion until a profile is chosen", () => {
-    const init = initialFixState({ catalogue: CATALOGUE, task: TASK, templates: [] });
-    const { result } = renderHook(() => useFixContextState(init, TASK, modes));
+    const init = initialFixState({ catalogue: TASK_CATALOGUE, task: TASK, templates: [] });
+    const { result } = renderHook(() => useFixContextState(init, TASK, modes, TASK_CATALOGUE));
     expect(result.current.config.profile).toBe("standard");
     act(() => result.current.setMode("full_autonomous_remediation"));
     expect(result.current.config.profile).toBe("deep");
@@ -132,8 +140,8 @@ describe("useFixContextState", () => {
   });
 
   it("keeps a just-saved draft current when the server stored the pack it used", () => {
-    const init = initialFixState({ catalogue: CATALOGUE, task: TASK, templates: [] });
-    const { result } = renderHook(() => useFixContextState(init, TASK, modes));
+    const init = initialFixState({ catalogue: TASK_CATALOGUE, task: TASK, templates: [] });
+    const { result } = renderHook(() => useFixContextState(init, TASK, modes, TASK_CATALOGUE));
     const used = result.current.request;
     act(() => result.current.showDraft({ ...SAVED, prompt_id: null } as never, used));
     expect(result.current.stale).toBe(false);

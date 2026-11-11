@@ -121,12 +121,14 @@ export function Tabs({
 }) {
   return (
     <RadixTabs.Root value={value} onValueChange={onValueChange} className={className}>
-      <RadixTabs.List className="flex gap-1 border-b border-border" aria-label="Sections">
+      {/* Scrolls sideways instead of widening the page when the tabs do not fit (phones). The baseline is an
+          inset shadow rather than a border so the active tab's underline is not clipped by the scroller. */}
+      <RadixTabs.List className="flex gap-1 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_rgb(var(--border))] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Sections">
         {tabs.map((t) => (
           <RadixTabs.Trigger
             key={t.value}
             value={t.value}
-            className="relative -mb-px inline-flex h-9 items-center gap-1.5 border-b-2 border-transparent px-2.5 text-[13px] text-fg-muted transition-colors hover:text-fg data-[state=active]:border-accent data-[state=active]:text-fg"
+            className="relative inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-2.5 text-[13px] text-fg-muted transition-colors hover:text-fg data-[state=active]:border-accent data-[state=active]:text-fg"
           >
             {t.label}
             {t.count !== undefined && <span className="num rounded bg-surface-3 px-1 text-2xs text-fg-muted">{t.count}</span>}

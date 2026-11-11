@@ -22,11 +22,13 @@ SENSITIVE = [
     "~/Library/Application Support/Google/Chrome/Default/Login Data",
     "~/Library/Application Support/Google/Chrome/Default/Cookies", "profile/cookies.sqlite", "~/.zsh_history",
     "/proc/self/environ", "file:///home/u/.env", "~/.ssh/*", "C:/Windows/System32/config/SAM",
+    "~/.ssh/known_hosts", "~/.ssh/*.pub", "~/.ssh/.pub", "~/.ssh/deploy_key",
 ]
 NOT_SENSITIVE = [
     ".env.example", ".env.sample", ".env.template", "example.env", "README.md", "src/app/main.py",
     "id_rsa.pub", "docs/environment.md", "package.json", "config/settings.yaml", "~/.bashrc",
     "public/cookies-policy.html", "src/keys.py", "tokenizer.json", "", "/etc/hosts",
+    "~/.ssh/id_ed25519.pub", "/home/dev/.ssh/id_rsa.pub", "C:\\Users\\bob\\.ssh\\deploy_key.PUB",
 ]
 
 
@@ -40,6 +42,15 @@ def test_sensitive_paths_are_recognised_with_a_reason(path):
 @pytest.mark.parametrize("path", NOT_SENSITIVE)
 def test_ordinary_paths_are_not_flagged(path):
     assert is_sensitive_path(path) == (False, None)
+
+
+def test_ssh_files_explain_why_they_matter_and_public_keys_are_not_secrets():
+    assert "known_hosts" in is_sensitive_path("~/.ssh/known_hosts")[1]
+    assert "grants access" in is_sensitive_path("/root/.ssh/authorized_keys")[1]
+    assert "private key" in is_sensitive_path("~/.ssh/config")[1]
+    assert is_sensitive_path("~/.ssh/id_rsa")[1] == "SSH directory — private keys and client configuration"
+    assert is_sensitive_path("~/.ssh/id_rsa.pub") == (False, None)
+    assert is_sensitive_path("keys/id_rsa.pub.pem")[0]  # the .pem rule still applies outside ~/.ssh
 
 
 def test_path_matching_is_case_and_separator_insensitive():

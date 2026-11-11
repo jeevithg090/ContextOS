@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ToastProvider } from "@/components/ui";
+import { TestRouter } from "@/test/router";
 import { ApprovalQueue } from "../ApprovalQueue";
 import { DecisionBar } from "../DecisionBar";
 import { activityTitle, countdownTone, deadlineOf, decidedByLabel, formatCountdown, ranWithoutApproval, riskChips } from "../meta";
@@ -105,11 +105,11 @@ function detail(overrides: Partial<ApprovalDetail> = {}): ApprovalDetail {
 function wrap(children: ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return (
-    <MemoryRouter>
+    <TestRouter>
       <QueryClientProvider client={qc}>
         <ToastProvider>{children}</ToastProvider>
       </QueryClientProvider>
-    </MemoryRouter>
+    </TestRouter>
   );
 }
 

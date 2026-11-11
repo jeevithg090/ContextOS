@@ -110,3 +110,84 @@ async def test_stream_endpoint_returns_an_sse_response(bound_bus, db, org):
     assert json.loads((await anext(body))["data"]) == {"type": "stream.connected"}
     await body.aclose()
     assert _subscribers(org.org_id) == 0
+
+
+def _session_principal(db, org) -> Principal:
+    from sqlalchemy import select
+
+    from app.core.security import hash_token
+    from app.models import AuthSession
+
+    auth = db.scalar(select(AuthSession).where(AuthSession.token_hash == hash_token(org.session_token)))
+    return Principal(org_id=org.org_id, kind="user", permissions={"read"}, user_id=org.user_id, role="owner",
+                     auth_session_id=auth.id)
+
+
+async def _drain(stream: AsyncIterator[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Messages delivered until the stream ends (fails with TimeoutError if it does not end)."""
+    delivered: list[dict[str, Any]] = []
+    try:
+        while True:
+            delivered.append(json.loads((await asyncio.wait_for(anext(stream), 2.0))["data"]))
+    except StopAsyncIteration:
+        return delivered
+
+
+@pytest.mark.parametrize("revoke", ["logout", "disable_user", "remove_membership"])
+async def test_stream_ends_when_its_credential_stops_being_valid(bound_bus, db, org, revoke):
+    from fastapi.concurrency import run_in_threadpool
+
+    from app.api.deps import recheck_credential
+    from app.core.timeutil import utcnow
+    from app.models import AuthSession, Membership, User
+
+    principal = _session_principal(db, org)
+
+    async def still_authorized() -> bool:
+        return await run_in_threadpool(recheck_credential, principal, "read")
+
+    async def connected() -> bool:
+        return False
+
+    stream = events_route.live_messages(org.org_id, connected, idle_check_s=0.05, still_authorized=still_authorized)
+    assert await _next(stream) == {"type": "stream.connected"}
+    with pytest.raises(TimeoutError):  # still valid: the stream stays open
+        await _next(stream, timeout=0.3)
+    stream = events_route.live_messages(org.org_id, connected, idle_check_s=0.05, still_authorized=still_authorized)
+    assert await _next(stream) == {"type": "stream.connected"}
+
+    if revoke == "logout":
+        db.get(AuthSession, principal.auth_session_id).revoked_at = utcnow()
+    elif revoke == "disable_user":
+        db.get(User, org.user_id).is_active = False
+    else:
+        for membership in db.query(Membership).filter(Membership.user_id == org.user_id):
+            db.delete(membership)
+    db.commit()
+    assert await _drain(stream) == []
+    assert _subscribers(org.org_id) == 0
+
+
+async def test_stream_ends_when_its_api_key_is_revoked(bound_bus, db, org):
+    from fastapi.concurrency import run_in_threadpool
+
+    from app.api.deps import recheck_credential
+    from app.core.timeutil import utcnow
+    from app.models import ApiKey
+
+    principal = Principal(org_id=org.org_id, kind="api_key", permissions={"read"}, api_key_id=org.api_key_id)
+
+    async def still_authorized() -> bool:
+        return await run_in_threadpool(recheck_credential, principal, "read")
+
+    async def connected() -> bool:
+        return False
+
+    stream = events_route.live_messages(org.org_id, connected, idle_check_s=0.05, still_authorized=still_authorized)
+    assert await _next(stream) == {"type": "stream.connected"}
+    db.get(ApiKey, org.api_key_id).revoked_at = utcnow()
+    db.commit()
+    await asyncio.sleep(0.1)  # past the re-check interval: the next message triggers a re-check first
+    _ingest(db, org, "A notification queued after revocation is never delivered.")
+    db.commit()
+    assert await _drain(stream) == []

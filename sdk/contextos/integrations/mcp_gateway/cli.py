@@ -42,13 +42,14 @@ _OPTIONS: list[tuple[tuple[str, ...], bool, dict[str, object]]] = [
                                       "forwards them without a decision"}),
     (("--approval-timeout",), True, {"type": float, "metavar": "SECONDS",
                                      "help": "how long a REQUIRE_APPROVAL call waits for a reviewer (default: "
-                                             "CONTEXTOS_APPROVAL_TIMEOUT_S or 300; 0 = do not wait, block)"}),
+                                             "CONTEXTOS_APPROVAL_TIMEOUT_S or 300; 0 = do not wait, block); a "
+                                             "request nobody decided in time is withdrawn"}),
     (("--poll-interval",), True, {"type": float, "default": 2.0, "metavar": "SECONDS",
                                   "help": "approval polling interval (default 2)"}),
     (("--session-id",), True, {"metavar": "ID", "help": "session id to report (default: a new id per process)"}),
     (("--hide-blocked-tools",), False, {"action": "store_true",
                                         "help": "list no tools when ContextOS classifies this MCP server as BLOCKED "
-                                                "(needs a key with the read scope; calls are decided either way)"}),
+                                                "(calls are decided either way)"}),
     (("--no-context-reports",), False, {"action": "store_true",
                                         "help": "do not report resource reads and prompts to ContextOS"}),
     (("--max-result-chars",), True, {"type": int, "default": 100_000, "metavar": "N",

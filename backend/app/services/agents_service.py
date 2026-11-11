@@ -130,8 +130,12 @@ def summaries(db: Session, org_id: str, agents: list[Agent]) -> list[dict[str, A
 def list_agents(
     db: Session, org_id: str, *, q: str | None, environment: str | None, framework: str | None,
     status: str | None, include_simulated: bool, sort: str, limit: int, offset: int,
+    only_agent_id: str | None = None,
 ) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
+    """``only_agent_id`` (an agent-bound API key) restricts the list and its facets to that agent."""
     query = scoped(Agent, org_id)
+    if only_agent_id:
+        query = query.where(Agent.id == only_agent_id)
     if not include_simulated:
         query = query.where(Agent.is_simulation.is_(False))
     if q and q.strip():
@@ -144,18 +148,19 @@ def list_agents(
     seen = Agent.last_seen_at.desc().nulls_last()
     order = {"risk": [Agent.risk_score.desc(), seen], "name": [Agent.name.asc()], "created": [Agent.created_at.desc()]}
     rows, total = paginate(db, query.order_by(*order.get(sort, [seen]), Agent.id), limit=limit, offset=offset)
-    return summaries(db, org_id, rows), total, facets(db, org_id, include_simulated=include_simulated)
+    return (summaries(db, org_id, rows), total,
+            facets(db, org_id, include_simulated=include_simulated, only_agent_id=only_agent_id))
 
 
-def facets(db: Session, org_id: str, *, include_simulated: bool) -> dict[str, Any]:
-    conds = [Agent.organization_id == org_id] + ([] if include_simulated else [Agent.is_simulation.is_(False)])
+def facets(db: Session, org_id: str, *, include_simulated: bool, only_agent_id: str | None = None) -> dict[str, Any]:
+    scope = [Agent.organization_id == org_id] + ([Agent.id == only_agent_id] if only_agent_id else [])
+    conds = scope + ([] if include_simulated else [Agent.is_simulation.is_(False)])
 
     def group(column: Any) -> list[dict[str, Any]]:
         rows = db.execute(select(column, func.count()).where(*conds).group_by(column)).all()
         return [{"value": str(v), "count": int(n)} for v, n in sorted(rows, key=lambda r: (-r[1], str(r[0]))) if v]
 
-    simulated = db.scalar(select(func.count()).select_from(Agent).where(
-        Agent.organization_id == org_id, Agent.is_simulation.is_(True))) or 0
+    simulated = db.scalar(select(func.count()).select_from(Agent).where(*scope, Agent.is_simulation.is_(True))) or 0
     return {"frameworks": group(Agent.framework), "environments": group(Agent.environment),
             "statuses": group(Agent.status), "simulated": int(simulated)}
 
@@ -168,8 +173,9 @@ def build_declared_capabilities(spec: dict[str, Any]) -> dict[str, Any]:
     tools = []
     for t in spec.get("tools") or []:
         hint = str(t["category"]) if t.get("category") else None
-        cls = classify_tool(str(t["name"]), "declared", category_hint=hint)
-        entry: dict[str, Any] = {"name": str(t["name"]), "category": cls.category, "risk_level": cls.risk_level}
+        name = redact_text(str(t["name"])).text  # same deterministic form the pipeline stores tool names in
+        cls = classify_tool(name, "declared", category_hint=hint)
+        entry: dict[str, Any] = {"name": name, "category": cls.category, "risk_level": cls.risk_level}
         if hint:
             entry["category_hint"] = hint
         tools.append(entry)
@@ -183,13 +189,14 @@ def _labels(labels: list[str], status: str) -> list[str]:
 
 
 def create_agent(db: Session, org_id: str, actor: Actor, data: dict[str, Any]) -> Agent:
-    name = data["name"]
+    # Redacted exactly as the ingestion pipeline redacts reported agent names, so they still match.
+    name = redact_text(data["name"]).text
     existing = db.scalar(scoped(Agent, org_id).where(Agent.name == name))
     if existing is not None:
         raise ConflictError(f"An agent named '{name}' is already registered", details={"agent_id": existing.id})
     agent = Agent(
         id=new_id("agent"), organization_id=org_id, name=name, description=_redact(data.get("description"), 4000),
-        framework=data.get("framework") or "custom", version=_redact(data.get("version"), 64),
+        framework=_redact(data.get("framework"), 64) or "custom", version=_redact(data.get("version"), 64),
         owner=_redact(data.get("owner"), 200), environment=data.get("environment") or "development",
         labels=_labels(data.get("labels") or [], "active"), status="active", is_simulation=False, risk_score=0,
         declared_capabilities=build_declared_capabilities(data.get("declared_capabilities") or {}),

@@ -21,7 +21,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 
@@ -72,6 +72,19 @@ def default_agent_ref(config: Config | None = None) -> AgentRef:
         script = Path(sys.argv[0]).stem if sys.argv and sys.argv[0] not in ("", "-c") else ""
         name = script or "python-agent"
     return AgentRef(name=name[:200], framework="python_sdk", environment=config.environment if config else None)
+
+
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def sends_credentials_in_clear(url: str) -> bool:
+    """True when ``url`` is plain HTTP to a host other than this machine (the API key would travel
+    unencrypted over the network)."""
+    parts = urlsplit(url.strip())
+    host = (parts.hostname or "").lower()
+    if parts.scheme.lower() != "http" or not host:
+        return False
+    return not (host in _LOOPBACK_HOSTS or host.endswith(".localhost") or host.startswith("127."))
 
 
 def _normalise_base_url(url: str) -> str:
@@ -126,6 +139,9 @@ class ContextOSClient(ReadAPIMixin):
     ) -> None:
         self.base_url = _normalise_base_url(base_url)
         self._api_key = api_key
+        if api_key and sends_credentials_in_clear(self.base_url):
+            log.warning("ContextOS at %s is plain HTTP to another host: the API key and event data travel "
+                        "unencrypted. Use an https:// URL.", self.base_url)
         self.timeout = timeout
         self.agent = agent or default_agent_ref()
         self.integration = integration
@@ -313,6 +329,16 @@ class ContextOSClient(ReadAPIMixin):
     def get_approval(self, approval_id: str) -> dict[str, Any]:
         return self._request("GET", f"/decide/approvals/{quote(approval_id, safe='')}")
 
+    def cancel_approval(self, approval_id: str, reason: str | None = None) -> dict[str, Any]:
+        """Withdraw a pending approval this integration stopped waiting for
+        (``POST /decide/approvals/{id}/cancel``, ``decide`` scope). The server records the held call as
+        cancelled, so a reviewer cannot approve a request nothing is waiting on any more. Idempotent;
+        raises :class:`APIError` 409 once a person decided it or it expired (``details["status"]``).
+        Retried only when the connection could not be opened."""
+        body = {"reason": reason.strip()[:500]} if reason and reason.strip() else None
+        return self._request("POST", f"/decide/approvals/{quote(approval_id, safe='')}/cancel", json_body=body,
+                             retry="connect")
+
     def wait_for_approval(self, approval_id: str, timeout_s: float = 300.0, poll_s: float = 2.0) -> dict[str, Any]:
         """Poll until the approval leaves ``pending``; returns the approval. Raises :class:`ApprovalTimeout`."""
         deadline = self._clock() + timeout_s
@@ -378,6 +404,27 @@ def approval_status_of(approval: Any) -> str | None:
     return str(raw).lower() if raw else None
 
 
+def withdraw_approval(client: ContextOSClient, approval_id: str, reason: str) -> str | None:
+    """Best-effort :meth:`ContextOSClient.cancel_approval` for an integration that stops waiting.
+
+    Returns the approval's status afterwards: ``cancelled`` when it was withdrawn, the status a person
+    set just before (``approved``, ``rejected``) or ``expired`` when the server answered 409, and
+    ``None`` when the server could not be asked. Never raises.
+    """
+    try:
+        status = approval_status_of(client.cancel_approval(approval_id, reason))
+    except APIError as exc:
+        details = exc.details if isinstance(exc.details, dict) else {}
+        if exc.status_code == 409 and details.get("status"):
+            return str(details["status"]).lower()
+        log.info("Could not withdraw approval %s: %s", approval_id, exc)
+        return None
+    except ContextOSError as exc:
+        log.info("Could not withdraw approval %s: %s", approval_id, exc)
+        return None
+    return status
+
+
 def _batches(events: list[dict[str, Any]]) -> Iterable[list[dict[str, Any]]]:
     batch: list[dict[str, Any]] = []
     size = 0
@@ -392,4 +439,5 @@ def _batches(events: list[dict[str, Any]]) -> Iterable[list[dict[str, Any]]]:
         yield batch
 
 
-__all__ = ["API_PREFIX", "MAX_BATCH_EVENTS", "ContextOSClient", "SendResult", "approval_status_of", "default_agent_ref"]
+__all__ = ["API_PREFIX", "MAX_BATCH_EVENTS", "ContextOSClient", "SendResult", "approval_status_of", "default_agent_ref",
+           "withdraw_approval"]

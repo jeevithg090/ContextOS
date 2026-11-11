@@ -17,6 +17,7 @@ from app.core.errors import ConflictError, ValidationFailedError
 from app.core.ids import new_id
 from app.core.security import hash_password, verify_password
 from app.domain.enums import Role
+from app.engines.redaction import redact_text
 from app.models import Board, Membership, Organization, User
 from app.schemas.auth import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, clean_name, normalize_email
 from app.services.audit import append_audit
@@ -63,6 +64,7 @@ def update_org_settings(
     new_settings = dict(org.settings or {})
     for field, value in changes.items():
         if field == "name":
+            value = redact_name(value)
             if value != org.name:
                 diff["name"] = {"from": org.name, "to": value}
                 org.name = value
@@ -98,15 +100,16 @@ def unique_slug(db: Session, name: str) -> str:
     return candidate
 
 
+def redact_name(value: str) -> str:
+    """A display name (organisation, user, API key) with any credential pasted into it redacted."""
+    return redact_text(value).text
+
+
 def validate_password(password: str) -> None:
     if not password or len(password) < PASSWORD_MIN_LENGTH:
         raise ValidationFailedError(f"Password must be at least {PASSWORD_MIN_LENGTH} characters")
     if len(password) > PASSWORD_MAX_LENGTH:
         raise ValidationFailedError(f"Password must be at most {PASSWORD_MAX_LENGTH} characters")
-
-
-def count_users(db: Session) -> int:
-    return int(db.scalar(select(func.count()).select_from(User)) or 0)
 
 
 def create_organization(
@@ -118,9 +121,9 @@ def create_organization(
     is their current password (an operator cannot silently attach someone else's account).
     """
     try:
-        org_name = clean_name(name)
+        org_name = redact_name(clean_name(name))
         email = normalize_email(owner_email)
-        display_name = clean_name(owner_name)
+        display_name = redact_name(clean_name(owner_name))
     except ValueError as exc:
         raise ValidationFailedError(str(exc)) from exc
     if len(org_name) > 200 or len(display_name) > 200:

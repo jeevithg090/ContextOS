@@ -1,8 +1,8 @@
 /** Explains the redaction markers in a preview and which secret types were removed. */
 import { EyeOff } from "lucide-react";
 import { RedactionMarker } from "@/components/data";
-import { humanize } from "@/lib/domain";
 import { pluralize } from "@/lib/format";
+import { secretTypeLabel } from "@/lib/secretTypes";
 
 export function RedactionLegend({ secretTypes, fingerprintCount, previewStored }: { secretTypes: Array<{ type: string; count: number }>; fingerprintCount: number; previewStored: boolean }) {
   return (
@@ -21,7 +21,7 @@ export function RedactionLegend({ secretTypes, fingerprintCount, previewStored }
               {secretTypes.map((s, i) => (
                 <span key={s.type}>
                   {i > 0 && ", "}
-                  <span className="text-fg">{humanize(s.type)}</span>
+                  <span className="text-fg">{secretTypeLabel(s.type)}</span>
                   {s.count > 1 && <span className="num"> ×{s.count}</span>}
                 </span>
               ))}

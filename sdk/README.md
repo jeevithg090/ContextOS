@@ -31,7 +31,8 @@ the user file (mode 600) by default. Pass `--key-location project` to store the 
 project file instead; that file is also mode 600 and `init` adds it to `.gitignore`. The key is
 never printed or logged. Output shows only its prefix, for example `ctxk_abc…`.
 
-API key scopes: `ingest` (report events), `decide` (enforcement), `read` (CLI read commands).
+API key scopes: `ingest` (report events; also needed to run `contextos simulate <scenario>`),
+`decide` (enforcement, approval polling and withdrawal), `read` (CLI data commands and `scan`).
 
 ## Reporting a session
 
@@ -68,7 +69,7 @@ Before each call the guard sends `tool.requested` to `POST /decide` and acts on 
 |---|---|
 | `ALLOW`, `AUDIT` | Runs the function |
 | `DENY` | Raises `ToolDenied(reason, decision)`. The function is never entered |
-| `REQUIRE_APPROVAL` | Polls the approval until it is decided or `approval_timeout_s` passes (default 300). Runs only if approved, otherwise raises `ToolDenied`. `approval_timeout_s=0` raises `ApprovalRequired(approval_id=…)` at once |
+| `REQUIRE_APPROVAL` | Polls the approval until it is decided or `approval_timeout_s` passes (default 300). Runs only if approved, otherwise raises `ToolDenied`; on a timeout the request is withdrawn (`POST /decide/approvals/{id}/cancel`) so nobody approves a call that is no longer waiting. `approval_timeout_s=0` raises `ApprovalRequired(approval_id=…)` at once and leaves the request pending for the host to wait on |
 | `RESTRICT` | Applies every restriction and runs the function with the restricted arguments. If any restriction cannot be applied, raises `ToolDenied` (fail closed) |
 | anything else | Raises `ToolDenied` (fail closed) |
 
@@ -145,9 +146,9 @@ Retry rules:
 | `contextos status` | Show the active config (key masked), where each value came from, the spool, and whether the server is reachable |
 | `contextos doctor` | Check the config, connectivity, key, scopes, spool size and Claude Code hooks |
 | `contextos flush` | Re-send spooled events now |
-| `contextos agents` / `events [--session ID]` / `policies` / `incidents [--status S]` | Read commands (`--json` prints the raw response) |
-| `contextos replay <session_id>` | Print a session's recorded timeline |
-| `contextos simulate --list` / `simulate <scenario_id>` | Run a Simulation Lab scenario. Results are flagged as simulation |
+| `contextos agents` / `events [--session ID]` / `policies` / `incidents [--status S]` | Read commands (`--json` prints the raw response). Simulation Lab data is labelled; `agents` and `incidents` leave it out unless `--include-simulated` |
+| `contextos replay <session_id>` | Print a session's recorded timeline. Takes the ContextOS id (`asn_…`) or the integration's own session id (e.g. the SDK's `ses_…`) |
+| `contextos simulate --list` / `simulate <scenario_id>` | Run a Simulation Lab scenario through the real pipeline (needs `ingest` as well as `read`). Results are flagged as simulation |
 | `contextos scan <path…\|->` | Run detection without storing anything. Files at sensitive paths (`.env`, keys, credentials) are not uploaded unless you pass `--force` |
 | `contextos hook <Event>` | Claude Code hook entry point (Claude Code integration package) |
 | `contextos mcp-gateway …` | MCP gateway (MCP gateway package). Arguments are passed through |
@@ -173,8 +174,14 @@ mail out a `.env` file, and the guard enforces the server's decision on each ste
 ## Tests
 
 ```bash
-cd backend && .venv/bin/python -m pytest -q ../sdk/tests/test_client*.py ../sdk/tests/test_guard*.py ../sdk/tests/test_cli*.py
+make test-sdk                                                     # the whole SDK suite, from the repository root
+cd sdk && ../backend/.venv/bin/python -m pytest -q -p no:cacheprovider tests/test_client*.py tests/test_guard*.py tests/test_cli*.py
 ```
+
+Run the SDK suite as its own pytest process, never together with `backend/tests` (both packages are
+named `tests`; see `docs/DEVELOPMENT_GUIDE.md`). The Claude Code and MCP gateway adapters are
+documented in `docs/integrations/claude-code.md` and `docs/integrations/mcp.md`; the cross-adapter
+contract in `docs/INTEGRATION_SPECIFICATION.md`.
 
 The tests use `httpx.MockTransport` and make no network calls. `test_client_contract.py` checks
 the SDK's copy of the envelope against `backend/app/events/envelope.py` whenever the server

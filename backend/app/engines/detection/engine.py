@@ -8,6 +8,7 @@ optional classifier may be registered; it never replaces the rules.
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Iterable
 from dataclasses import replace
@@ -222,7 +223,11 @@ def _run_classifier(text: str, hits: list[DetectionHit]) -> float | None:
         return None
     try:
         raw = clf.score(text)
-    except Exception:  # noqa: BLE001 — a classifier failure must never break deterministic detection
+    except Exception as exc:  # noqa: BLE001 — a classifier failure must never break deterministic detection
+        # Recorded (type only, never the content) and the classifier score is reported as absent.
+        logging.getLogger(__name__).warning("detection.classifier_failed",
+                                            extra={"classifier": getattr(clf, "name", "model"),
+                                                   "error_type": type(exc).__name__})
         return None
     cls_score = max(0.0, min(1.0, float(raw)))
     if cls_score > CLASSIFIER_THRESHOLD:

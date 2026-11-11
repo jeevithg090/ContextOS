@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { chainItems, WhatHappened } from "../detail/WhatHappened";
 import { clearedParams, findingFiltersFrom, hasActiveFilters, selectedStatuses, toggleStatus, toggleValue, windowFrom, withStatuses } from "../filters";
 import { confidenceWords, formatDuration } from "../meta";
 import type { FindingDetail } from "../types";
+import { TestRouter } from "@/test/router";
 
 const qs = (s: string) => new URLSearchParams(s);
 
@@ -121,9 +121,9 @@ describe("What happened chain", () => {
 
   it("states missing links plainly and keeps the provenance caveat", () => {
     render(
-      <MemoryRouter>
+      <TestRouter>
         <WhatHappened finding={baseFinding} />
-      </MemoryRouter>,
+      </TestRouter>,
     );
     expect(screen.getByText(/No content source is linked/)).toBeInTheDocument();
     expect(screen.queryByText(/No tool call is linked/)).not.toBeInTheDocument();

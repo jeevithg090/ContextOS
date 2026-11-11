@@ -122,8 +122,10 @@ export function PageHeader({ title, description, actions, eyebrow }: { title: Re
     <header className="flex flex-wrap items-end justify-between gap-4 pb-5">
       <div className="min-w-0">
         {eyebrow && <div className="label-caps mb-1.5">{eyebrow}</div>}
-        <h1 className="text-xl font-semibold text-fg">{title}</h1>
-        {description && <p className="mt-1 max-w-3xl text-[13px] text-fg-muted">{description}</p>}
+        <h1 className="break-words text-xl font-semibold text-fg">{title}</h1>
+        {/* break-words: descriptions can carry unbroken hashes or URLs (context receipts) that would widen the page.
+            A <div>, not a <p>: some pages pass block content (inline stats) as the description. */}
+        {description && <div className="mt-1 max-w-3xl break-words text-[13px] text-fg-muted">{description}</div>}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
     </header>
@@ -226,7 +228,7 @@ export function Checkbox({ label, checked, onChange, disabled }: { label: ReactN
 
 export function Table({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn("overflow-x-auto", className)}>
+    <div className={cn("relative overflow-x-auto", className)}>
       <table className="w-full border-collapse text-left text-[13px]">{children}</table>
     </div>
   );

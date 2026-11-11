@@ -6,8 +6,9 @@ ContextOS evaluates every tool call and Claude Code acts on the decision *before
 The other hooks are **observation only**: they report what happened and never block.
 
 The integration is `sdk/contextos/integrations/claude_code/`. It talks to ContextOS over HTTP only
-(`POST /decide`, `POST /events`, `GET /decide/approvals/{id}`) via the `contextos` SDK and never
-imports server code.
+(`POST /decide`, `POST /events`, `GET /decide/approvals/{id}`, `POST /decide/approvals/{id}/cancel`,
+`POST /scan`) via the `contextos` SDK and never imports server code. The cross-adapter contract is
+in [../INTEGRATION_SPECIFICATION.md](../INTEGRATION_SPECIFICATION.md).
 
 - `mapping.py` — hook payload → event envelope(s) (pure)
 - `results.py` — a tool's result reduced to the text the model reads
@@ -64,6 +65,10 @@ Three levels — event → matcher group → handler:
   }
 }
 ```
+
+The installer writes the absolute interpreter that has the `contextos` package
+(`<python> -m contextos hook <Event>`), so the hooks never depend on `PATH`; the example above shows
+the equivalent console-script form.
 
 `matcher` filters by tool name on `PreToolUse`/`PostToolUse`/`PostToolUseFailure`/`SubagentStop`;
 `"*"`, `""` or omitted matches all. `UserPromptSubmit`, `SessionStart`, `SessionEnd` ignore a
@@ -126,7 +131,7 @@ and `UserPromptSubmit` would be injected into Claude's context).
 |---|---|
 | `ALLOW`, `AUDIT` | no decision (Claude Code's own permissions still apply) |
 | `DENY` | `deny`, reason cites the deciding policy (not AUDIT matches) + `policy_decision_id` |
-| `REQUIRE_APPROVAL` | poll `GET /decide/approvals/{id}` up to `approval_wait_s` → approved: no decision; rejected/expired/cancelled: `deny`; still pending: `ask` (or `deny` if `on_approval_timeout=deny`). An approval belongs to one call: a retry is a new request, and the deny reason says so |
+| `REQUIRE_APPROVAL` | poll `GET /decide/approvals/{id}` up to `approval_wait_s` → approved: no decision; rejected/expired/cancelled: `deny`; still pending: the request is withdrawn (`POST /decide/approvals/{id}/cancel`; a decision made just before wins) and the hook answers `ask` (or `deny` if `on_approval_timeout=deny`). An approval belongs to one call: a retry is a new request, and the reason says so |
 | `RESTRICT` | path/size restrictions that only check and pass → no decision; `redact_secrets` → `ask` with the masked `updatedInput` (re-verified by `POST /scan`); any restriction that cannot be applied → `deny` (fail closed) |
 | unavailable / error | fail mode: `closed` → `deny`, `ask` → `ask`, `open` → no decision + warning; a rejected API key always denies. The undecided request is spooled so the server records it as observed. |
 
@@ -206,13 +211,16 @@ Latency: a PreToolUse decision against a local backend took 51–69 ms per call 
   non-allow decision raises a `CTX-DECISION-NOT-HONOURED` finding server-side.
 - `permission_mode: "bypassPermissions"` bypasses Claude Code's *own* permissions, not the hook —
   the hook still runs and can deny.
-- When the hook stops waiting for an approval it answers on its own (`ask` or `deny`), but the
-  approval stays `pending` in the Approval Centre until its expiry; approving it then runs nothing.
+- When the hook stops waiting for an approval it withdraws the request and answers on its own
+  (`ask` or `deny`). If ContextOS cannot be reached for the withdrawal, the approval stays `pending`
+  in the Approval Centre until it expires; approving it then runs nothing.
 - A call the person approves at Claude Code's own prompt after an `ask` is reported with
-  `approved_at_host_prompt` metadata. The server does not yet distinguish that from a bypassed hook,
-  so such a call can still raise `CTX-DECISION-NOT-HONOURED`.
+  `approved_at_host_prompt` metadata naming the withdrawn approval. ContextOS cannot verify that
+  approval, so it records the low-severity finding `CTX-APPROVED-AT-HOST-PROMPT` for review instead
+  of `CTX-DECISION-NOT-HONOURED`.
 - Claude Code's internal `ToolSearch` tool (loads deferred tool definitions) is not in the server's
-  built-in tool table, so its result is currently labelled a web search.
+  built-in tool table; it is classified as a generic search tool, so its result is labelled a web
+  search.
 
 ## Live verification
 
@@ -267,5 +275,8 @@ instead — they cover the mapping for every event, the decision matrix, approva
 installer, and a subprocess hook against a real local HTTP server:
 
 ```bash
-cd sdk && ../backend/.venv/bin/python -m pytest -q tests/test_claude_code_*.py
+cd sdk && ../backend/.venv/bin/python -m pytest -q -p no:cacheprovider tests/test_claude_code_*.py
 ```
+
+`backend/tests/e2e/test_live_hooks.py` also runs the real hook as a subprocess against a real
+`contextos-server` process (part of `make test-backend`).

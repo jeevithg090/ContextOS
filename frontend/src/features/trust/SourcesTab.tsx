@@ -1,7 +1,7 @@
 /** Sources tab: every context source agents consumed, how it is classified and what it may do. */
 import { useEffect, useMemo } from "react";
 import { Database } from "lucide-react";
-import { Badge, SeverityBadge, TrustBadge } from "@/components/ui";
+import { Badge, SeverityBadge, SimulationBadge, TrustBadge } from "@/components/ui";
 import { DataTable, FilterBar, FilterSelect, Pagination, SearchInput, type DataTableColumn, type SortState } from "@/components/data";
 import { usePagination } from "@/hooks";
 import { TRUST_LEVELS, TRUST_META, type TrustLevel } from "@/lib/domain";
@@ -10,7 +10,7 @@ import { useTrustSources } from "./api";
 import { CapabilityChips } from "./components";
 import { CAPABILITY_META, SOURCE_TYPE_LABELS, displayIdentifier, sourceTypeLabel } from "./meta";
 import { SOURCE_TYPES, type Capability, type SourceFilters, type SourceSort, type TrustSource } from "./types";
-import { boolParam, type SetParams } from "./urlState";
+import { boolParam, includeSimulatedParam, type SetParams } from "./urlState";
 
 const SORT_FIELDS: Record<string, string> = {
   source: "identifier",
@@ -40,8 +40,11 @@ const COLUMNS: Array<DataTableColumn<TrustSource>> = [
     sortable: true,
     render: (s) => (
       <div className="min-w-0 max-w-[420px]">
-        <div className="truncate text-[13px] text-fg" title={s.identifier}>
-          {s.display_name || displayIdentifier(s.identifier)}
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-[13px] text-fg" title={s.identifier}>
+            {s.display_name || displayIdentifier(s.identifier)}
+          </span>
+          {s.is_simulation && <SimulationBadge />}
         </div>
         <div className="flex min-w-0 items-center gap-1.5 text-2xs text-fg-faint">
           <span className="shrink-0">{sourceTypeLabel(s.source_type)}</span>
@@ -80,8 +83,9 @@ export function SourcesTab({ params, set, onOpen }: { params: URLSearchParams; s
   const manual = params.get("smanual") ?? "";
   const findings = params.get("sfind") ?? "";
   const sort = (params.get("ssort") ?? "-last_seen") as SourceSort;
+  const includeSimulated = includeSimulatedParam(params);
   const page = usePagination(50);
-  const filterKey = [q, level, type, cap, manual, findings, sort].join("|");
+  const filterKey = [q, level, type, cap, manual, findings, sort, includeSimulated].join("|");
   const { reset } = page;
   useEffect(() => reset(), [filterKey, reset]);
 
@@ -93,11 +97,12 @@ export function SourcesTab({ params, set, onOpen }: { params: URLSearchParams; s
       capability: (cap || undefined) as Capability | undefined,
       manual: boolParam(manual),
       has_findings: boolParam(findings),
+      include_simulated: includeSimulated || undefined,
       sort,
       limit: page.limit,
       offset: page.offset,
     }),
-    [q, level, type, cap, manual, findings, sort, page.limit, page.offset],
+    [q, level, type, cap, manual, findings, includeSimulated, sort, page.limit, page.offset],
   );
   const sources = useTrustSources(filters);
   const filtered = !!(q || level || type || cap || manual || findings);

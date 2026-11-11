@@ -36,6 +36,7 @@ from app.models import (
 from app.models import TaskContextReference as Ref
 from app.services.incidents import add_activity
 from app.services.notify import notify
+from app.services.org_counters import lock_org
 from app.services.scoping import get_scoped
 from app.services.workspace_boards import get_active_board, remediation_board
 from app.services.workspace_tasks import create_task
@@ -194,6 +195,8 @@ def create_task_from_finding(
 ) -> FromFindingResult:
     actor = as_actor(principal)
     finding = get_scoped(db, SecurityFinding, finding_id, actor.org_id, label="Finding")
+    # Two requests for the same finding (a double click, two analysts) check one after the other.
+    lock_org(db, actor.org_id)
     existing = open_task_for_finding(db, actor.org_id, finding.id)
     if existing is not None:
         return FromFindingResult(task=existing, created=False)

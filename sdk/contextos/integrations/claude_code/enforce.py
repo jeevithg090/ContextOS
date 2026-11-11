@@ -10,8 +10,9 @@ ContextOS decision     Hook answer
 ALLOW, AUDIT           no decision (Claude Code's own permission rules still apply)
 DENY                   ``deny`` + a reason citing the policy (Claude reads it as the tool error)
 REQUIRE_APPROVAL       wait up to ``approval_wait_s`` for the Approval Centre: approved → no
-                       decision; rejected / expired / cancelled → ``deny``; still pending →
-                       ``ask`` (default) or ``deny`` (``on_approval_timeout``)
+                       decision; rejected / expired / cancelled → ``deny``; still pending → the
+                       request is withdrawn from the Approval Centre (nothing waits on it any more)
+                       and the hook answers ``ask`` (default) or ``deny`` (``on_approval_timeout``)
 RESTRICT               restrictions that only check (paths, size) pass → no decision; secrets that
                        must be masked → ``ask`` with ``updatedInput`` (the masked input; the person
                        sees it); anything that cannot be applied → ``deny`` (fail closed)
@@ -33,7 +34,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from contextos.client import ContextOSClient
+from contextos.client import ContextOSClient, withdraw_approval
 from contextos.errors import (
     APIError,
     AuthError,
@@ -46,7 +47,7 @@ from contextos.redact import mask_text
 from contextos.restrictions import apply_restrictions, scan_reports_secrets
 
 from . import mapping
-from .approval import await_approval, remember_host_prompt
+from .approval import ApprovalOutcome, await_approval, remember_host_prompt
 from .hook_config import POLL_S, HookConfig
 from .mapping import HookInput
 from .observe import remember_delegation
@@ -200,6 +201,16 @@ class PreToolUseEnforcer:
                            f"id, so it was blocked (fail closed). ({_ref(decision)}.)", outcome="approval_missing")
         wait = max(0.0, min(self.cfg.effective_approval_wait_s, self.deadline - self.clock() - 1.0))
         result = await_approval(self.client, decision.approval_id, wait, self.poll_s)
+        withdrawn = False
+        if result.status == ApprovalStatus.PENDING:
+            # The hook answers on its own now, so approving this request later would run nothing:
+            # withdraw it. A person may have decided it a moment ago (409 carries that status).
+            after = withdraw_approval(self.client, result.approval_id,
+                                      f"The Claude Code hook stopped waiting after {wait:.0f}s and answered "
+                                      f"'{self.cfg.on_approval_timeout}'.")
+            if after in (ApprovalStatus.APPROVED, ApprovalStatus.REJECTED, ApprovalStatus.EXPIRED):
+                result = ApprovalOutcome(result.approval_id, after)
+            withdrawn = after == ApprovalStatus.CANCELLED
         if result.approved:
             return Verdict(None, outcome="approved", notes={"approval_id": result.approval_id})
         if result.status in (ApprovalStatus.REJECTED, ApprovalStatus.EXPIRED, ApprovalStatus.CANCELLED):
@@ -213,18 +224,20 @@ class PreToolUseEnforcer:
                            f"{result.approval_id} could not be checked ({result.error}), so it was blocked (fail "
                            "closed).", outcome="approval_error")
         summary = f"{decision.reason} Policy: {_policies(decision)}."
+        stale = ("The request was withdrawn from the Approval Centre, so it can no longer be approved."
+                 if withdrawn else "Approving that request now will not run this call.")
         if self.cfg.on_approval_timeout == "deny":
             # Approvals belong to one call: approving this request later does not run anything, and a
             # retry is a new call with a new approval request. Say so, so nobody waits on a dead request.
-            return Verdict("deny", reason=f"ContextOS approval {result.approval_id} for this {tool} call is still "
-                           f"pending after {wait:.0f}s, so it was blocked. {summary} Approving that request now "
-                           "will not run this call. If the user still wants it, they can ask you to retry and "
-                           f"approve the new request in the ContextOS Approval Centre within {wait:.0f}s.",
-                           system_message=f"ContextOS approval {result.approval_id} pending: {tool} blocked",
-                           outcome="approval_timeout_deny")
-        return Verdict("ask", reason=f"ContextOS approval {result.approval_id} pending — approve in the Approval Centre "
-                       f"or here. {summary}", outcome="approval_pending",
-                       notes={"approval_id": result.approval_id})
+            return Verdict("deny", reason=f"ContextOS approval {result.approval_id} for this {tool} call was still "
+                           f"pending after {wait:.0f}s, so it was blocked. {summary} {stale} If the user still "
+                           "wants it, they can ask you to retry and approve the new request in the ContextOS "
+                           f"Approval Centre within {wait:.0f}s.",
+                           system_message=f"ContextOS approval {result.approval_id} not decided in time: {tool} blocked",
+                           outcome="approval_timeout_deny", notes={"approval_withdrawn": withdrawn})
+        return Verdict("ask", reason=f"ContextOS approval {result.approval_id} was not decided within {wait:.0f}s — "
+                       f"decide at this prompt. {stale} {summary}", outcome="approval_pending",
+                       notes={"approval_id": result.approval_id, "approval_withdrawn": withdrawn})
 
     def _restrict(self, h: HookInput, decision: DecisionResponse) -> Verdict:
         tool = h.tool_name

@@ -162,6 +162,8 @@ export interface TrustSource {
   max_finding_severity: string | null;
   first_seen_at: string;
   last_seen_at: string;
+  /** Only Simulation Lab traffic has observed this source. */
+  is_simulation?: boolean;
 }
 
 export interface HistoryEntry {
@@ -255,6 +257,8 @@ export interface SourceFilters {
   manual?: boolean;
   has_findings?: boolean;
   capability?: Capability;
+  /** Also list sources only Simulation Lab traffic has observed. */
+  include_simulated?: boolean;
   sort?: SourceSort;
   limit: number;
   offset: number;
@@ -284,6 +288,8 @@ export interface TrustDestination {
   first_seen_at: string;
   last_seen_at: string;
   verification: VerificationSummary;
+  /** Every recorded call to this destination was simulated. */
+  is_simulation?: boolean;
 }
 
 export interface DestinationInvocation {
@@ -343,6 +349,8 @@ export interface DestinationFilters {
   kind?: string;
   q?: string;
   has_blocked?: boolean;
+  /** Also list destinations only simulated calls were sent to. */
+  include_simulated?: boolean;
   sort?: DestinationSort;
   limit: number;
   offset: number;

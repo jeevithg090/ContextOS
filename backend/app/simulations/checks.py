@@ -73,6 +73,7 @@ def finding(why: str, *, categories: tuple[str, ...] = (), rule_ids: tuple[str, 
             min_severity: str = "low", eid: str | None = None) -> Expectation:
     """At least one finding in the run matches a category or rule id at ``min_severity`` or above."""
     target = " / ".join([*categories, *rule_ids])
+    article = "an" if target[:1].lower() in "aeiou" and target else "a"
 
     def check(rv: RunView) -> CheckResult:
         rows = [f for f in _findings(rv)
@@ -80,11 +81,11 @@ def finding(why: str, *, categories: tuple[str, ...] = (), rule_ids: tuple[str, 
                 and _SEVERITY_RANK.get(f.severity, 0) >= _SEVERITY_RANK[min_severity]]
         if rows:
             best = max(rows, key=lambda f: _SEVERITY_RANK.get(f.severity, 0))
-            return CheckResult(f"a {target} finding (severity ≥ {min_severity})",
+            return CheckResult(f"{article} {target} finding (severity ≥ {min_severity})",
                                f"{len(rows)} finding(s), highest {best.severity}: {best.title}", True,
                                _ev(rows, "finding"))
         seen = _findings(rv)
-        return CheckResult(f"a {target} finding (severity ≥ {min_severity})",
+        return CheckResult(f"{article} {target} finding (severity ≥ {min_severity})",
                            f"none; findings raised: {_join(f.category for f in seen)}", False, _ev(seen, "finding"))
 
     return Expectation(id=eid or f"finding:{target}", description=why, check=check)
