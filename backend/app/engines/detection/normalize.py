@@ -91,16 +91,25 @@ _LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t
 # (markdown images, emails, shell) to gate on, though they are still folded inside a leet word.
 _LEET_CHARS = frozenset("0134578")
 _LEET_WORD_CHARS = frozenset("0134578@$!")
+# Letters of any script ([^\W\d_]), so accented Latin ("p r é c é d e n t e s") is handled too.
 # "i g n o r e" / "i.g.n.o.r.e" / "i-g-n-o-r-e": runs of >= 4 single letters split by one separator.
-_SPACED = re.compile(r"(?<![\w])(?:[A-Za-z][ ._\-*]){3,}[A-Za-z](?![\w])")
-# A word mixing letters and leet digits/symbols, e.g. "1gn0r3". Bounded length to avoid backtracking.
-_LEET_WORD = re.compile(r"\b[A-Za-z][A-Za-z0-9@$!]{2,30}\b")
+_SPACED = re.compile(r"(?<![\w])(?:[^\W\d_][ ._\-*]){3,}[^\W\d_](?![\w])")
+# Once a text is known to spell words out letter by letter, its short words ("t o", "a l l") are
+# collapsed too. Space-separated only, so abbreviations such as "e.g." are never touched.
+_SPACED_SHORT = re.compile(r"(?<![\w])[^\W\d_](?: [^\W\d_]){1,2}(?![\w])")
+_MULTI_SPACE = re.compile(r"[ \t]{2,}")
+# A token mixing letters and leet digits/symbols, e.g. "1gn0r3" or "p@ssw0rd" (it may start with a
+# digit). Bounded length and anchored at token starts to keep the scan linear.
+_LEET_WORD = re.compile(r"(?<![\w@$!])(?=[\w@$!]{0,31}[^\W\d_])[\w@$!]{3,32}(?![\w@$!])")
 
 
 def collapse_leetspeak(text: str) -> str:
     collapsed = text
     if any(sep in text for sep in " ._-*") and _SPACED.search(text):
         collapsed = _SPACED.sub(lambda m: re.sub(r"[ ._\-*]", "", m.group(0)), collapsed)
+        collapsed = _SPACED_SHORT.sub(lambda m: m.group(0).replace(" ", ""), collapsed)
+        # Spelt-out text separates its words with wider gaps; squeeze them back to single spaces.
+        collapsed = _MULTI_SPACE.sub(" ", collapsed)
     if any(c in collapsed for c in _LEET_CHARS):
         collapsed = _LEET_WORD.sub(_leet_word, collapsed)
     return collapsed
@@ -223,16 +232,28 @@ def decode_base64_segments(text: str) -> list[str]:
     return out
 
 
+# A single JSON-style \\uXXXX escape (serialisers with ensure_ascii emit one per non-ASCII char).
+_U_ESC = re.compile(r"\\u[0-9A-Fa-f]{4}")
+
+
+def _pair_surrogates(text: str) -> str:
+    """Re-pair UTF-16 surrogates left by \\uXXXX decoding ("\\ud83d\\ude00", Unicode tag characters)
+    into real code points; a lone surrogate becomes U+FFFD."""
+    if not any(0xD800 <= ord(c) <= 0xDFFF for c in text):
+        return text
+    return text.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
+
+
 def _decode_escapes(seg: str) -> str:
     def rep(m: re.Match[str]) -> str:
         tok = m.group(0)
         return chr(int(tok[2:], 16))
 
-    return re.sub(r"\\x[0-9A-Fa-f]{2}|\\u[0-9A-Fa-f]{4}", rep, seg)
+    return _pair_surrogates(re.sub(r"\\x[0-9A-Fa-f]{2}|\\u[0-9A-Fa-f]{4}", rep, seg))
 
 
 def decode_url_and_escapes(text: str) -> str | None:
-    """Decode %-encoded runs and \\x / \\u escapes in place; None when nothing was decoded."""
+    """Decode %-encoded runs, \\x runs and \\u escapes in place; None when nothing was decoded."""
     if "%" not in text and "\\" not in text:
         return None
     changed = False
@@ -248,7 +269,25 @@ def decode_url_and_escapes(text: str) -> str | None:
         return _decode_escapes(m.group(0))
 
     decoded = _ESC.sub(esc, _PCT.sub(pct, text))
+    if "\\u" in decoded:
+        singles = _U_ESC.sub(lambda m: chr(int(m.group(0)[2:], 16)), decoded)
+        if singles != decoded:
+            changed = True
+            decoded = _pair_surrogates(singles)
     return decoded if changed else None
+
+
+# A hard line break inside running text (PDF extraction, 72-column e-mail): the next line starts
+# with a letter or digit, so markdown structure (quotes, fences, lists, headings) is never joined.
+_HARD_WRAP = re.compile(r"(?<=\S)[ \t]*\n[ \t]*(?=[^\W_])")
+
+
+def reflow(text: str) -> str | None:
+    """Join hard-wrapped lines so a sentence split across lines is matched as one; None if unchanged."""
+    if "\n" not in text:
+        return None
+    joined = _HARD_WRAP.sub(" ", text)
+    return joined if joined != text else None
 
 
 # --- view builder -----------------------------------------------------------------------------
@@ -274,7 +313,11 @@ def build_views(text: str) -> list[View]:
         add("homoglyph", folded)
         base = folded
 
+    reflowed = reflow(base)
     add("leetspeak", collapse_leetspeak(base))
+    add("reflowed", reflowed)
+    if reflowed:  # layout and spelling tricks compose: a spelt-out sentence can also be hard-wrapped
+        add("leetspeak", collapse_leetspeak(reflowed))
 
     comments, hidden = extract_hidden_markup(text)
     for seg in comments:
@@ -284,5 +327,11 @@ def build_views(text: str) -> list[View]:
 
     for seg in decode_base64_segments(base):
         add("base64", seg)
-    add("url_encoded", decode_url_and_escapes(base))
+    decoded = decode_url_and_escapes(base)
+    add("url_encoded", decoded)
+    if decoded and not decoded.isascii():
+        # Escaped text can itself carry invisible characters, tag payloads or look-alikes.
+        visible, tag_payload = _strip_invisible(unicodedata.normalize("NFKC", decoded))
+        add("url_encoded", fold_homoglyphs(visible))
+        add("url_encoded", tag_payload)
     return views

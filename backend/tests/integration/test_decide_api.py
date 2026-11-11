@@ -126,3 +126,50 @@ def test_decision_latency_p95_under_250ms(client, seeded_org, db):
         return
     assert wall_p95 < 250, f"p95 decision round trip {wall_p95:.1f} ms"
     assert server_p95 < 250, f"p95 server-side decision latency {server_p95:.1f} ms"
+
+
+# -- organisation settings ---------------------------------------------------------------------------
+
+
+def _set_org(db, org_id: str, **settings) -> None:
+    from app.models import Organization
+
+    row = db.get(Organization, org_id)
+    row.settings = {**(row.settings or {}), **settings}
+    db.commit()
+
+
+def test_default_decision_setting_applies_when_no_policy_matches(client, seeded_org, db):
+    benign = {"file_path": "/srv/app/main.py"}
+    assert decide(client, seeded_org.api_headers, tool_requested("Read", benign))["decision"] == "ALLOW"
+    _set_org(db, seeded_org.org_id, default_decision="AUDIT")
+    audited = decide(client, seeded_org.api_headers, tool_requested("Read", benign))
+    assert audited["decision"] == "AUDIT" and "default AUDIT applied" in audited["reason"]
+    assert audited["matched_policies"] == []
+    # A matching policy still decides; the default only fills the gap.
+    assert decide(client, seeded_org.api_headers, tool_requested("Bash", {"command": "rm -rf ~/"}))["decision"] == "DENY"
+    db.rollback()
+    stored = db.scalar(select(PolicyDecision).where(PolicyDecision.id == audited["policy_decision_id"]))
+    assert stored.decision == "AUDIT" and stored.matched_policies == []
+
+
+def test_approval_timeout_setting_sets_the_approval_deadline(client, seeded_org, db):
+    _set_org(db, seeded_org.org_id, approval_timeout_s=120)
+    response = decide(client, seeded_org.api_headers, tool_requested("WebFetch", WEBHOOK))
+    assert response["decision"] == "REQUIRE_APPROVAL"
+    db.rollback()
+    approval = db.get(Approval, response["approval_id"])
+    assert (approval.expires_at - approval.requested_at).total_seconds() == 120
+    poll = client.get(f"/api/v1/decide/approvals/{approval.id}", headers=seeded_org.api_headers).json()
+    assert poll["status"] == "pending" and poll["decision_note"] is None and poll["expires_at"]
+
+
+def test_observed_requests_never_open_approvals_whatever_the_timeout(client, seeded_org, db):
+    from tests.integration.ingestion_support import post_events
+
+    _set_org(db, seeded_org.org_id, approval_timeout_s=120)
+    result = post_events(client, seeded_org.api_headers, tool_requested("WebFetch", WEBHOOK))[0]
+    assert result["refs"]["decision"] == "REQUIRE_APPROVAL" and result["refs"]["enforcement"] == "observed"
+    assert "approval_id" not in result["refs"]
+    db.rollback()
+    assert db.scalar(select(func.count()).select_from(Approval)) == 0

@@ -1,6 +1,15 @@
 """Suspicious tool-request rules (ids prefixed TOOL-). Operate on normalised argument text plus the
 structured resources a tool call touches. Works for Claude Code argument shapes (Bash {command},
 Read {file_path}, WebFetch {url, prompt}, Write {file_path, content}) and generic dicts.
+
+Category semantics (policies key on them, so each family keeps its own):
+
+* ``TOOL-DESTRUCTIVE-*`` — irreversible damage (recursive deletes of root/home, disk writes, force
+  pushes to main, dropped tables). Category ``suspicious_tool_use``; the rule-id prefix is the
+  destructive signal the built-in "Deny destructive shell commands" policy matches.
+* ``permission_escalation`` — the agent widening its own capabilities or control: agent/editor
+  configuration writes, persistence, reverse shells. Matched by the built-in "Deny agent config
+  tampering and privilege escalation" policy.
 """
 
 from __future__ import annotations
@@ -51,7 +60,11 @@ TOOL_RULES: list[ToolRule] = [
         0.8,
         "The command dumps environment variables, which routinely hold API keys, tokens and "
         "passwords. Printing them is a common first step in credential theft.",
-        _rx(r"(?:^|[\n;&|]\s*)(?:printenv|env)(?![\w.=/])|\bcat\b[^|\n]{0,40}/proc/\d+/environ|\becho\b[^|\n]{0,20}\$(?:[A-Z_]{2,}|\{[A-Z_]{2,}\})|\bprocess\.env\b(?!\.\w)"),
+        # ``env`` alone (or piped / redirected) dumps the environment; ``env VAR=1 cmd`` only sets it.
+        # process.env counts when the whole object reaches an output or transmit call.
+        _rx(r"(?:^|[\n;&|]\s*)(?:printenv(?![\w.=/])|env(?=[ \t]*(?:$|[|>;&\n])))|\bcat\b[^|\n]{0,40}/proc/\d+/environ"
+            r"|\becho\b[^|\n]{0,20}\$(?:[A-Z_]{2,}|\{[A-Z_]{2,}\})"
+            r"|\b(?:log|print|dump|send|post|stringify|write|upload|show|display)\b[^.\n;]{0,30}?\bprocess\.env\b(?!\s*(?:\.\s*\w|\[))"),
     ),
     ToolRule(
         "TOOL-EXFIL-UPLOAD",
@@ -85,7 +98,7 @@ TOOL_RULES: list[ToolRule] = [
     ),
     ToolRule(
         "TOOL-DESTRUCTIVE-RM",
-        FindingCategory.PERMISSION_ESCALATION,
+        FindingCategory.SUSPICIOUS_TOOL_USE,
         "Destructive recursive delete",
         Severity.CRITICAL,
         0.88,
@@ -95,7 +108,7 @@ TOOL_RULES: list[ToolRule] = [
     ),
     ToolRule(
         "TOOL-DESTRUCTIVE-DISK",
-        FindingCategory.PERMISSION_ESCALATION,
+        FindingCategory.SUSPICIOUS_TOOL_USE,
         "Destructive disk / device write",
         Severity.CRITICAL,
         0.88,
@@ -105,7 +118,7 @@ TOOL_RULES: list[ToolRule] = [
     ),
     ToolRule(
         "TOOL-DESTRUCTIVE-PERM",
-        FindingCategory.PERMISSION_ESCALATION,
+        FindingCategory.SUSPICIOUS_TOOL_USE,
         "Dangerous permission change",
         Severity.HIGH,
         0.82,
@@ -115,7 +128,7 @@ TOOL_RULES: list[ToolRule] = [
     ),
     ToolRule(
         "TOOL-DESTRUCTIVE-GIT",
-        FindingCategory.PERMISSION_ESCALATION,
+        FindingCategory.SUSPICIOUS_TOOL_USE,
         "Force-push to protected branch",
         Severity.HIGH,
         0.78,
@@ -125,7 +138,7 @@ TOOL_RULES: list[ToolRule] = [
     ),
     ToolRule(
         "TOOL-DESTRUCTIVE-DB",
-        FindingCategory.PERMISSION_ESCALATION,
+        FindingCategory.SUSPICIOUS_TOOL_USE,
         "Destructive database statement",
         Severity.CRITICAL,
         0.85,

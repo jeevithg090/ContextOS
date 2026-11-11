@@ -11,15 +11,20 @@ export interface CreateTaskDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Pre-selected board (e.g. the list's board filter); defaults to the organisation's default board. */
   boardId?: string;
+  /**
+   * Called with the new task's id after it is created (e.g. a board opens it in its drawer). When
+   * omitted, the dialog navigates to the task page.
+   */
+  onCreated?: (taskId: string) => void;
 }
 
-/** Create a task with the essentials, then continue on the task page to add detail. */
+/** Create a task with the essentials, then continue on the task page (or the caller's view) to add detail. */
 export function CreateTaskDialog(props: CreateTaskDialogProps) {
   // Mounted only while open, so every opening starts from a clean form and mutation state.
   return props.open ? <CreateTaskDialogBody {...props} /> : null;
 }
 
-function CreateTaskDialogBody({ open, onOpenChange, boardId }: CreateTaskDialogProps) {
+function CreateTaskDialogBody({ open, onOpenChange, boardId, onCreated }: CreateTaskDialogProps) {
   const ids = { board: useId(), column: useId(), title: useId(), type: useId(), priority: useId() };
   const navigate = useNavigate();
   const toast = useToast();
@@ -62,7 +67,8 @@ function CreateTaskDialogBody({ open, onOpenChange, boardId }: CreateTaskDialogP
         onSuccess: (task) => {
           toast.success(`${task.key} created`, `${task.board_name} · ${task.column_name}`);
           onOpenChange(false);
-          navigate(`/work/tasks/${encodeURIComponent(task.id)}`);
+          if (onCreated) onCreated(task.id);
+          else navigate(`/work/tasks/${encodeURIComponent(task.id)}`);
         },
       },
     );

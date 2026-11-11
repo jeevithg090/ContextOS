@@ -17,7 +17,8 @@ class DetectionHit:
     explanation: str  # plain-language "why this matters"
     excerpt: str | None = None  # REDACTED, <= 240 chars, around the match
     span: tuple[int, int] | None = None  # offsets in the ORIGINAL text when known
-    technique: str = "plain"  # plain|zero_width|homoglyph|base64|url_encoded|html_comment|hidden_text|multilingual:<lang>|leetspeak
+    # plain|zero_width|homoglyph|base64|url_encoded|html_comment|hidden_text|multilingual:<lang>|leetspeak|reflowed
+    technique: str = "plain"
 
 
 @dataclass

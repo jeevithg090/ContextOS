@@ -167,7 +167,11 @@ def test_counterfactual_with_current_policies_reproduces_recorded_decisions(clie
 def test_disabling_a_policy_changes_only_the_decisions_it_decided(client, seeded_org):
     sid = _exfil(client, seeded_org)
     block = _policy_id(client, seeded_org, "Block credential exfiltration")
-    cf = _cf(client, seeded_org, sid, disable_policy_ids=[block])
+    # The session read an injected README, so a second layer also denies credentials in the arguments.
+    layered = _policy_id(client, seeded_org, "Deny credentials in tool arguments after prompt injection")
+    only_block = _cf(client, seeded_org, sid, disable_policy_ids=[block])
+    assert only_block["summary"]["changed"] == 0 and only_block["steps"][2]["hypothetical_decision"] == "DENY"
+    cf = _cf(client, seeded_org, sid, disable_policy_ids=[block, layered])
     assert cf["summary"]["changed"] == 1 and cf["summary"]["transitions"] == {"DENY→REQUIRE_APPROVAL": 1}
     reads, exfil = cf["steps"][:2], cf["steps"][2]
     assert not any(s["changed"] for s in reads)
@@ -184,7 +188,9 @@ def test_outcome_and_mode_overrides(client, seeded_org):
     sid = _exfil(client, seeded_org)
     block = _policy_id(client, seeded_org, "Block credential exfiltration")
     audit = _policy_id(client, seeded_org, "Audit sensitive file reads")
-    cf = _cf(client, seeded_org, sid, overrides={block: {"outcome": "AUDIT"}, audit: {"mode": "monitor"}})
+    layered = _policy_id(client, seeded_org, "Deny credentials in tool arguments after prompt injection")
+    cf = _cf(client, seeded_org, sid, overrides={block: {"outcome": "AUDIT"}, audit: {"mode": "monitor"}},
+             disable_policy_ids=[layered])
     read_env, _, exfil = cf["steps"]
     assert read_env["hypothetical_decision"] == "ALLOW" and read_env["changed"]
     assert [c["change"] for c in read_env["policy_changes"]] == ["monitor"]

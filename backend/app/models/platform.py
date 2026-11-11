@@ -19,6 +19,7 @@ class IngestedEvent(OrgScopedMixin, Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "client_event_id"),
         Index("ix_events_org_session_seq", "organization_id", "session_id", "sequence"),
+        Index("ix_events_org_received", "organization_id", "received_at"),  # retention, time-range scans
     )
 
     id: Mapped[str] = id_column()

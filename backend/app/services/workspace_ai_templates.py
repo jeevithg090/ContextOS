@@ -273,5 +273,5 @@ def catalogue() -> ModesOut:
     return ModesOut(
         modes=describe_modes(), presets=describe_presets(), profiles=describe_profiles(), options=_option_specs(),
         sections=[{"key": k, "title": SECTION_TITLES[k]} for k in SECTION_KEYS], breakdown_plans=list(PLAN_KEYS),
-        repository_configured=bool((get_settings().workspace_root or "").strip()),
+        repository_configured=bool((get_settings().workspace_repo_root or "").strip()),
     )

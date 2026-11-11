@@ -22,3 +22,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["contextos"]
+
+# The SDK suite is run from sdk/ as its own pytest process (`make test-sdk`). sdk/tests and
+# backend/tests are both Python packages named `tests`; one pytest process cannot import both
+# (the second resolves to the first and fails with "No module named 'tests.test_...'"), so never
+# collect them together. This table pins sdk/ as the rootdir for SDK runs.
+[tool.pytest.ini_options]
+testpaths = ["tests"]

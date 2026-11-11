@@ -71,9 +71,13 @@ def _actor(db: Session, principal: Principal) -> Actor:
 
 
 @router.get("/summary", response_model=TrustSummaryOut)
-def get_summary(principal: Principal = READ, db: Session = Depends(get_db)) -> TrustSummaryOut:
+def get_summary(
+    principal: Principal = READ, db: Session = Depends(get_db),
+    include_simulated: bool = Query(False, description="Count sources and destinations only simulations observed"),
+) -> TrustSummaryOut:
     """Counts per trust level, sources with findings and recent downgrades (from the audit trail)."""
-    return TrustSummaryOut.model_validate(trust_service_summary.summary(db, principal.org_id))
+    return TrustSummaryOut.model_validate(
+        trust_service_summary.summary(db, principal.org_id, include_simulated=include_simulated))
 
 
 # ----------------------------------------------------------------------------- rules
@@ -148,13 +152,15 @@ def list_sources(
     manual: bool | None = None,
     has_findings: bool | None = None,
     capability: CapabilityName | None = None,
+    include_simulated: bool = Query(False, description="Include sources only Simulation Lab traffic has observed"),
     sort: SourceSort = "-last_seen",
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> Page[TrustSourceOut]:
     rows, total = trust_service_sources.list_sources(
         db, principal.org_id, trust_levels=list(trust_level or []), source_type=source_type, q=q, manual=manual,
-        has_findings=has_findings, capability=capability, sort=sort, limit=limit, offset=offset,
+        has_findings=has_findings, capability=capability, include_simulated=include_simulated, sort=sort,
+        limit=limit, offset=offset,
     )
     items = trust_service_sources.sources_out(db, principal.org_id, rows)
     return Page(items=[TrustSourceOut.model_validate(i) for i in items], total=total, limit=limit, offset=offset)
@@ -210,13 +216,14 @@ def list_destinations(
     kind: DestinationKindName | None = None,
     q: str | None = Query(None, max_length=200),
     has_blocked: bool | None = None,
+    include_simulated: bool = Query(False, description="Include destinations only simulated calls were sent to"),
     sort: DestinationSort = "-last_seen",
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> Page[TrustDestinationOut]:
     rows, total = trust_service_destinations.list_destinations(
         db, principal.org_id, classifications=list(classification or []), kind=kind, q=q, has_blocked=has_blocked,
-        sort=sort, limit=limit, offset=offset,
+        include_simulated=include_simulated, sort=sort, limit=limit, offset=offset,
     )
     items = trust_service_destinations.destinations_out(db, principal.org_id, rows)
     return Page(items=[TrustDestinationOut.model_validate(i) for i in items], total=total, limit=limit, offset=offset)

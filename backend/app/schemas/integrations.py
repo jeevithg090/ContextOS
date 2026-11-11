@@ -77,7 +77,9 @@ class ConnectedIntegrationOut(BaseModel):
 class IntegrationsOut(BaseModel):
     connected: list[ConnectedIntegrationOut]
     catalog: list[CatalogEntryOut]
+    # Connected = an event within this window; the same rule the Overview uses.
     stale_after_minutes: int
+    stale_after_hours: int
     generated_at: datetime
 
 
@@ -118,3 +120,5 @@ class SetupGuideOut(BaseModel):
     verification: str
     notes: list[str]
     docs_path: str | None = None
+    # The organisation's fail mode written into the setup commands (None when unknown).
+    fail_mode: str | None = None

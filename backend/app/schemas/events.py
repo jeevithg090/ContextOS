@@ -16,6 +16,7 @@ from app.events.envelope import DecisionResponse, EventBatch, EventEnvelope, Eve
 from app.schemas.common import ORM
 
 __all__ = [
+    "ApprovalCancelIn",
     "ApprovalPollOut",
     "DecisionResponse",
     "EventBatch",
@@ -101,7 +102,11 @@ class ScanDetectionOut(BaseModel):
 
 
 class ScanSecretOut(BaseModel):
+    """Where a secret is in the submitted content. The value (and its fingerprint) is never returned."""
+
     type: str
+    start: int = Field(description="Offset of the first character in the submitted content")
+    end: int = Field(description="Offset one past the last character")
     confidence: float
 
 
@@ -109,6 +114,7 @@ class ScanOut(BaseModel):
     """Detection over submitted content. Nothing is persisted."""
 
     detection: ScanDetectionOut
+    hits: list[ScanHitOut] = Field(default_factory=list, description="Same as detection.hits")
     secrets: list[ScanSecretOut] = Field(default_factory=list)
     sensitivity: str
     content_length: int
@@ -124,3 +130,11 @@ class ApprovalPollOut(BaseModel):
     decided_at: datetime | None = None
     decision_note: str | None = None
     expires_at: datetime | None = None
+
+
+class ApprovalCancelIn(BaseModel):
+    """An integration that stopped waiting for a reviewer (timeout, user abort) withdraws the request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=500, description="Why the integration stopped waiting")

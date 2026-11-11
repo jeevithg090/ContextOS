@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { TestRouter } from "@/test/router";
 import { EntityLink } from "../EntityLink";
 import { entityHref } from "../entityRoutes";
 
-const renderInRouter = (ui: React.ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>);
+const renderInRouter = (ui: React.ReactElement) => render(<TestRouter>{ui}</TestRouter>);
 
 describe("entityHref route map", () => {
   it.each([

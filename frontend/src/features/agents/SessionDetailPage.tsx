@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Activity, ArrowLeft, GitBranch, History, Network } from "lucide-react";
 import { Badge, DecisionBadge, EmptyState, ErrorState, LoadingRows, Mono, PageHeader, SeverityBadge, SimulationBadge, StatusBadge } from "@/components/ui";
-import { EntityLink, InlineStat, RiskMeter, Section } from "@/components/data";
+import { EntityLink, InlineStat, RiskMeter, Section, provenanceHref } from "@/components/data";
 import { ApiError } from "@/lib/api";
 import { FINDING_CATEGORY_LABELS } from "@/lib/domain";
 import { formatDateTime, timeAgo } from "@/lib/format";
@@ -72,7 +72,7 @@ export function SessionDetailPage() {
             <Link to={`/replay/${encodeURIComponent(s.id)}`} className={linkButton}>
               <History className="h-3.5 w-3.5" aria-hidden /> Replay
             </Link>
-            <Link to={`/provenance?session_id=${encodeURIComponent(s.id)}`} className={linkButton}>
+            <Link to={provenanceHref("session", s.id)} className={linkButton}>
               <Network className="h-3.5 w-3.5" aria-hidden /> Provenance graph
             </Link>
           </>

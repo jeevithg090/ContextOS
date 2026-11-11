@@ -154,6 +154,38 @@ def test_posture_is_assembled_from_persisted_state(client, seeded_org):
     assert basis["total_sessions"] == 1 and basis["sessions_with_trifecta"] == 1
     assert basis["supports_enforcement"] is True and basis["decisions_by_enforcement"] == {"enforced": 3}
     assert basis["untrusted_source_count"] >= 1 and basis["enabled_policy_count"] > 0
+    assert basis["integration_health"] == "connected"
+
+
+def test_posture_counts_a_stale_integration_as_unhealthy(client, seeded_org, db):
+    from datetime import timedelta
+
+    from app.core.timeutil import utcnow
+    from app.models import Integration
+
+    agent = _register(client, seeded_org)
+    exfil_session(client, seeded_org.api_headers)
+    db.rollback()
+    row = db.scalar(select(Integration).where(Integration.organization_id == seeded_org.org_id,
+                                              Integration.kind == "claude_code"))
+    assert row.status == "connected"  # the stored status alone would still read as healthy
+    row.last_event_at = utcnow() - timedelta(hours=25)
+    db.commit()
+    posture = client.get(f"{API}/{agent['id']}/posture", headers=seeded_org.user_headers).json()
+    coverage = {d["key"]: d for d in posture["dimensions"]}["enforcement_coverage"]
+    assert posture["basis"]["integration_health"] == "stale"
+    assert coverage["score"] == 5 and "'stale'" in coverage["explanation"] and coverage["recommendation"]
+
+
+def test_posture_builder_passes_policies_in_the_engine_shape():
+    from app.engines.policy import PolicySpec
+    from app.services.agents_posture import posture_policies
+
+    spec = PolicySpec(id="pol_1", name="Deny secrets out", outcome="DENY", mode="enforce",
+                      conditions={"field": "secrets_in_arguments", "op": "not_empty"}, version=1, enabled=True,
+                      priority=100, severity="high", restrictions={}, description=None)
+    assert posture_policies([spec]) == [{"id": "pol_1", "name": "Deny secrets out", "outcome": "DENY",
+                                         "mode": "enforce", "conditions": spec.conditions, "enabled": True}]
 
 
 def test_agent_detail_relationships_and_graph(client, seeded_org):

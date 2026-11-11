@@ -14,7 +14,7 @@ from sqlalchemy import select
 from app.core.timeutil import utcnow
 from app.domain.enums import Role
 from app.events.envelope import EventEnvelope
-from app.models import Integration
+from app.models import Integration, Organization
 from app.services.ingestion import IngestContext, ingest_event
 from app.services.integrations_service import health_of, server_url_for
 from tests.integration.agents_support import exfil_session
@@ -45,7 +45,7 @@ def _catalog(body, kind):
 def test_empty_org_lists_catalog_and_nothing_connected(client, org):
     body = _get(client, org.user_headers)
     assert body["connected"] == []
-    assert body["stale_after_minutes"] == 15
+    assert body["stale_after_minutes"] == 24 * 60 and body["stale_after_hours"] == 24
     kinds = {c["kind"] for c in body["catalog"]}
     assert kinds == SUPPORTED | PLANNED
     for entry in body["catalog"]:
@@ -136,15 +136,30 @@ def test_stale_and_never_seen_health(client, org, db):
     post_events(client, org.api_headers, event("session.started", integration="python_sdk"))
     row = db.scalar(select(Integration).where(Integration.organization_id == org.org_id,
                                               Integration.kind == "python_sdk"))
-    row.last_event_at = utcnow() - timedelta(minutes=16)
+    row.last_event_at = utcnow() - timedelta(hours=25)
     db.commit()
     entry = _connected(_get(client, org.user_headers), "python_sdk")
     assert entry["health"] == "stale" and "contextos doctor" in entry["health_detail"]
+    assert "24 hours" in entry["health_detail"]
 
     now = utcnow()
     assert health_of(None, now)[0] == "never_seen"
-    assert health_of(now - timedelta(minutes=14, seconds=59), now)[0] == "connected"
-    assert health_of(now - timedelta(minutes=15, seconds=1), now)[0] == "stale"
+    assert health_of(now - timedelta(minutes=16), now)[0] == "connected"  # idle for minutes is not stale
+    assert health_of(now - timedelta(hours=23, minutes=59), now)[0] == "connected"
+    assert health_of(now - timedelta(hours=24, seconds=1), now)[0] == "stale"
+
+
+def test_integrations_page_and_overview_share_one_staleness_rule(client, org, db):
+    post_events(client, org.api_headers, event("session.started", integration="python_sdk"))
+    row = db.scalar(select(Integration).where(Integration.organization_id == org.org_id,
+                                              Integration.kind == "python_sdk"))
+    for age, expected in ((timedelta(hours=2), "connected"), (timedelta(hours=30), "stale")):
+        row.last_event_at = utcnow() - age
+        db.commit()
+        page = _connected(_get(client, org.user_headers), "python_sdk")["health"]
+        overview = client.get("/api/v1/overview", headers=org.user_headers).json()["integrations"]
+        assert page == expected
+        assert next(i for i in overview if i["kind"] == "python_sdk")["status"] == expected
 
 
 def test_connected_sorted_by_health_then_recency(client, org, db):
@@ -261,3 +276,28 @@ def test_unsafe_host_header_falls_back_to_placeholder_url(client, org):
     assert server_url_for("https://contextos.internal:8443/")[0] == "https://contextos.internal:8443"
     assert server_url_for("http://[::1]:8000/")[0] == "http://[::1]:8000"
     assert server_url_for("javascript:alert(1)")[0] == "http://localhost:8000"
+
+
+def test_setup_guides_use_the_organisations_fail_mode(client, org, db):
+    org_row = db.get(Organization, org.org_id)
+    org_row.settings = {**(org_row.settings or {}), "fail_mode": "closed"}
+    db.commit()
+    sdk = _setup(client, org, "python_sdk")
+    assert sdk["fail_mode"] == "closed"
+    assert any("contextos init --url http://testserver --api-key ctxk_your_key --fail-mode closed" in c["code"]
+               for c in _commands(sdk))
+    hook = _setup(client, org, "claude_code")
+    codes = [c["code"] for c in _commands(hook)]
+    assert "export CONTEXTOS_HOOK_FAIL_MODE=closed" in codes
+    assert json.loads(next(c["code"] for c in _commands(hook) if c["language"] == "json"))["hooks"]  # hooks first
+
+    org_row.settings = {**org_row.settings, "fail_mode": "ask"}
+    db.commit()
+    gateway = _setup(client, org, "mcp_gateway")
+    init = next(s for s in gateway["steps"] if s["title"].startswith("Connect the project"))
+    assert "--fail-mode ask" in init["commands"][0]["code"] and "treats 'ask' as 'closed'" in init["description"]
+
+
+def test_setup_guide_defaults_to_the_server_default_fail_mode(client, org):
+    guide = _setup(client, org, "python_sdk")
+    assert guide["fail_mode"] == "ask"  # default_org_settings()

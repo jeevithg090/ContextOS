@@ -397,18 +397,20 @@ def test_real_decide_pipeline_feeds_stats_matches_and_counterfactual_tests(clien
     assert hit["session_id"] == recorded.session_id and hit["agent_name"] == "coder" and hit["tool_name"] == "Bash"
     assert hit["match_mode"] == "enforce" and hit["matched_version"] == 1 and hit["enforcement"] == "enforced"
 
-    # Counterfactual: the same recorded input with both DENY policies it matched disabled
-    # (destructive-command rules are also classified as permission escalation).
+    # Counterfactual: the same recorded input with the DENY policy it matched disabled. Destructive
+    # commands are not also classified as permission escalation, so disabling that one policy is
+    # enough to change the outcome (one switch per threat in Policy Studio).
     tamper = by_name(client, seeded_org, "Deny agent config tampering and privilege escalation")
-    assert {rm_policy["name"], tamper["name"]} <= {m["name"] for m in destructive["matched_policies"]}
-    for pid in (rm_policy["id"], tamper["id"]):
-        assert client.patch(f"{BASE}/{pid}", json={"enabled": False}, headers=h).status_code == 200
+    matched = {m["name"] for m in destructive["matched_policies"]}
+    assert rm_policy["name"] in matched and tamper["name"] not in matched
+    assert client.patch(f"{BASE}/{rm_policy['id']}", json={"enabled": False}, headers=h).status_code == 200
     body = client.post(f"{BASE}/test", json={"with_org_policies": True,
                                              "policy_decision_id": destructive["policy_decision_id"]}, headers=h).json()
     assert body["simulation"] is True and body["label"] == "Simulation — not a historical outcome"
     assert body["decision"] == "AUDIT" and body["recorded"]["decision"] == "DENY"
     assert rm_policy["name"] in body["recorded"]["matched_policy_names"]
-    assert not {rm_policy["id"], tamper["id"]} & {p["id"] for p in body["evaluated_policies"]}
+    evaluated = {p["id"] for p in body["evaluated_policies"]}
+    assert rm_policy["id"] not in evaluated and tamper["id"] in evaluated
 
     # Re-evaluating the exfiltration attempt never echoes the secret: snapshots are redacted at ingest.
     replay = client.post(f"{BASE}/test", json={"policy_ids": [by_name(client, seeded_org, "Block credential exfiltration")["id"]],

@@ -1,10 +1,10 @@
 /** Task header: key, inline-editable title, status line and the primary actions. */
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Archive, ArchiveRestore, Ban, ListTree, Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Archive, ArchiveRestore, Ban, FileText, ListTree, Sparkles } from "lucide-react";
 import { ConfirmDialog, CopyButton } from "@/components/data";
 import { Badge, Button, SeverityBadge, useToast } from "@/components/ui";
-import { pluralize } from "@/lib/format";
+import { pluralize, shortId } from "@/lib/format";
 import { taskTypeLabel } from "../analytics/taskMeta";
 import { useArchiveTask } from "../api";
 import type { TaskDetail } from "../types";
@@ -13,8 +13,39 @@ import { InlineTitle } from "./fields/InlineEditors";
 import { describeError, useSaveTask } from "./hooks";
 import { PriorityIcon, VerificationStatusBadge } from "./taskBits";
 
+/** Same look as the primary small Button, for actions that navigate (real links: middle-click works). */
+const PRIMARY_LINK =
+  "inline-flex h-7 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded bg-accent px-2.5 text-xs font-medium text-accent-fg transition-colors hover:bg-accent-strong";
+
+/** Saved-prompt detail in the Prompt Library (opens the prompt drawer on the "Saved prompts" tab). */
+export const savedPromptHref = (promptId: string) => `/work/prompts?tab=prompts&prompt=${encodeURIComponent(promptId)}`;
+export const fixContextHref = (taskId: string) => `/work/fix-context/${encodeURIComponent(taskId)}`;
+const PROMPTS_SHOWN = 5;
+
+function GeneratedPrompts({ task }: { task: TaskDetail }) {
+  const ids = task.generated_prompt_ids;
+  if (ids.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
+      <span className="inline-flex items-center gap-1">
+        <FileText className="h-3.5 w-3.5 text-fg-faint" aria-hidden />
+        {pluralize(ids.length, "saved fix prompt")}:
+      </span>
+      {ids.slice(0, PROMPTS_SHOWN).map((id) => (
+        <Link key={id} to={savedPromptHref(id)} className="font-mono text-accent hover:underline" aria-label={`Open saved prompt ${id}`}>
+          {shortId(id)}
+        </Link>
+      ))}
+      {ids.length > PROMPTS_SHOWN && (
+        <Link to={`/work/prompts?tab=prompts&task=${encodeURIComponent(task.id)}`} className="text-accent hover:underline">
+          all {ids.length}
+        </Link>
+      )}
+    </div>
+  );
+}
+
 export function TaskHeader({ task, canWrite }: { task: TaskDetail; canWrite: boolean }) {
-  const navigate = useNavigate();
   const toast = useToast();
   const { save, pending } = useSaveTask(task.id);
   const archive = useArchiveTask();
@@ -55,9 +86,10 @@ export function TaskHeader({ task, canWrite }: { task: TaskDetail; canWrite: boo
       {archived && <p className="text-xs text-warn">This task is archived: it is hidden from boards and cannot take new evidence until restored.</p>}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="primary" icon={<Sparkles className="h-3.5 w-3.5" aria-hidden />} onClick={() => navigate(`/work/fix-context/${encodeURIComponent(task.id)}`)}>
+        <Link to={fixContextHref(task.id)} className={PRIMARY_LINK}>
+          <Sparkles className="h-3.5 w-3.5" aria-hidden />
           Generate Fix Context
-        </Button>
+        </Link>
         {editable && (
           <Button size="sm" variant="secondary" icon={<ListTree className="h-3.5 w-3.5" aria-hidden />} onClick={() => setBreakingDown(true)}>
             Break down
@@ -74,6 +106,8 @@ export function TaskHeader({ task, canWrite }: { task: TaskDetail; canWrite: boo
             </Button>
           ))}
       </div>
+
+      <GeneratedPrompts task={task} />
 
       <BreakdownDialog task={task} open={breakingDown} onOpenChange={setBreakingDown} />
       <ConfirmDialog

@@ -238,6 +238,7 @@ class TrustSourceOut(BaseModel):
     max_finding_severity: str | None
     first_seen_at: datetime
     last_seen_at: datetime
+    is_simulation: bool = False  # only Simulation Lab traffic has observed this source
 
 
 class HistoryEntryOut(BaseModel):
@@ -341,6 +342,7 @@ class TrustDestinationOut(BaseModel):
     first_seen_at: datetime
     last_seen_at: datetime
     verification: VerificationSummaryOut
+    is_simulation: bool = False  # every recorded call to this destination was simulated
 
 
 class DestinationInvocationOut(BaseModel):

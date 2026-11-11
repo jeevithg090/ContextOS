@@ -1,5 +1,6 @@
-"""``tool.completed`` / ``tool.failed``: pair the result with its request and record the result as
-context whose source is derived SERVER-SIDE from the tool and its arguments (never from the client).
+"""``tool.completed`` / ``tool.failed``: pair the result with its request and record the result (or
+the error text of a failure, which the model also reads) as context whose source is derived
+SERVER-SIDE from the tool and its arguments (never from the client).
 
 Pairing: ``correlation_id`` within the session first; otherwise the most recent unfinished call of
 the same tool (without a correlation id). A result with no recorded request creates the invocation
@@ -12,8 +13,8 @@ from typing import Any
 
 from sqlalchemy import select
 
-from app.domain.enums import EventType, FindingCategory, Severity, SourceType, ToolCategory
-from app.models import Tool, ToolInvocation
+from app.domain.enums import Decision, EventType, FindingCategory, Severity, SourceType, ToolCategory
+from app.models import Destination, Tool, ToolInvocation
 from app.services.ingestion_context import ContextInput, record_context
 from app.services.ingestion_entities import tool_identity
 from app.services.ingestion_findings import raise_finding
@@ -24,6 +25,7 @@ from app.services.ingestion_tools import decide_request
 
 # Statuses meaning ContextOS did not let the call run (or it was still waiting for a person).
 NOT_ALLOWED = {"denied", "rejected", "pending_approval", "expired", "cancelled"}
+FINISHED = {"completed", "failed"}  # a repeated result for the same call is not a new transfer
 _QUERY_KEYS = ("query", "q", "search_query", "search", "keywords")
 _WEB_CATEGORIES = {ToolCategory.HTTP.value, ToolCategory.BROWSER.value}
 
@@ -99,20 +101,56 @@ def handle_tool_result(st: PipelineState, started: float) -> None:
     st.refs["tool_invocation_id"] = inv.id
     text, content_type = result_text(env.result)
     if failed:
-        error = redact_session_text(st, text or str((env.metadata or {}).get("error") or "")) or ""
-        inv.error = (error[:1999] + "…" if len(error) > 2000 else error) or "Tool reported a failure"
-    elif text:
+        # The error text reaches the model like any result (and can carry injected instructions),
+        # so it is recorded and scanned as context too.
+        text = text or str((env.metadata or {}).get("error") or "")
+        if st.store_previews:
+            error = redact_session_text(st, text) or ""
+            inv.error = (error[:1999] + "…" if len(error) > 2000 else error) or "Tool reported a failure"
+        else:  # the organisation stores no content text: keep only the fact and the size
+            inv.error = (f"Tool reported a failure ({len(text):,} characters of error output; content previews "
+                         "are disabled)") if text else "Tool reported a failure"
+    if text:
         source_type, identifier, display = result_source(tool, inv)
         outcome = record_context(st, ContextInput(
             source_type=source_type, identifier=identifier, display_name=display, raw_text=text,
             content_type=content_type if env.content_type == "text/plain" else env.content_type,
-            tool_invocation_id=inv.id, item_metadata={"tool": f"{tool.provider}/{tool.name}"},
+            tool_invocation_id=inv.id,
+            item_metadata={"tool": f"{tool.provider}/{tool.name}", **({"tool_failed": True} if failed else {})},
             trust_ceiling=mcp_server_ceiling(st, tool.server) if source_type == SourceType.MCP_TOOL.value else None,
         ))
         inv.result_context_item_id = outcome.item.id
-        inv.result_summary = preview_of(redact_session_text(st, text) or "") if st.store_previews else None
+        if not failed:
+            inv.result_summary = preview_of(redact_session_text(st, text) or "") if st.store_previews else None
+    if not first_seen and not failed and prior_status not in FINISHED:
+        _count_late_transfer(st, inv)
     if not first_seen and prior_status in NOT_ALLOWED:
         _decision_not_honoured(st, inv, tool, prior_status)
+
+
+def _count_late_transfer(st: PipelineState, inv: ToolInvocation) -> None:
+    """A call whose transfer was not counted when it was decided (held for approval, or blocked at an
+    enforcing boundary) has now completed, so the data did reach its destination: count it.
+
+    Calls decided ALLOW / AUDIT / RESTRICT, and every observed call, were counted at request time
+    (``ingestion_tools``); ``blocked_count`` keeps recording the decision itself.
+    """
+    if not inv.destination_id:
+        return
+    held = inv.decision == Decision.REQUIRE_APPROVAL and inv.enforcement != "observed"
+    blocked = inv.decision == Decision.DENY and inv.enforcement == "enforced"
+    if not (held or blocked):
+        return
+    dest = st.db.scalar(select(Destination).where(
+        Destination.organization_id == st.ctx.org_id, Destination.id == inv.destination_id))
+    if dest is None:
+        return
+    dest.transfer_count = (dest.transfer_count or 0) + 1
+    sensitive = (inv.sensitive_data_detected or bool(inv.matched_session_fingerprints)
+                 or any(isinstance(r, dict) and r.get("sensitive") for r in inv.resources or []))
+    if sensitive:
+        dest.sensitive_transfer_count = (dest.sensitive_transfer_count or 0) + 1
+    st.refs["destination_id"] = dest.id
 
 
 def _decision_not_honoured(st: PipelineState, inv: ToolInvocation, tool: Tool, prior_status: str) -> None:

@@ -1,4 +1,10 @@
-"""FastAPI application factory."""
+"""FastAPI application factory.
+
+Startup refuses to serve an un-migrated database: the lifespan checks that the schema is at the latest
+Alembic revision (``app.database.migrations.ensure_schema_ready``) and fails with an error naming
+``contextos-server init-db`` otherwise. Outside production a complete schema created by ``create_all``
+(test fixtures) is accepted.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +22,8 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging, get_logger
+from app.database.migrations import SchemaNotReadyError, ensure_schema_ready
+from app.database.session import get_engine
 from app.events.bus import bus
 
 log = get_logger(__name__)
@@ -23,8 +31,16 @@ log = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    settings = get_settings()
+    try:
+        status = ensure_schema_ready(get_engine(), allow_unversioned=settings.env != "production")
+    except SchemaNotReadyError as exc:
+        log.error("contextos.schema_not_ready", extra={"state": exc.status.state if exc.status else None,
+                                                       "reason": str(exc)})
+        raise
     bus.bind_loop(asyncio.get_running_loop())
-    log.info("contextos.started", extra={"env": get_settings().env})
+    log.info("contextos.started", extra={"env": settings.env, "schema": status.state,
+                                         "revision": ",".join(status.current) or None})
     yield
 
 

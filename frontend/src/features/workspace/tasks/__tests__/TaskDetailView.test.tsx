@@ -38,7 +38,7 @@ describe("TaskDetailView", () => {
   it("shows the task, its definition and the primary actions", async () => {
     setup();
     expect(await screen.findByRole("button", { name: /Treat fetched web content as data/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Generate Fix Context" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Generate Fix Context" })).toHaveAttribute("href", "/work/fix-context/tsk_1");
     expect(screen.getByRole("button", { name: "Break down" })).toBeInTheDocument();
     expect(screen.getByText("1/2 met")).toBeInTheDocument();
     expect(screen.getByText("backend/app/engines/detection/injection.py")).toBeInTheDocument();
@@ -47,7 +47,7 @@ describe("TaskDetailView", () => {
 
   it("separates claims from verification and records a verification run", async () => {
     const { calls } = setup();
-    await screen.findByRole("button", { name: "Generate Fix Context" });
+    await screen.findByRole("link", { name: "Generate Fix Context" });
     fireEvent.mouseDown(screen.getByRole("tab", { name: /Fix & verify/ }));
     const verification = await screen.findByRole("region", { name: /Verification/ });
     expect(within(verification).getByText("Not verified")).toBeInTheDocument();
@@ -64,10 +64,30 @@ describe("TaskDetailView", () => {
 
   it("is read-only for viewers", async () => {
     setup(makeTaskDetail(), ["read"]);
-    await screen.findByRole("button", { name: "Generate Fix Context" });
+    await screen.findByRole("link", { name: "Generate Fix Context" });
     expect(screen.queryByRole("button", { name: "Break down" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /edit title/ })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Treat fetched web content as data" })).toBeInTheDocument();
+  });
+
+  it("links each saved fix prompt to the Prompt Library", async () => {
+    setup(makeTaskDetail({ generated_prompt_ids: ["gpr_01HZXAAAAAAAAAAAAAAAAAAAAB", "gpr_01HZXAAAAAAAAAAAAAAAAAAAAC"] }));
+    await screen.findByRole("link", { name: "Generate Fix Context" });
+    expect(screen.getByText("2 saved fix prompts:")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open saved prompt gpr_01HZXAAAAAAAAAAAAAAAAAAAAB" })).toHaveAttribute(
+      "href",
+      "/work/prompts?tab=prompts&prompt=gpr_01HZXAAAAAAAAAAAAAAAAAAAAB",
+    );
+    expect(screen.getByRole("link", { name: "Open saved prompt gpr_01HZXAAAAAAAAAAAAAAAAAAAAC" })).toHaveAttribute(
+      "href",
+      "/work/prompts?tab=prompts&prompt=gpr_01HZXAAAAAAAAAAAAAAAAAAAAC",
+    );
+  });
+
+  it("shows no saved-prompt row when nothing was generated", async () => {
+    setup();
+    await screen.findByRole("link", { name: "Generate Fix Context" });
+    expect(screen.queryByText(/saved fix prompt/)).not.toBeInTheDocument();
   });
 
   it("links recorded security context to the original records", async () => {
@@ -79,7 +99,7 @@ describe("TaskDetailView", () => {
         ],
       }),
     );
-    await screen.findByRole("button", { name: "Generate Fix Context" });
+    await screen.findByRole("link", { name: "Generate Fix Context" });
     fireEvent.mouseDown(screen.getByRole("tab", { name: /Security context/ }));
     expect(await screen.findByRole("link", { name: "Finding Prompt injection in fetched page" })).toHaveAttribute("href", "/intelligence/fnd_1");
     expect(screen.getByText("Record deleted")).toBeInTheDocument();

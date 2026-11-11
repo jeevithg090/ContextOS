@@ -1,8 +1,9 @@
 """Context sources: where context came from, how much each delivered and what it triggered.
 
 Counts are computed from persisted items and findings. Simulation Lab data is excluded unless
-requested, and a source observed only by simulations is hidden from the list (but still reachable by
-id). Agent-bound API keys see only sources their agent received content from.
+requested, and a simulation-only source (``ContextSource.is_simulation``: no real traffic has
+observed it) is hidden from the list but still reachable by id. Agent-bound API keys see only
+sources their agent received content from.
 """
 
 from __future__ import annotations
@@ -64,7 +65,7 @@ def _source_select(org_id: str, include_simulated: bool, bound_agent_id: str | N
     if bound_agent_id:
         query = query.where(ContextSource.id.in_(any_items))
     elif hide_simulation_only and not include_simulated:  # sources observed only by simulations
-        query = query.where(or_(item_count > 0, ContextSource.id.not_in(any_items)))
+        query = query.where(ContextSource.is_simulation.is_(False))
     sorts = {"last_seen": ContextSource.last_seen_at, "items": item_count, "findings": finding_count}
     return query, sorts, finding_count
 
@@ -77,6 +78,7 @@ def _source_summary(row: Any) -> dict[str, Any]:
         "last_seen_at": s.last_seen_at, "observation_count": s.observation_count or 0, "item_count": int(row[1]),
         "agent_count": int(row[2]), "session_count": int(row[3]), "items_with_detections": int(row[4]),
         "finding_count": int(row[5]), "open_finding_count": int(row[6]), "max_finding_severity": s.max_finding_severity,
+        "is_simulation": bool(s.is_simulation),
     }
 
 

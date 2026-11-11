@@ -17,7 +17,7 @@ from tests.integration.workspace_support import API, activity_kinds, create_task
 
 @pytest.fixture(autouse=True)
 def no_root(monkeypatch):
-    monkeypatch.setattr(get_settings(), "workspace_root", None)
+    monkeypatch.setattr(get_settings(), "workspace_repo_root", None)
 
 
 def _section(prompt: dict, key: str) -> dict:

@@ -5,7 +5,7 @@ import { SegmentedControl } from "../SegmentedControl";
 import { JsonView } from "../JsonView";
 import { EvidenceList } from "../EvidenceList";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { MemoryRouter } from "react-router-dom";
+import { TestRouter } from "@/test/router";
 
 describe("SearchInput", () => {
   beforeEach(() => vi.useFakeTimers());
@@ -92,7 +92,7 @@ describe("JsonView", () => {
 describe("EvidenceList", () => {
   it("renders linked evidence, quoted excerpts and skips malformed entries", () => {
     render(
-      <MemoryRouter>
+      <TestRouter>
         <EvidenceList
           sessionId="ses_1"
           evidence={[
@@ -102,7 +102,7 @@ describe("EvidenceList", () => {
             { nope: true },
           ]}
         />
-      </MemoryRouter>,
+      </TestRouter>,
     );
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(screen.getByRole("link", { name: /Context item/ })).toHaveAttribute("href", "/context/ctx_1");

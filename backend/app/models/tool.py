@@ -53,6 +53,7 @@ class ToolInvocation(TimestampMixin, OrgScopedMixin, Base):
     __table_args__ = (
         Index("ix_tool_inv_org_session", "organization_id", "session_id"),
         Index("ix_tool_inv_correlation", "organization_id", "session_id", "correlation_id"),
+        Index("ix_tool_inv_org_requested", "organization_id", "requested_at"),  # retention, time-range scans
     )
 
     id: Mapped[str] = id_column()

@@ -35,6 +35,7 @@ from app.services.trust_service_common import (
     rules_by_id,
 )
 from app.services.trust_service_history import SOURCE_TARGET, history, manual_details
+from app.services.trust_service_simulation import real_source_filter
 
 FINDINGS_SHOWN = 20
 ITEMS_SHOWN = 10
@@ -70,11 +71,15 @@ def list_sources(
     manual: bool | None = None,
     has_findings: bool | None = None,
     capability: str | None = None,
+    include_simulated: bool = False,
     sort: str = "-last_seen",
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[ContextSource], int]:
+    """Sources of the organisation; simulation-only sources are left out unless ``include_simulated``."""
     stmt = scoped(ContextSource, org_id)
+    if not include_simulated:
+        stmt = stmt.where(real_source_filter())
     if trust_levels:
         stmt = stmt.where(ContextSource.trust_level.in_(trust_levels))
     if source_type:
@@ -115,6 +120,7 @@ def source_out(row: ContextSource, rule_names: dict[str, str]) -> dict[str, Any]
         "max_finding_severity": row.max_finding_severity,
         "first_seen_at": row.first_seen_at,
         "last_seen_at": row.last_seen_at,
+        "is_simulation": bool(row.is_simulation),
     }
 
 

@@ -8,7 +8,9 @@ Engineering Workspace (Kanban + AI fix-context generation) that turns findings i
 
 Read before major changes: `CONTEXT.md` (current state) → `docs/ARCHITECTURE.md` →
 `docs/SECURITY_MODEL.md` → the doc for the area you touch (`docs/DATA_MODEL.md`,
-`docs/API_SPECIFICATION.md`, `docs/INTEGRATION_SPECIFICATION.md`).
+`docs/API_SPECIFICATION.md`, `docs/INTEGRATION_SPECIFICATION.md`, `docs/integrations/*.md`).
+Some of these are still being written; when one is missing, the module docstrings and tests are
+authoritative — never guess.
 
 ## Repository layout
 - `backend/` FastAPI modular monolith (Python 3.12, SQLAlchemy 2, Pydantic 2, Alembic)
@@ -22,10 +24,13 @@ Read before major changes: `CONTEXT.md` (current state) → `docs/ARCHITECTURE.m
 
 ## Commands
 - Backend tests: `cd backend && .venv/bin/python -m pytest -q`
-- Run API: `cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000`
+- SDK tests: `cd sdk && ../backend/.venv/bin/python -m pytest -q tests`
+- Run API: `cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000` (refuses an
+  un-migrated database: run `.venv/bin/contextos-server init-db` first)
 - Migrations: `cd backend && .venv/bin/alembic upgrade head`
-- Frontend: `cd frontend && npm run dev` (proxies /api → :8000), `npm run typecheck`, `npm run build`
+- Frontend: `cd frontend && npm run dev` (proxies /api → :8000), `npm run typecheck`, `npm test`, `npm run build`
 - Lint: `cd backend && .venv/bin/ruff check app tests`; `cd frontend && npm run lint`
+- Whole-system smoke run (fresh DB, real server): `backend/.venv/bin/python .claude/skills/release-readiness/scripts/smoke.py`
 
 ## Non-negotiable rules
 1. **Never persist raw secrets or raw context content.** Redact with `app.engines.redaction`
@@ -54,3 +59,13 @@ Read before major changes: `CONTEXT.md` (current state) → `docs/ARCHITECTURE.m
   `dec-*`); status badges from `@/components/ui`; data via TanStack Query hooks in
   `features/<name>/api.ts`; every view has loading, error and empty states.
 - Keep files focused (< ~500 lines); split by responsibility.
+
+## Rules and skills
+- `.claude/rules/*.md` load automatically for the paths they cover (backend architecture,
+  frontend architecture, security engineering, database & migrations, testing, integration
+  adapters, documentation). They refine the rules above; they never relax them.
+- `.claude/skills/<name>/SKILL.md` are step-by-step procedures: `secure-feature` (build),
+  `integration-builder`, `test-and-verify`, `code-review`, `architecture-review`, `threat-model`,
+  `repo-audit`, `release-readiness`. Use the matching skill instead of improvising the process.
+- `AGENTS.md` points other coding agents at this file; this file is the source of truth.
+- After significant work, update `CONTEXT.md` (what works, what changed, known problems, next steps).

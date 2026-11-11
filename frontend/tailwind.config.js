@@ -39,6 +39,8 @@ export default {
         ok: v("ok"),
         warn: v("warn"),
         danger: v("danger"),
+        // Backdrop behind dialogs, drawers and the mobile navigation.
+        scrim: v("scrim"),
       },
       fontFamily: {
         sans: ["'Inter Variable'", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
@@ -56,12 +58,16 @@ export default {
         "fade-in": { from: { opacity: 0 }, to: { opacity: 1 } },
         "slide-in-right": { from: { transform: "translateX(16px)", opacity: 0 }, to: { transform: "none", opacity: 1 } },
         "slide-up": { from: { transform: "translateY(4px)", opacity: 0 }, to: { transform: "none", opacity: 1 } },
+        // Dialogs are centred with translateX(-50%); the entrance keeps that translate so the panel
+        // does not jump sideways while animating.
+        "dialog-in": { from: { transform: "translate(-50%, 4px)", opacity: 0 }, to: { transform: "translate(-50%, 0)", opacity: 1 } },
         pulse_dot: { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.35 } },
       },
       animation: {
         "fade-in": "fade-in 160ms ease-out",
         "slide-in-right": "slide-in-right 200ms cubic-bezier(.2,.8,.2,1)",
         "slide-up": "slide-up 160ms ease-out",
+        "dialog-in": "dialog-in 160ms ease-out",
         "pulse-dot": "pulse_dot 1.6s ease-in-out infinite",
       },
     },

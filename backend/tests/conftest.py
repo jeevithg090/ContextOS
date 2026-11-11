@@ -2,6 +2,11 @@
 
 Every test gets a fresh SQLite database file and a FastAPI TestClient bound to it.
 ``make_org`` creates an isolated tenant with an owner user session and an ingest/decide API key.
+
+PostgreSQL: set ``CONTEXTOS_TEST_DATABASE_URL`` (e.g. ``postgresql+psycopg://user:pw@127.0.0.1:18432/contextos_test``)
+to run the same tests against a dedicated test database instead. Its tables are dropped and recreated
+once per run and every table is truncated before each test, so the database name must contain "test".
+Tests that build their own SQLite databases (CLI, migrations) keep doing so.
 """
 
 from __future__ import annotations
@@ -17,6 +22,8 @@ os.environ.setdefault("CONTEXTOS_SERVE_FRONTEND", "false")
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 import app.models as models  # noqa: F401  (registers tables)
@@ -27,9 +34,58 @@ from app.database.base import Base
 from app.database.session import make_engine, session_factory, set_engine
 from app.domain.enums import Role
 
+TEST_DATABASE_URL = os.environ.get("CONTEXTOS_TEST_DATABASE_URL", "").strip() or None
+
+
+def _external_test_engine(url: str) -> Engine:
+    parsed = make_url(url)
+    if "test" not in (parsed.database or "").lower():
+        raise pytest.UsageError(
+            "CONTEXTOS_TEST_DATABASE_URL must name a dedicated test database (its name must contain 'test'): "
+            "every ContextOS table in it is dropped, recreated and truncated."
+        )
+    if parsed.get_backend_name() == "postgresql":
+        # Fail a test that waits on a lock (e.g. a fixture session holding a row lock a request needs)
+        # instead of hanging the whole run.
+        return create_engine(url, pool_pre_ping=True,
+                             connect_args={"options": "-c lock_timeout=30s -c statement_timeout=300s"})
+    return make_engine(url)
+
+
+def _reset_tables(eng: Engine) -> None:
+    with eng.begin() as conn:
+        if conn.dialect.name == "postgresql":
+            # Sessions a previous test leaked ("idle in transaction") would block TRUNCATE.
+            conn.exec_driver_sql(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() "
+                "AND pid <> pg_backend_pid() AND state IN ('idle in transaction', 'idle in transaction (aborted)')"
+            )
+            names = ", ".join(conn.dialect.identifier_preparer.quote(t.name) for t in Base.metadata.sorted_tables)
+            conn.exec_driver_sql(f"TRUNCATE {names} RESTART IDENTITY CASCADE")
+        else:
+            for table in reversed(Base.metadata.sorted_tables):
+                conn.execute(table.delete())
+
+
+@pytest.fixture(scope="session")
+def _external_engine() -> Iterator[Engine | None]:
+    if TEST_DATABASE_URL is None:
+        yield None
+        return
+    eng = _external_test_engine(TEST_DATABASE_URL)
+    Base.metadata.drop_all(eng)
+    Base.metadata.create_all(eng)
+    yield eng
+    eng.dispose()
+
 
 @pytest.fixture()
-def engine(tmp_path: Path):
+def engine(tmp_path: Path, _external_engine: Engine | None):
+    if _external_engine is not None:
+        _reset_tables(_external_engine)
+        set_engine(_external_engine)
+        yield _external_engine
+        return
     eng = make_engine(f"sqlite:///{tmp_path / 'test.db'}")
     Base.metadata.create_all(eng)
     set_engine(eng)

@@ -2,18 +2,23 @@
 
 A pack is built by :func:`app.workspace.context_pack.build_context_pack` from the task's related files
 (plus any extra paths the user asked for), the linked ContextOS records and, when
-``settings.workspace_root`` points at a readable repository, project documents, related tests and Git
-history. Without a repository root the pack holds only database records, the task's paths marked as
+``settings.workspace_repo_root`` (``CONTEXTOS_WORKSPACE_REPO_ROOT``, server-side configuration only — never
+taken from a request) points at a readable repository, project documents, related tests and Git history. Without a repository root the pack holds only database records, the task's paths marked as
 unverified, and a note saying repository files could not be verified.
 
 Toggling: an included item can be excluded and re-included; an item left out because of the token
 budget can be included manually (files are re-read with the same safety checks, records are re-derived
 from the database). Sensitive, rejected, missing or unverified items can never be included.
+
+Export: :func:`export_pack` returns the pack as a JSON document (redacted again, audited as
+``context_pack.exported``).
 """
 
 from __future__ import annotations
 
+import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -23,9 +28,17 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.errors import ConflictError, ValidationFailedError
 from app.core.ids import new_id
-from app.core.timeutil import utcnow
+from app.core.timeutil import isoformat, utcnow
+from app.engines.redaction import redact_value
 from app.models import ContextPack, Task
-from app.schemas.workspace_ai import ContextPackItemOut, ContextPackOut, ContextPackSummaryOut, PackCountsOut
+from app.schemas.workspace_ai import (
+    ContextPackItemOut,
+    ContextPackOut,
+    ContextPackSummaryOut,
+    ModesOut,
+    PackCountsOut,
+)
+from app.services.audit import append_audit
 from app.services.scoping import get_scoped
 from app.services.workspace_ai_input import TaskBundle, collect, pack_records
 from app.services.workspace_tasks_common import Actor, audit_task, clean_text, record_activity, task_key
@@ -35,10 +48,12 @@ from app.workspace.fix_input import SECURITY_TASK_TYPES
 from app.workspace.modes import PromptMode
 from app.workspace.text import clean, estimate_tokens, truncate_lines
 
-NO_ROOT_TITLE = "No workspace_root configured"
-NO_ROOT_REASON = ("No workspace_root configured — repository files could not be verified. Set "
-                  "CONTEXTOS_WORKSPACE_ROOT on the server to the repository path to include project documents, "
+NO_ROOT_TITLE = "No repository root configured"
+NO_ROOT_REASON = ("No repository root configured — repository files could not be verified. Set "
+                  "CONTEXTOS_WORKSPACE_REPO_ROOT on the server to the repository path to include project documents, "
                   "source files and related tests.")
+EXPORTED_BY = "ContextOS context-pack builder (deterministic; no external AI provider involved)"
+_FILENAME_SAFE = re.compile(r"[^A-Za-z0-9._-]+")
 FILE_KINDS = ("doc", "source_file", "test_file")
 RECORD_KINDS = ("record", "policy")
 EXTRA_PATH_REASON = "Requested when this context pack was built."
@@ -54,8 +69,20 @@ def default_profile(task: Task, mode: str) -> str:
     return "standard"
 
 
+def suggested_profiles(task: Task) -> dict[str, str]:
+    """``{mode: profile}`` — :func:`default_profile` for every prompt mode (the UI shows it as "suggested")."""
+    return {mode.value: default_profile(task, mode.value) for mode in PromptMode}
+
+
+def with_suggestions(catalogue: ModesOut, task: Task, mode: str) -> ModesOut:
+    """``catalogue`` plus the profile suggested for ``task`` in ``mode`` and in every mode."""
+    return catalogue.model_copy(update={"task_id": task.id, "mode": mode, "suggested_profile": default_profile(task, mode),
+                                        "suggested_profiles": suggested_profiles(task)})
+
+
 def _workspace_root() -> str | None:
-    root = get_settings().workspace_root
+    """The configured repository root (server settings only)."""
+    root = get_settings().workspace_repo_root
     return root.strip() if isinstance(root, str) and root.strip() else None
 
 
@@ -71,7 +98,7 @@ def build_items(task: Task, bundle: TaskBundle, profile: str, extra_paths: list[
     task_files = [p for p in task.related_files or [] if isinstance(p, str)]
     extras = [clean_text(p, 500) for p in extra_paths or [] if isinstance(p, str) and p.strip()]
     root = _workspace_root()
-    items, total = build_context_pack(root, related_files=[*task_files, *extras], profile=profile,
+    items, total = build_context_pack(repo_root=root, related_files=[*task_files, *extras], profile=profile,
                                       records=pack_records(bundle))
     own = {_normal(p) for p in task_files}
     for item in items:
@@ -278,3 +305,27 @@ def delete_pack(db: Session, actor: Actor, pack: ContextPack) -> None:
     if task is not None:
         record_activity(db, task, actor.user_id, "context_pack_deleted", details={"context_pack_id": pack_id})
         audit_task(db, actor, task, "context_pack_deleted", {"context_pack_id": pack_id})
+
+
+# ----------------------------------------------------------------------------- export
+
+
+def export_pack(db: Session, actor: Actor, pack: ContextPack) -> tuple[str, str]:
+    """``(json_body, filename)`` for a download. Audited; excerpts are redacted again (defence in depth)."""
+    task = pack_task(db, pack)
+    out = pack_out(pack, task)
+    doc: dict[str, Any] = {
+        "context_pack": out.model_dump(mode="json"),
+        "task": {"id": task.id, "key": task_key(task), "title": task.title} if task else None,
+        "exported_at": isoformat(utcnow()),
+        "generated_by": EXPORTED_BY,
+        "external_transfer": False,
+    }
+    redacted, _ = redact_value(doc)
+    append_audit(db, pack.organization_id, action="context_pack.exported", actor_type=actor.type, actor_id=actor.id,
+                 target_type="context_pack", target_id=pack.id,
+                 details={"task_id": pack.task_id, "profile": pack.profile, "format": "json",
+                          "items": out.counts.total, "included": out.counts.included})
+    stem = f"context-pack-{task_key(task) if task else pack.id}-{pack.profile}"
+    return json.dumps(redacted, indent=2, ensure_ascii=False), _FILENAME_SAFE.sub("_", stem) + ".json"
+

@@ -239,6 +239,7 @@ class ContextSourceSummaryOut(BaseModel):
     open_finding_count: int = 0
     max_finding_severity: str | None = None
     items_with_detections: int = 0
+    is_simulation: bool = False  # only Simulation Lab traffic has observed this source
 
 
 class TrustRuleRefOut(BaseModel):

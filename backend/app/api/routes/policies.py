@@ -33,7 +33,7 @@ from app.schemas.policies import (
     ValidateIn,
     ValidateOut,
 )
-from app.services import policy_service
+from app.services import policy_service, policy_testing
 from app.services.policy_service import Actor
 
 router = APIRouter(prefix="/policies", tags=["policies"])
@@ -100,7 +100,7 @@ def validate_policy(body: ValidateIn, principal: Principal = READ) -> ValidateOu
 @router.post("/test", response_model=PolicyTestOut)
 def test_policy(body: PolicyTestIn, principal: Principal = READ, db: Session = Depends(get_db)) -> PolicyTestOut:
     """Dry run: evaluate a draft and/or saved policies against an input. Nothing is persisted."""
-    result = policy_service.run_policy_test(
+    result = policy_testing.run_policy_test(
         db,
         principal.org_id,
         draft=body.policy.model_dump() if body.policy else None,

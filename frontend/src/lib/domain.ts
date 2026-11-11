@@ -105,6 +105,13 @@ export const ENFORCEMENT_META: Record<EnforcementMode, { label: string; tone: To
   observed: { label: "Observed only", tone: "neutral", description: "Reported after the fact — nothing could be prevented." },
 };
 
+export const FINDING_CATEGORIES = [
+  "prompt_injection", "instruction_override", "credential_access", "secret_exposure", "exfiltration", "untrusted_source",
+  "suspicious_tool_use", "dangerous_permissions", "lethal_trifecta", "anomaly", "cross_agent_contamination",
+  "policy_violation", "destination_risk", "permission_escalation",
+] as const;
+export type FindingCategory = (typeof FINDING_CATEGORIES)[number];
+
 export const FINDING_CATEGORY_LABELS: Record<string, string> = {
   prompt_injection: "Prompt injection",
   instruction_override: "Instruction override",
@@ -135,3 +142,6 @@ export function humanize(value?: string | null): string {
   if (!value) return "—";
   return value.replace(/[_.]/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }
+
+export * from "./vocabulary";
+export * from "./secretTypes";

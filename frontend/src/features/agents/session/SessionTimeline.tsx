@@ -19,7 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Badge, DecisionBadge, EnforcementBadge, ErrorState, LoadingRows, SeverityBadge, TrustBadge } from "@/components/ui";
-import { EntityLink, Pagination, Section, Timeline, type TimelineItem } from "@/components/data";
+import { EntityLink, Pagination, Section, Timeline, provenanceHref, type TimelineItem } from "@/components/data";
 import { decisionTone, severityTone, trustTone, type Tone } from "@/lib/domain";
 import { formatDateTime } from "@/lib/format";
 import { useSessionTimeline } from "../api";
@@ -54,7 +54,7 @@ function EntryLinks({ e, sessionId }: { e: TimelineEntry; sessionId: string }) {
   const links = [
     r.context_item_id && <EntityLink key="ctx" type="context_item" id={r.context_item_id} label="Context receipt" />,
     r.context_item_id && (
-      <Link key="prov" to={`/provenance?context_item_id=${encodeURIComponent(r.context_item_id)}`} className="text-accent hover:underline">
+      <Link key="prov" to={provenanceHref("item", r.context_item_id)} className="text-accent hover:underline">
         Provenance
       </Link>
     ),

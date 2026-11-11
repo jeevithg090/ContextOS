@@ -27,10 +27,12 @@ export function Dialog({
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px] animate-fade-in" />
+        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-scrim/60 backdrop-blur-[2px] animate-fade-in" />
         <RadixDialog.Content
           className={cn(
-            "fixed left-1/2 top-[12vh] z-50 w-[min(560px,calc(100vw-32px))] -translate-x-1/2 rounded-lg border border-border-strong bg-surface shadow-pop animate-slide-up focus:outline-none",
+            // -translate-x-1/2 centres the panel; animate-dialog-in keeps that translate in every
+            // keyframe (a plain slide-up would replace it and shift the dialog while it animates).
+            "fixed left-1/2 top-[12vh] z-50 w-[min(560px,calc(100vw-32px))] -translate-x-1/2 rounded-lg border border-border-strong bg-surface shadow-pop animate-dialog-in focus:outline-none",
             className,
           )}
         >
@@ -77,7 +79,7 @@ export function Drawer({
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-black/50 animate-fade-in" />
+        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-scrim/50 animate-fade-in" />
         <RadixDialog.Content className={cn("fixed inset-y-0 right-0 z-50 flex flex-col border-l border-border-strong bg-surface shadow-pop animate-slide-in-right focus:outline-none", width)}>
           <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
             <div className="min-w-0">

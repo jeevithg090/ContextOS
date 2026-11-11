@@ -27,8 +27,8 @@ from app.models import Agent, AgentSession, Approval, IngestedEvent, PolicyDecis
 from app.services.replay_service_counterfactual import counterfactual
 from app.services.replay_service_risk import RISK_NOTE, TimelinePoint, risk_brief, risk_progression
 from app.services.scoping import get_scoped, scoped
-from app.services.sessions_service import _entries as timeline_entries  # noqa: PLC2701 - shared timeline wording
 from app.services.sessions_service import agent_ref, risk_flags, timeline_query
+from app.services.sessions_timeline import timeline_entries
 
 __all__ = ["BASIS", "counterfactual", "session_replay"]
 

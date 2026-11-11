@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from app.core.ids import new_id
 from app.core.security import keyed_hmac
 from app.core.timeutil import isoformat, utcnow
+from app.engines.redaction import redact_value
 from app.models import AuditEvent, Organization
 
 _PURPOSE = "audit-chain-v1"
@@ -50,15 +51,11 @@ def _compute_hash(entry: AuditEvent) -> str:
 
 
 def _safe_details(details: dict[str, Any] | None) -> dict[str, Any]:
+    """Redact audit details before they are stored (callers pass ids and short metadata, never content)."""
     if not details:
         return {}
-    try:
-        from app.engines.redaction import redact_value
-
-        redacted, _ = redact_value(details)
-        return redacted if isinstance(redacted, dict) else {"value": redacted}
-    except NotImplementedError:  # pragma: no cover - only before the redaction engine exists
-        return details
+    redacted, _ = redact_value(details)
+    return redacted if isinstance(redacted, dict) else {"value": redacted}
 
 
 def append_audit(

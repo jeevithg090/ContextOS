@@ -2,7 +2,8 @@
 
 These find credentials whose value has no recognisable format of its own, so the surrounding
 text decides: ``password = "..."`` assignments, ``.env`` lines, ``--token`` CLI flags, ``curl -u``,
-``.npmrc`` auth lines, and AWS secret keys / Twilio auth tokens that sit near their provider name.
+``.npmrc`` auth lines, AWS secret keys near an AWS anchor word (or in a text that also holds an
+AKIA/ASIA access key id) and Twilio auth tokens that sit near their provider name.
 Values are gated by placeholder checks, code-reference checks, length and Shannon entropy.
 """
 
@@ -255,11 +256,19 @@ _AWS_SECRET_ASSIGN_RE = re.compile(
     r"(?i)aws[A-Za-z0-9_.\- ]{0,30}?(?:secret|sk)[A-Za-z0-9_.\- ]{0,20}?\\?[\"']?\s*(?::=|=>|=|:)\s*\\?[\"']?"
     r"(?P<secret>[A-Za-z0-9/+]{40})(?![A-Za-z0-9/+=])"
 )
-_B64_40_RE = re.compile(r"(?<![A-Za-z0-9/+=])(?P<secret>[A-Za-z0-9/+]{40})(?![A-Za-z0-9/+=])")
+# "=" only ever pads the END of base64, so it may precede a value (``aws=<key>``, ``x=<key>``) but
+# never follow one; a run that continues past 40 characters is not an AWS secret.
+_B64_40_RE = re.compile(r"(?<![A-Za-z0-9/+])(?P<secret>[A-Za-z0-9/+]{40})(?![A-Za-z0-9/+=])")
 _HEX_32_RE = re.compile(r"(?<![0-9a-fA-F])(?P<secret>[0-9a-f]{32})(?![0-9a-fA-F])")
 _NPMRC_RE = re.compile(r"(?i)_(?P<kind>authToken|auth|password)\s*=\s*\"?(?P<secret>[^\s\"'\\]{8,512})")
+# A standalone access key id (not a fragment of a longer base64 run such as an embedded image).
+_AWS_KEY_ID_RE = re.compile(r"(?<![A-Za-z0-9/+=])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Za-z0-9/+=])")
+_AWS_ANCHORS = ("aws", "akia", "asia", "secretaccesskey", "secret_access_key", "secret-access-key")
 _ALNUM = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+_B64_RUN = _ALNUM | {"/", "+"}  # characters that continue a base64 run
 _PROXIMITY = 200
+_TRAILING_PROXIMITY = 120
+_PEM_LINE_MIN = 60
 _MAX_ANCHORS = 4096
 
 
@@ -268,13 +277,60 @@ def _aws_secret_ok(value: str) -> bool:
     return not is_hex(value) and not is_placeholder(value) and entropy >= 4.0 and classes >= 3
 
 
+def _in_base64_block(text: str, start: int, end: int) -> bool:
+    """True when the value is the tail line of a wrapped base64 block (PEM body, MIME attachment)."""
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", end)
+    line_end = len(text) if line_end < 0 else line_end
+    if text[line_start:start].strip() or text[end:line_end].strip() or line_start < 2:
+        return False
+    prev_start = text.rfind("\n", 0, line_start - 1) + 1
+    previous = text[prev_start : line_start - 1].strip()
+    return len(previous) >= _PEM_LINE_MIN and all(c in _B64_CHARS for c in previous)
+
+
+def _aws_context_after(text: str, lower: str, end: int) -> bool:
+    """An AWS anchor word (not a fragment of a longer token) within 120 characters after ``end``."""
+    window_end = min(len(lower), end + _TRAILING_PROXIMITY)
+    for anchor in _AWS_ANCHORS:
+        pos = lower.find(anchor, end, window_end)
+        while pos >= 0:
+            if left_ok(text, pos, _B64_RUN):
+                return True
+            pos = lower.find(anchor, pos + 1, window_end)
+    return False
+
+
+def _aws_secret_candidates(text: str, lower: str) -> Iterator[Candidate]:
+    """40-character AWS-secret-shaped values, only where the text makes an AWS secret likely: an
+    AWS anchor word within 200 characters before (or 120 after) the value, or a standalone
+    AKIA/ASIA access key id anywhere in the same text. Hex (git SHAs), placeholders, low-entropy
+    values, longer base64 runs and wrapped base64 blocks are never flagged."""
+    seen: set[int] = set()
+    for m in _near(text, lower, _AWS_ANCHORS, _B64_40_RE, _B64_CHARS, anchor_left=_B64_RUN):
+        if _aws_secret_ok(m.group("secret")):
+            seen.add(m.start())
+            yield Candidate("aws_secret_key", *m.span("secret"), m.group("secret"), 0.75, SPEC_CONTEXTUAL)
+    key_id_present = _AWS_KEY_ID_RE.search(text) is not None
+    for m in _B64_40_RE.finditer(text):
+        if m.start() in seen or not _aws_secret_ok(m.group("secret")):
+            continue
+        if _aws_context_after(text, lower, m.end()):
+            yield Candidate("aws_secret_key", *m.span("secret"), m.group("secret"), 0.75, SPEC_CONTEXTUAL)
+        elif key_id_present and not _in_base64_block(text, m.start(), m.end()):
+            yield Candidate("aws_secret_key", *m.span("secret"), m.group("secret"), 0.7, SPEC_CONTEXTUAL)
+
+
 def _near(text: str, lower: str, anchors: tuple[str, ...], regex: re.Pattern[str],
-          boundary: frozenset[str]) -> Iterator[re.Match[str]]:
+          boundary: frozenset[str], *, anchor_left: frozenset[str] | None = None) -> Iterator[re.Match[str]]:
     """Matches of ``regex`` starting within 200 characters after any anchor word (each once).
 
+    ``anchor_left`` (optional) lists characters that may not precede an anchor, so an anchor that
+    is only a fragment of a longer token (e.g. "akia" inside a base64 blob) does not count.
     Overlapping windows are merged so dense anchors ("awsawsaws...") stay linear.
     """
-    positions = sorted({p for anchor in anchors for p in iter_needle(lower, anchor)})
+    positions = sorted({p for anchor in anchors for p in iter_needle(lower, anchor)
+                        if anchor_left is None or left_ok(text, p, anchor_left)})
     if len(positions) > _MAX_ANCHORS:
         yield from regex.finditer(text)  # anchor-dense input: everything is "near"; one linear pass
         return
@@ -299,9 +355,7 @@ def scan_provider_context(text: str, lower: str) -> Iterator[Candidate]:
         m = _AWS_SECRET_ASSIGN_RE.match(text, pos)
         if m is not None and _aws_secret_ok(m.group("secret")):
             yield Candidate("aws_secret_key", *m.span("secret"), m.group("secret"), 0.95, SPEC_CONTEXTUAL + 5)
-    for m in _near(text, lower, ("aws", "akia", "asia"), _B64_40_RE, _B64_CHARS):
-        if _aws_secret_ok(m.group("secret")):
-            yield Candidate("aws_secret_key", *m.span("secret"), m.group("secret"), 0.75, SPEC_CONTEXTUAL)
+    yield from _aws_secret_candidates(text, lower)
     for m in _near(text, lower, ("twilio",), _HEX_32_RE, _HEX_CHARS):
         if not looks_fake(m.group("secret")):
             yield Candidate("twilio_auth_token", *m.span("secret"), m.group("secret"), 0.75, SPEC_CONTEXTUAL)

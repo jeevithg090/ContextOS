@@ -4,6 +4,7 @@
     contextos-server create-org --name "Acme AI" --email owner@acme.test --name-of-owner "Ada Owner"
     contextos-server create-api-key --org-slug acme-ai --name "Claude Code laptop" --scopes ingest,decide
     contextos-server seed-demo --org-slug acme-ai
+    contextos-server purge [--org-slug acme-ai] [--dry-run]
     contextos-server serve --host 127.0.0.1 --port 8000
 
 The database comes from ``CONTEXTOS_DATABASE_URL`` (or ``--database-url``). Output never contains
@@ -16,20 +17,25 @@ import importlib
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
-from sqlalchemy import Engine, func, inspect, select
-from sqlalchemy.engine import make_url
+from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import INSECURE_DEV_SECRET, get_settings
 from app.core.errors import AppError
 from app.core.logging import configure_logging
+from app.database.migrations import (
+    SchemaNotReadyError,
+    display_url,
+    ensure_schema_ready,
+    upgrade_to_head,
+)
 from app.database.session import make_engine, session_factory, set_engine
 
 app = typer.Typer(
@@ -41,7 +47,6 @@ app = typer.Typer(
 console = Console(highlight=False, soft_wrap=True)
 err_console = Console(stderr=True, highlight=False, soft_wrap=True)
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[1]
 _state: dict[str, str | None] = {"database_url": None}
 
 
@@ -62,7 +67,7 @@ def _database_url() -> str:
 
 
 def _display_url(url: str) -> str:
-    return make_url(url).render_as_string(hide_password=True)
+    return display_url(url)
 
 
 def _fail(message: str) -> typer.Exit:
@@ -79,8 +84,11 @@ def _bind_engine() -> Engine:
 @contextmanager
 def _session(*, require_schema: bool = True) -> Iterator[Session]:
     engine = _bind_engine()
-    if require_schema and not inspect(engine).has_table("organizations"):
-        raise _fail(f"Database {_display_url(_database_url())} is not initialised. Run `contextos-server init-db` first.")
+    if require_schema:
+        try:
+            ensure_schema_ready(engine, allow_unversioned=get_settings().env != "production")
+        except SchemaNotReadyError as exc:
+            raise _fail(str(exc)) from exc
     db = session_factory()()
     try:
         yield db
@@ -93,29 +101,6 @@ def _session(*, require_schema: bool = True) -> Iterator[Session]:
         raise
     finally:
         db.close()
-
-
-@contextmanager
-def _database_env(url: str) -> Iterator[None]:
-    """Make ``get_settings()`` (read by alembic/env.py and the app) see ``url`` for the duration."""
-    previous = os.environ.get("CONTEXTOS_DATABASE_URL")
-    os.environ["CONTEXTOS_DATABASE_URL"] = url
-    get_settings.cache_clear()
-    try:
-        yield
-    finally:
-        if previous is None:
-            os.environ.pop("CONTEXTOS_DATABASE_URL", None)
-        else:
-            os.environ["CONTEXTOS_DATABASE_URL"] = previous
-        get_settings.cache_clear()
-
-
-def _migration_files() -> list[Path]:
-    versions = _BACKEND_ROOT / "alembic" / "versions"
-    if not (_BACKEND_ROOT / "alembic.ini").is_file() or not versions.is_dir():
-        return []
-    return sorted(p for p in versions.glob("*.py") if p.name != "__init__.py")
 
 
 def _org_by_slug(db: Session, slug: str) -> Any:
@@ -132,32 +117,25 @@ def _org_by_slug(db: Session, slug: str) -> Any:
 
 @app.command("init-db")
 def init_db() -> None:
-    """Create or upgrade the database schema (Alembic migrations when present)."""
+    """Create or upgrade the database schema by applying the Alembic migrations."""
     url = _database_url()
-    if url.startswith("sqlite"):
-        path = url.split("///", 1)[-1]
-        if path and path != ":memory:":
-            Path(path).expanduser().parent.mkdir(parents=True, exist_ok=True)
-    migrations = _migration_files()
-    if migrations:
-        from alembic.config import Config
-
-        from alembic import command
-
-        config = Config(str(_BACKEND_ROOT / "alembic.ini"))
-        config.set_main_option("script_location", str(_BACKEND_ROOT / "alembic"))
-        with _database_env(url):
-            command.upgrade(config, "head")
-        console.print(f"[green]✓[/] Database {_display_url(url)} upgraded to the latest migration ({len(migrations)} available).")
-        return
-
-    import app.models  # noqa: F401  (registers every table)
-    from app.database.base import Base
-
-    err_console.print("[yellow]Warning:[/] no Alembic migrations found; creating tables directly from the models.")
-    engine = _bind_engine()
-    Base.metadata.create_all(engine)
-    console.print(f"[green]✓[/] Database {_display_url(url)} initialised ({len(Base.metadata.tables)} tables).")
+    engine = make_engine(url)  # creates the parent directory of a SQLite file
+    try:
+        # Alembic's own logging setup (alembic.ini) would replace the CLI's; its progress lines go through ours.
+        result = upgrade_to_head(engine, url, configure_logging=False)
+    except SchemaNotReadyError as exc:
+        raise _fail(str(exc)) from exc
+    finally:
+        engine.dispose()
+    head = ", ".join(result.heads)
+    if result.action == "unchanged":
+        console.print(f"[green]✓[/] Database {_display_url(url)} is already at the latest migration ({head}).")
+    elif result.action == "adopted":
+        console.print(f"[green]✓[/] Database {_display_url(url)} matched the current schema and was stamped at "
+                      f"{head} (it had been created without migrations).")
+    else:
+        before = ", ".join(result.before) or "an empty database"
+        console.print(f"[green]✓[/] Database {_display_url(url)} upgraded from {before} to {head}.")
 
 
 @app.command("create-org")
@@ -244,18 +222,38 @@ def create_api_key(
     )
 
 
-def _scenario_key(scenario: Any) -> str:
+def _scenario_id(scenario: Any) -> str:
     if isinstance(scenario, str):
         return scenario
     if isinstance(scenario, dict):
-        return str(scenario.get("key") or scenario.get("id"))
-    return str(getattr(scenario, "key", None) or scenario.id)
+        return str(scenario.get("id") or scenario.get("key"))
+    return str(getattr(scenario, "id", None) or scenario.key)
+
+
+def _is_demo(scenario: Any) -> bool:
+    flag = scenario.get("demo") if isinstance(scenario, dict) else getattr(scenario, "demo", False)
+    return flag is True
+
+
+def _demo_scenarios(scenarios: list[Any]) -> list[Any]:
+    """Scenarios flagged ``demo=True``; every scenario when none is flagged."""
+    flagged = [s for s in scenarios if _is_demo(s)]
+    return flagged or scenarios
+
+
+def _outcome(run: Any) -> str | None:
+    status = run.get("status") if isinstance(run, dict) else getattr(run, "status", None)
+    passed = run.get("passed") if isinstance(run, dict) else getattr(run, "passed", None)
+    if status and passed is not None:
+        return f"{status}, expectations {'met' if passed else 'NOT met'}"
+    return str(status) if status else None
 
 
 @app.command("seed-demo")
 def seed_demo(org_slug: str = typer.Option(..., "--org-slug", help="Organisation slug.")) -> None:
-    """Populate an organisation with demo data by running every Simulation Lab scenario through the real
-    pipeline. All resulting rows are flagged as simulations."""
+    """Populate an organisation with demo data by running the Simulation Lab's demo scenarios (every
+    scenario when none is flagged as a demo) through the real pipeline. All resulting rows are flagged
+    as simulations."""
     try:
         simulations = importlib.import_module("app.services.simulations")
     except ModuleNotFoundError as exc:
@@ -269,24 +267,72 @@ def seed_demo(org_slug: str = typer.Option(..., "--org-slug", help="Organisation
 
     with _session() as db:
         org_id = _org_by_slug(db, org_slug).id
+    scenarios = _demo_scenarios(list(list_scenarios()))
+    if not scenarios:
+        raise _fail("The Simulation Lab has no scenarios to run.")
     failures = 0
-    for scenario in list_scenarios():
-        key = _scenario_key(scenario)
+    for scenario in scenarios:
+        scenario_id = _scenario_id(scenario)
         try:
             with _session() as db:
-                run = run_scenario(db, org_id, key)
-                outcome = getattr(run, "status", None) or (run.get("status") if isinstance(run, dict) else None)
+                outcome = _outcome(run_scenario(db, org_id, scenario_id))
         except typer.Exit:
             failures += 1
             continue
         except Exception as exc:  # report and continue with the remaining scenarios
             failures += 1
-            err_console.print(f"[red]✗[/] {key}: {type(exc).__name__}: {exc}", markup=True)
+            err_console.print(f"[red]✗[/] {escape(scenario_id)}: {type(exc).__name__}: {escape(str(exc))}")
             continue
-        console.print(f"[green]✓[/] {key}" + (f" — {outcome}" if outcome else ""))
+        console.print(f"[green]✓[/] {scenario_id}" + (f" — {outcome}" if outcome else ""))
     if failures:
-        raise _fail(f"{failures} scenario(s) failed.")
-    console.print("Demo data generated. Every row it created is flagged as a simulation.")
+        raise _fail(f"{failures} of {len(scenarios)} scenario(s) failed.")
+    console.print(f"Demo data generated from {len(scenarios)} scenario(s). Every row it created is flagged as a "
+                  "simulation.")
+
+
+@app.command()
+def purge(
+    org_slug: str | None = typer.Option(
+        None, "--org-slug", help="Only this organisation (default: every organisation).", show_default=False
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Count what would be deleted; delete nothing."),
+    as_json: bool = typer.Option(False, "--json", help="Print the per-table counts as JSON (for scripts)."),
+) -> None:
+    """Delete recorded event data older than each organisation's retention period (Settings → Privacy).
+
+    Audit entries are never deleted (they form a hash chain), and evidence of open incidents is kept
+    until the incident is closed. Schedule this daily, e.g. from cron or a Kubernetes CronJob."""
+    import json
+
+    from app.core.timeutil import isoformat
+    from app.models import Organization
+    from app.services.retention import TABLES, purge_expired
+
+    with _session() as db:
+        if org_slug:
+            orgs = [_org_by_slug(db, org_slug)]
+        else:
+            orgs = list(db.scalars(select(Organization).order_by(Organization.created_at, Organization.id)))
+        results = [(org.slug, purge_expired(db, org.id, dry_run=dry_run)) for org in orgs]
+        if dry_run:
+            db.rollback()
+
+    if as_json:
+        typer.echo(json.dumps([{"org_slug": slug, **r.as_dict()} for slug, r in results], indent=2))
+        return
+    if not results:
+        console.print("No organisations.")
+        return
+    console.print("[bold]Dry run[/] — nothing was deleted." if dry_run else "[bold]Retention purge[/]")
+    for slug, r in results:
+        table = Table(show_header=False, box=None, padding=(0, 2))
+        for name in TABLES:
+            table.add_row(name.replace("_", " "), str(r.counts[name]))
+        console.print(f"\n{escape(slug)}: keeps {r.retention_days} days (older than {isoformat(r.cutoff)}); "
+                      f"{r.protected_incidents} open incident(s) keep their evidence")
+        console.print(table)
+    verb = "would be deleted" if dry_run else "deleted"
+    console.print(f"{sum(r.total for _, r in results)} row(s) {verb}. Audit entries are never deleted.")
 
 
 @app.command()

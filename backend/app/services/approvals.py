@@ -13,7 +13,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.errors import ConflictError
+from app.core.errors import ConflictError, NotFoundError
 from app.core.ids import new_id
 from app.core.timeutil import isoformat, utcnow
 from app.domain.enums import ApprovalStatus
@@ -252,3 +252,49 @@ def _already_closed(approval: Approval) -> str:
     if approval.status == ApprovalStatus.EXPIRED:
         return f"This request already expired{f' at {when}' if when else ''}."
     return f"This request was already {approval.status}{f' at {when}' if when else ''}."
+
+
+MAX_CANCEL_REASON_CHARS = 500
+
+
+def cancel_approval(
+    db: Session, org_id: str, approval_id: str, *, actor_type: str, actor_id: str | None,
+    reason: str | None = None, bound_agent_id: str | None = None,
+) -> Approval:
+    """An integration stopped waiting for a reviewer (its host timed out or the user aborted).
+
+    The approval becomes ``cancelled`` and the paused call ``cancelled`` (a result reported later is
+    flagged as "ran despite the decision"). Cancelling an already cancelled approval returns it
+    unchanged; one a person already decided, or that expired, is a 409. An API key bound to one
+    agent can only cancel that agent's approvals (others are not found).
+    """
+    approval = get_scoped(db, Approval, approval_id, org_id, label="Approval")  # 404 across orgs
+    if bound_agent_id and approval.agent_id != bound_agent_id:
+        raise NotFoundError(f"Approval '{approval_id}' not found")
+    refresh_expiry(db, org_id, approval)
+    if approval.status == ApprovalStatus.CANCELLED:
+        return approval
+    if approval.status != ApprovalStatus.PENDING:
+        raise ConflictError(_already_closed(approval), details={
+            "status": approval.status, "decided_at": isoformat(approval.decided_at)})
+    now = utcnow()
+    if not _close(db, org_id, approval.id, {"status": ApprovalStatus.CANCELLED, "decided_at": now}):
+        db.refresh(approval)
+        if approval.status == ApprovalStatus.CANCELLED:
+            return approval
+        raise ConflictError(_already_closed(approval), details={"status": approval.status})
+    db.refresh(approval)
+    before, after = _settle_invocation(db, org_id, approval, ApprovalStatus.CANCELLED.value)
+    clean = redact_text(reason.strip()[:MAX_CANCEL_REASON_CHARS]).text if reason and reason.strip() else None
+    append_audit(
+        db, org_id, action="approval.cancelled", actor_type=actor_type, actor_id=actor_id, target_type="approval",
+        target_id=approval.id,
+        details={"outcome": ApprovalStatus.CANCELLED.value, "tool_invocation_id": approval.tool_invocation_id,
+                 "policy_decision_id": approval.policy_decision_id, "agent_id": approval.agent_id,
+                 "session_id": approval.session_id, "invocation_status_before": before, "invocation_status": after,
+                 "reason": clean, "is_simulation": bool(approval.is_simulation)},
+    )
+    notify(db, org_id, "approval.decided", id=approval.id, status=ApprovalStatus.CANCELLED.value,
+           session_id=approval.session_id, tool_invocation_id=approval.tool_invocation_id)
+    db.flush()
+    return approval
