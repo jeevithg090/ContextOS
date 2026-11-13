@@ -172,6 +172,7 @@ def _evaluate(scenario: Scenario, view: RunView, execution: Any) -> list[dict[st
         evidence = o.evidence()
         out.append({"kind": "observation", "step": label, "expectation": f"Step '{label}' ({o.kind})",
                     "expected": None, "actual": actual, "passed": None, "decision": o.decision,
+                    "enforcement": o.enforcement, "session_id": o.session_id,
                     "matched_policies": o.refs.get("matched_policies") or [], "evidence": evidence,
                     "evidence_ids": [e["id"] for e in evidence]})
     return out

@@ -33,11 +33,11 @@ def engineering_analytics(
     db: Session = Depends(get_db),
     board_id: str | None = Query(None, description="Limit task metrics to one board"),
     window: str = Query("30d", pattern=r"^\d{1,3}d$", description="Look-back window in days, e.g. 7d, 30d, 90d"),
-    include_simulations: bool = Query(True, description="Count findings produced by Simulation Lab runs"),
+    include_simulated: bool = Query(False, description="Count findings produced by Simulation Lab runs"),
 ) -> EngineeringAnalyticsOut:
     return analytics.engineering_analytics(
         db, principal.org_id, board_id=board_id, window_days=analytics.parse_window(window),
-        include_simulations=include_simulations,
+        include_simulated=include_simulated,
     )
 
 
@@ -48,11 +48,11 @@ def remediation_pipeline(
     state: RemediationStateName | None = None,
     severity: SeverityName | None = None,
     q: str | None = Query(None, max_length=200, description="Finding title contains"),
-    include_simulations: bool = Query(True, description="Include findings produced by Simulation Lab runs"),
+    include_simulated: bool = Query(False, description="Include findings produced by Simulation Lab runs"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> RemediationPageOut:
     return analytics.remediation_pipeline(
-        db, principal.org_id, state=state, severity=severity, q=q, include_simulations=include_simulations,
+        db, principal.org_id, state=state, severity=severity, q=q, include_simulated=include_simulated,
         limit=limit, offset=offset,
     )

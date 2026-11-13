@@ -128,6 +128,8 @@ class StepOutcome:
     approval_id: str | None = None
     refs: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
+    # Server session the step was recorded in (the parent's or the delegated child's).
+    session_id: str | None = None
 
     def evidence(self) -> list[dict[str, str]]:
         out: list[dict[str, str]] = []
@@ -135,7 +137,7 @@ class StepOutcome:
                           ("context_item_id", "context_item"), ("approval_id", "approval")):
             value = self.refs.get(key) or (self.approval_id if key == "approval_id" else None)
             if value:
-                out.append({"type": kind, "id": str(value)})
+                out.append({"type": kind, "id": str(value), **({"session_id": self.session_id} if self.session_id else {})})
         return out
 
 

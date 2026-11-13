@@ -4,6 +4,8 @@
  * backend/app/services/simulations.py (`_evaluate`).
  */
 
+import type { EnforcementMode } from "@/lib/domain";
+
 export interface ScenarioCheck {
   id: string;
   /** Plain-language statement of what the configured pipeline should record. */
@@ -32,6 +34,8 @@ export interface ScenarioList {
 export interface ResultEvidence {
   type: string;
   id: string;
+  /** Session the record belongs to (the parent's or a delegated sub-agent's), when it has one. */
+  session_id?: string | null;
 }
 
 /** One expectation (check) of the scenario, evaluated against the rows the run wrote. */
@@ -57,6 +61,10 @@ export interface ObservationResult {
   actual: string;
   passed: null;
   decision?: string | null;
+  /** Enforcement mode the server assumed for this step's decision (null when there was no decision). */
+  enforcement?: EnforcementMode | null;
+  /** Session the step was recorded in (the parent's or a delegated sub-agent's). */
+  session_id?: string | null;
   matched_policies?: Array<string | null>;
   evidence: ResultEvidence[];
   evidence_ids: string[];

@@ -227,7 +227,10 @@ def test_scan_and_read_helpers_hit_the_documented_endpoints(tmp_path: Path) -> N
     client.run_simulation("prompt-injection-basic")
     assert server.bodies("POST", "/api/v1/simulations/runs") == [{"scenario_id": "prompt-injection-basic"}]
     client.list_events(session_id="ses_1", limit=5)
-    assert server.calls("GET", "/api/v1/events")[0].url.params["session_id"] == "ses_1"
+    first_events_call = server.calls("GET", "/api/v1/events")[0].url.params
+    assert first_events_call["session_id"] == "ses_1" and "include_simulated" not in first_events_call
+    client.list_events(include_simulated=True)
+    assert server.calls("GET", "/api/v1/events")[1].url.params["include_simulated"] == "true"
     client.list_incidents(status="open")
     client.list_policies()
 

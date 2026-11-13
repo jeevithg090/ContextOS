@@ -32,12 +32,13 @@ Measured numbers (held-out **test** split; details, method and blind spots in
 | Split | Precision | Recall | F1 | FPR |
 |---|---:|---:|---:|---:|
 | Content, test (1269 samples in total, 604 in test) | 0.968 | 0.931 | 0.949 | 0.045 |
-| Tool requests, test (91 in total, 46 in test) | 0.850 | 0.895 | 0.872 | 0.111 |
+| Tool requests, test (91 in total, 46 in test) | 1.000 | 0.895 | 0.944 | 0.000 |
 
-Targets were ≥ 0.90 precision and ≥ 0.85 recall: content meets both; tool-request precision does
-not (all three false positives come from one benign seed, `echo $PATH`). The regression floors in
-`test_detection_corpus.py` sit just below the measured numbers (content P ≥ 0.96, R ≥ 0.92; tool
-requests P ≥ 0.84, R ≥ 0.89; per-technique recall ≥ 0.80). The dev split was used for tuning, so
+Targets were ≥ 0.90 precision and ≥ 0.85 recall; both sets meet them. Tool-request precision was
+0.850 on the first held-out run (one benign seed, `echo $PATH`); the rule was narrowed afterwards,
+so 1.000 is not a clean held-out estimate (disclosed in DETECTION_EVALUATION.md). The regression
+floors in `test_detection_corpus.py` sit just below the measured numbers (content P ≥ 0.96, R ≥ 0.92;
+tool requests P ≥ 0.95, R ≥ 0.89; per-technique recall ≥ 0.80). The dev split was used for tuning, so
 its perfect scores are not evidence of real-world accuracy.
 
 ```bash
@@ -70,14 +71,14 @@ Live Claude Code verification (needs a Claude Code login and network):
 `PYTHONPATH=sdk backend/.venv/bin/python examples/claude_code/live_verify.py --model haiku`
 ([integrations/claude-code.md](integrations/claude-code.md#live-verification)).
 
-## Last recorded results (2026-11-11)
+## Last recorded results (2026-11-13)
 
 | Suite | Result |
 |---|---|
-| Backend, SQLite | 1751 passed (release review, ≈ 2 min on a loaded machine) |
-| Backend, PostgreSQL 17.11 scratch database | 1751 passed (release review) |
+| Backend, SQLite | 1780 passed (≈ 1.5 min; 1751 at the 2026-11-11 release review) |
+| Backend, PostgreSQL 17.11 scratch database | 1751 passed (2026-11-11 release review; not re-run since) |
 | SDK | 387 passed |
-| Frontend | `tsc` clean, ESLint clean, 367 tests passed in 47 files |
+| Frontend | `tsc` clean, ESLint clean, 492 tests passed in 66 files (every page has a `*.page.test.tsx`) |
 | `ruff check app tests` | clean |
 
 Suites grow as work lands; re-run them rather than trusting these numbers, and record new counts

@@ -53,6 +53,7 @@ def _sensitive_paths(monkeypatch):
         ("Agent", "claude_code", None, "agent_delegation"),
         ("TodoWrite", "claude_code", None, "other"),
         ("ExitPlanMode", "claude_code", None, "other"),
+        ("ToolSearch", "claude_code", None, "other"),  # a deferred-tool loader, not a web search
         ("mcp__gmail__send_email", "claude_code", None, "email"),
         ("mcp__slack__slack_post_message", "claude_code", None, "messaging"),
         ("mcp__discord__send", "claude_code", None, "messaging"),

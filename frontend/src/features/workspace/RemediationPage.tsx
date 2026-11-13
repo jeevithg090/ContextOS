@@ -17,17 +17,17 @@ export function RemediationPage() {
   const state = oneOf(get("state"), REMEDIATION_STATES);
   const severity = oneOf(get("severity"), SEVERITIES);
   const q = get("q");
-  const includeSimulations = get("simulations") !== "exclude";
+  const includeSimulated = get("sim") === "1";
   const pagination = usePagination(50);
   const { reset } = pagination;
 
-  useEffect(() => reset(), [state, severity, q, includeSimulations, reset]);
+  useEffect(() => reset(), [state, severity, q, includeSimulated, reset]);
 
   const query = useRemediationPipeline({
     state,
     severity,
     q: q || undefined,
-    include_simulations: includeSimulations,
+    include_simulated: includeSimulated,
     ...pagination.params,
   });
   const page = query.data;
@@ -53,7 +53,7 @@ export function RemediationPage() {
             canClear={filtered}
             onClear={() => set({ state: null, severity: null, q: null })}
             actions={
-              <Checkbox label="Include Simulation Lab findings" checked={includeSimulations} onChange={(v) => set({ simulations: v ? null : "exclude" })} />
+              <Checkbox label="Include Simulation Lab findings" checked={includeSimulated} onChange={(v) => set({ sim: v ? "1" : null })} />
             }
           >
             <SearchInput value={q} onChange={(v) => set({ q: v })} placeholder="Search finding titles…" label="Search findings" className="w-64" />

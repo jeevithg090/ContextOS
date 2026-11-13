@@ -74,9 +74,13 @@ export const VERDICT_META: Record<Verdict, { label: string; status: string; desc
 
 const ENFORCEMENT_IN_ACTUAL = /^[A-Z_]+ \((enforced|advisory|observed)\)/;
 
-/** Enforcement mode recorded for a step, parsed from the server's "DECISION (mode)" wording. */
-export function observationEnforcement(o: Pick<ObservationResult, "actual" | "decision">): EnforcementMode | null {
+/**
+ * Enforcement mode recorded for a step. Uses the server's `enforcement` field; runs recorded before
+ * that field existed fall back to parsing the "DECISION (mode)" wording.
+ */
+export function observationEnforcement(o: Pick<ObservationResult, "actual" | "decision" | "enforcement">): EnforcementMode | null {
   if (!o.decision) return null;
+  if (o.enforcement === "enforced" || o.enforcement === "advisory" || o.enforcement === "observed") return o.enforcement;
   const m = ENFORCEMENT_IN_ACTUAL.exec(o.actual ?? "");
   return m ? (m[1] as EnforcementMode) : null;
 }
@@ -91,7 +95,7 @@ export interface StepOutcomeText {
  * enforced at the boundary; advisory/observed decisions are described as such. Nothing in a
  * simulation is ever executed, so allowed steps say "would have run".
  */
-export function describeObservation(o: Pick<ObservationResult, "actual" | "decision">): StepOutcomeText {
+export function describeObservation(o: Pick<ObservationResult, "actual" | "decision" | "enforcement">): StepOutcomeText {
   const actual = o.actual ?? "";
   if (actual.startsWith("pipeline error")) return { text: "The pipeline reported an error for this step.", tone: "danger" };
   if (actual.startsWith("not run")) return { text: "Not submitted — an earlier step failed.", tone: "neutral" };

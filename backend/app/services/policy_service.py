@@ -215,7 +215,7 @@ def _like_contains_quoted(value: str) -> str:
 
 
 def decisions_for_policy(
-    db: Session, org_id: str, policy_id: str, *, days: int, limit: int, offset: int, include_simulation: bool
+    db: Session, org_id: str, policy_id: str, *, days: int, limit: int, offset: int, include_simulated: bool
 ) -> tuple[list[dict[str, Any]], int]:
     """Recorded decisions (newest first) in which the policy matched, in enforce or monitor mode."""
     get_policy(db, org_id, policy_id)
@@ -233,7 +233,7 @@ def decisions_for_policy(
         )
         .order_by(PolicyDecision.evaluated_at.desc(), PolicyDecision.id.desc())
     )
-    if not include_simulation:
+    if not include_simulated:
         stmt = stmt.where(PolicyDecision.is_simulation.is_(False))
     hits: list[tuple[str, str, dict[str, Any]]] = []
     for decision_id, matched, monitor in db.execute(stmt):
@@ -272,7 +272,7 @@ def recent_decisions(
     decision: str | None = None,
     session_id: str | None = None,
     agent_id: str | None = None,
-    include_simulation: bool = True,
+    include_simulated: bool = False,
 ) -> tuple[list[dict[str, Any]], int]:
     """Recorded decisions to pick as dry-run test inputs (newest first)."""
     stmt = scoped(PolicyDecision, org_id)
@@ -282,7 +282,7 @@ def recent_decisions(
         stmt = stmt.where(PolicyDecision.session_id == session_id)
     if agent_id:
         stmt = stmt.where(PolicyDecision.agent_id == agent_id)
-    if not include_simulation:
+    if not include_simulated:
         stmt = stmt.where(PolicyDecision.is_simulation.is_(False))
     stmt = stmt.order_by(PolicyDecision.evaluated_at.desc(), PolicyDecision.id.desc())
     rows, total = paginate(db, stmt, limit=limit, offset=offset)

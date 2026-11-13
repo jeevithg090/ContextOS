@@ -364,3 +364,28 @@ def test_mcp_listing_refs_carry_the_servers_trust_level(client, seeded_org):
     source = client.get(f"/api/v1/context/sources/{connected['refs']['source_id']}",
                         headers=seeded_org.user_headers).json()
     assert level == source["trust_level"]
+
+
+def test_event_log_hides_simulated_events_unless_asked(client, seeded_org, db):
+    from app.events.envelope import EventEnvelope
+    from app.services.ingestion import IngestContext, ingest_event
+
+    h = seeded_org.api_headers
+    post_events(client, h, event("prompt.submitted", content="real work", session="ext-real"))
+    simulated = EventEnvelope.model_validate(event("prompt.submitted", content="simulated", session="ext-sim"))
+    ingest_event(db, IngestContext(org_id=seeded_org.org_id, actor_type="system", is_simulation=True), simulated)
+    db.commit()
+
+    def listed(**params):
+        response = client.get("/api/v1/events", headers=seeded_org.user_headers, params=params)
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    default = listed(event_type="prompt.submitted")
+    assert default["total"] == 1 and default["items"][0]["is_simulation"] is False
+    assert listed(event_type="prompt.submitted", include_simulated="false")["total"] == 1
+    everything = listed(event_type="prompt.submitted", include_simulated="true")
+    assert everything["total"] == 2 and sorted(e["is_simulation"] for e in everything["items"]) == [False, True]
+    # A simulated session's events stay hidden unless asked for, as findings and sessions do.
+    assert listed(session_id="ext-sim")["total"] == 0
+    assert listed(session_id="ext-sim", include_simulated="true")["total"] == 1

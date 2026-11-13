@@ -83,7 +83,7 @@ class EngineeringAnalyticsOut(BaseModel):
     window_days: int
     window_start: datetime
     board_id: str | None = Field(description="Task metrics are limited to this board; finding metrics never are")
-    include_simulations: bool
+    include_simulated: bool
     open_tasks: int
     overdue: int = Field(description="Open tasks whose due date has passed")
     by_priority: list[CountOut] = Field(description="Open tasks per priority (every priority, canonical order)")

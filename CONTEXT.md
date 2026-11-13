@@ -25,7 +25,8 @@ updates. React 18 SPA (`frontend/`). Integrations in `sdk/` speak HTTP only. Det
   provenance → risk → policy → findings/incidents → persist/audit/notify; per-event SAVEPOINT and
   visible processing errors.
 - Engines: secret redaction with keyed fingerprints; deterministic injection/credential/exfiltration
-  detection (content test split P 0.968 / R 0.931; tool requests P 0.850 / R 0.895 —
+  detection (content test split P 0.968 / R 0.931; tool requests P 1.000 / R 0.895 after a disclosed
+  post-hoc fix, 0.850 on the first held-out run —
   [docs/DETECTION_EVALUATION.md](docs/DETECTION_EVALUATION.md)); trust rules + evidence; policy DSL
   with enforce/monitor modes; lethal-trifecta session risk; agent posture; provenance risky paths;
   signed Context Receipts.
@@ -42,14 +43,14 @@ updates. React 18 SPA (`frontend/`). Integrations in `sdk/` speak HTTP only. Det
   9 Simulation Lab scenarios, `seed-demo` through the real pipeline, Alembic migrations,
   production settings validation, Dockerfile and docker-compose.
 
-Verification on 2026-11-11 (this machine):
+Verification on 2026-11-11 (release review) and 2026-11-13 (after the follow-up fixes), this machine:
 
 | Suite | Command | Result |
 |---|---|---|
-| Backend (SQLite) | `cd backend && .venv/bin/python -m pytest -q -p no:cacheprovider tests` | 1751 passed (X1 release review; 1750 in the clean copy before its one added test) |
+| Backend (SQLite) | `cd backend && .venv/bin/python -m pytest -q -p no:cacheprovider tests` | 1780 passed (2026-11-13; 1751 at the X1 release review) |
 | Backend (PostgreSQL 17.11, scratch DB) | same with `CONTEXTOS_TEST_DATABASE_URL=postgresql+psycopg://…/contextos_test` | 1751 passed (X1 release review) |
-| SDK / CLI / adapters | `make test-sdk` | 387 passed |
-| Frontend | `cd frontend && npx tsc -b --noEmit && npx eslint src && npx vitest run`; `npm run build` | clean, clean, 367 passed (47 files); build OK |
+| SDK / CLI / adapters | `make test-sdk` | 387 passed (2026-11-13) |
+| Frontend | `cd frontend && npx tsc -b --noEmit && npx eslint src && npx vitest run`; `npm run build` | clean, clean, 492 passed (66 files, every page has a page-level render test); build OK (2026-11-13) |
 | Backend lint / types | `cd backend && .venv/bin/ruff check app tests`; `.venv/bin/mypy app/engines app/workspace app/core app/domain app/events` | clean; clean (services/routes are not mypy-clean: ~320 mostly SQLAlchemy typing errors) |
 | Quick start | `init-db`, `create-org`, `create-api-key`, `serve`, `contextos init --claude-code`, `contextos doctor`, hook `deny`, `contextos simulate`, `seed-demo`, `purge --dry-run` | all as documented (SQLite and PostgreSQL) |
 
@@ -85,13 +86,14 @@ walk was done afterwards (below) and found no problem.
 | 19 | Automated tests pass | met | counts in the table above; ruff, tsc, ESLint clean |
 | 20 | Installation docs | met | README quick start run as written (ports moved to 18000–18999 for this review); `doc_paths.py`: 42 documents, 0 missing references |
 | 21 | Limitations documented | met | "Known problems" below, `docs/RELEASE_NOTES.md`, `docs/PRODUCT_IMPROVEMENTS.md` |
-| 22 | No placeholder interfaces | met | no TODO/"coming soon"/lorem text in `backend/app`, `sdk/contextos`, `frontend/src`; every route module has routes; every page's GET endpoints answer with data. Signed-in browser walk (built SPA from `contextos-server serve`, fresh DB + `seed-demo`): all 22 nav pages, 7 detail/drawer views and a not-found page render at 1280 px with 0 console errors; the same 26 views at 375 px have no horizontal scroll; "blocked" only for DENY to an enforcing integration. Still open: 17 of 29 pages have no page-level render test (their components do) |
+| 22 | No placeholder interfaces | met | no TODO/"coming soon"/lorem text in `backend/app`, `sdk/contextos`, `frontend/src`; every route module has routes; every page's GET endpoints answer with data. Signed-in browser walk (built SPA from `contextos-server serve`, fresh DB + `seed-demo`): all 22 nav pages, 7 detail/drawer views and a not-found page render at 1280 px with 0 console errors; the same 26 views at 375 px have no horizontal scroll; "blocked" only for DENY to an enforcing integration. Every page now has a page-level render test (loading, error, empty and data states) |
 
 ## Known problems and limitations
 
-- **Page-level render tests**: 17 of 29 pages have no Vitest test that renders the page (their
-  components are tested); a manual signed-in browser walk covered every page for 0.1.0
-  ([PRODUCT_IMPROVEMENTS.md](docs/PRODUCT_IMPROVEMENTS.md) #21).
+- **No scripted browser walk**: every page has a Vitest render test, but the signed-in click-through
+  in a real browser was done by hand for 0.1.0 and is not automated
+  ([PRODUCT_IMPROVEMENTS.md](docs/PRODUCT_IMPROVEMENTS.md) #21). The provenance page test stands in
+  a stub for the React Flow canvas (jsdom has no layout); its layout logic has unit tests.
 - **npm advisories needing major upgrades**: two moderate `react-router` 6.x advisories are fixed
   only in v7 (they do not apply to this SPA: no SSR, all navigation targets are app-defined paths);
   dev/test tooling (`vitest` 2, `typescript-eslint`, `eslint`) has advisories that need majors. The
@@ -101,8 +103,8 @@ walk was done afterwards (below) and found no problem.
 - **Enforcement gaps** (by design of the hosts): disabled or bypassed Claude Code hooks, MCP servers
   not behind the gateway, code not wrapped by `guard()`, and files touched inside shell commands are
   not covered. Path RESTRICTs on opaque tools deny.
-- **Detection is lexical**: semantic paraphrases without trigger vocabulary are missed; tool-request
-  precision 0.850 is below the 0.90 target (one benign seed, `echo $PATH`).
+- **Detection is lexical**: semantic paraphrases without trigger vocabulary are missed; secrets are
+  recognised in `echo`/`printf` by variable name only, so a credential under an innocuous name is not.
 - **MCP tool calls have no default `mcp:<server>` destination** (would make local MCP servers count
   as outbound). Mitigation: the built-in "Deny credentials in tool arguments after prompt injection".
 - **Lock ordering (PostgreSQL)**: WIP-limit checks, "task from finding" and default-board seeding take the
@@ -113,7 +115,6 @@ walk was done afterwards (below) and found no problem.
   replicas would need a shared bus/limiter.
 - **MCP gateway**: stdio upstreams only; sampling, elicitation, roots and subscriptions are not
   proxied; `tools/list` is flattened (≤ 100 upstream pages); text-only scanning.
-- **Claude Code**: `ToolSearch` (deferred tool loader) is classified as a generic `search` tool.
 - **Audit chain**: detects tampering by anyone without `CONTEXTOS_SECRET_KEY`; an attacker with DB
   write access *and* the secret can rewrite it (export `audit_head_hash` externally). Rotating the
   secret invalidates fingerprints, receipt signatures and chain verification.

@@ -2,8 +2,8 @@
  * Engineering analytics and remediation pipeline hooks.
  * Backend contract: backend/app/api/routes/workspace_analytics.py
  *
- *   GET /workspace/analytics?window=30d&board_id=&include_simulations=  -> EngineeringAnalytics
- *   GET /workspace/analytics/remediation?state=&severity=&q=&include_simulations=&limit=&offset= -> RemediationPage
+ *   GET /workspace/analytics?window=30d&board_id=&include_simulated=  -> EngineeringAnalytics
+ *   GET /workspace/analytics/remediation?state=&severity=&q=&include_simulated=&limit=&offset= -> RemediationPage
  *
  * Keys start with "workspace" so `task.updated` refreshes them. `finding.created`, `finding.updated`
  * (status changes move findings out of, or back into, the open list) and `incident.updated` refresh

@@ -70,7 +70,7 @@ export interface EngineeringAnalytics {
   window_start: string;
   /** Task metrics are limited to this board; finding metrics never are. */
   board_id: string | null;
-  include_simulations: boolean;
+  include_simulated: boolean;
   open_tasks: number;
   overdue: number;
   by_priority: CountItem[];
@@ -94,7 +94,7 @@ export interface EngineeringAnalytics {
 export interface AnalyticsParams {
   window: AnalyticsWindow;
   board_id?: string;
-  include_simulations: boolean;
+  include_simulated: boolean;
 }
 
 export interface RemediationFinding {
@@ -135,7 +135,7 @@ export interface RemediationFilters {
   state?: RemediationState;
   severity?: Severity;
   q?: string;
-  include_simulations: boolean;
+  include_simulated: boolean;
   limit: number;
   offset: number;
 }

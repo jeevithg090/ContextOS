@@ -31,8 +31,9 @@ class ReadAPIMixin:
         return self._request("GET", "/agents", params=params)
 
     def list_events(self, *, session_id: str | None = None, event_type: str | None = None,
-                    limit: int = 50, offset: int = 0) -> Any:
-        params = {"session_id": session_id, "event_type": event_type, "limit": limit, "offset": offset}
+                    limit: int = 50, offset: int = 0, include_simulated: bool = False) -> Any:
+        params = {"session_id": session_id, "event_type": event_type, "limit": limit, "offset": offset,
+                  "include_simulated": "true" if include_simulated else None}
         return self._request("GET", "/events", params=params)
 
     def list_policies(self, *, limit: int = 200, offset: int = 0) -> Any:

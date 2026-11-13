@@ -85,17 +85,20 @@ def events(
     session: str | None = typer.Option(None, "--session", "-s", help="Only events of this session id."),
     event_type: str | None = typer.Option(None, "--type", "-t", help="Only this event type, e.g. tool.requested."),
     limit: int = LIMIT_OPT,
+    include_simulated: bool = SIM_OPT,
     as_json: bool = JSON_OPT,
 ) -> None:
-    """List recently ingested events (newest first)."""
+    """List recently ingested events (newest first). Simulation Lab events are hidden unless asked for."""
     cfg = get_config()
     with cli_errors(cfg.url):
-        payload = get_client(cfg).list_events(session_id=session, event_type=event_type, limit=limit)
+        payload = get_client(cfg).list_events(session_id=session, event_type=event_type, limit=limit,
+                                              include_simulated=include_simulated)
     if as_json:
         return print_json(payload)
     rows = items_of(payload)
     if not rows:
-        out().print("No events match." if session or event_type else "No events recorded yet.")
+        hint = "" if include_simulated else " Simulated events are hidden: --include-simulated."
+        out().print(("No events match." if session or event_type else "No events recorded yet.") + hint)
         return
     table = Table(title="Events" + (f" — session {session}" if session else ""), title_justify="left")
     for col in ("Received", "Type", "Agent", "Session", "Integration", "Processing", "ID", ""):
