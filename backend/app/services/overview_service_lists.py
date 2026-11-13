@@ -63,6 +63,8 @@ F, Inv = SecurityFinding, ToolInvocation
 _ENFORCING_NOTES = {
     "claude_code": "The PreToolUse hook asks ContextOS before each tool call and Claude Code does not run denied calls.",
     "mcp_gateway": "The gateway asks ContextOS before forwarding each MCP tool call and refuses denied ones.",
+    "openai_codex": "The PreToolUse hook asks ContextOS before each tool call that reaches it and Codex does not run "
+                    "blocked calls.",
     "python_sdk": "guard() asks ContextOS before each guarded function runs; code that bypasses the guard is not covered.",
 }
 _REPORT_ONLY_NOTE = ("This integration only reports events: decisions returned to it are advisory and ContextOS "

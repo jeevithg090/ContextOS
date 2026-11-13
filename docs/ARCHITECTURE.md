@@ -45,7 +45,7 @@ adapters), [SECURITY_MODEL.md](SECURITY_MODEL.md) (controls), [ARCHITECTURE_DECI
 | `backend/app/schemas/` | Pydantic request/response models (`*In`, `*Out`, `Page[T]`) |
 | `backend/app/models/` | SQLAlchemy tables (41), `database/` engine, session, Alembic integration |
 | `backend/alembic/` | migrations (`versions/0001_initial_schema.py`, `0002_incident_seq.py`) |
-| `sdk/contextos/` | Python SDK, `contextos` CLI, `integrations/claude_code`, `integrations/mcp_gateway` |
+| `sdk/contextos/` | Python SDK, `contextos` CLI, `integrations/claude_code`, `integrations/codex`, `integrations/mcp_gateway` |
 | `frontend/src/` | React 18 + TypeScript SPA: `app/` (routes, nav), `features/<area>/`, `components/`, `hooks/useLiveEvents.ts`, `lib/domain.ts` |
 
 ## Layers and dependency rules
@@ -137,7 +137,7 @@ computed in `app/services/ingestion_state.py`):
 
 | Mode | Meaning | When |
 |---|---|---|
-| `enforced` | Decision returned at a real execution boundary that honours DENY and approvals | `POST /decide` from an integration in `ENFORCING_INTEGRATIONS` = `claude_code` (PreToolUse hook), `mcp_gateway` (`tools/call`), `python_sdk` (`guard()`) |
+| `enforced` | Decision returned at a real execution boundary that honours DENY and approvals | `POST /decide` from an integration in `ENFORCING_INTEGRATIONS` = `claude_code` (PreToolUse hook), `openai_codex` (Codex PreToolUse hook), `mcp_gateway` (`tools/call`), `python_sdk` (`guard()`) |
 | `advisory` | Decision returned, but the caller may ignore it | `POST /decide` from any other `integration` value (default `custom`) |
 | `observed` | Reported after execution; nothing could be prevented | `POST /events` (e.g. `tool.completed`, `context.ingested`, a `tool.requested` spooled while ContextOS was unreachable) |
 

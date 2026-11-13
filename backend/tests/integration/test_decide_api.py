@@ -26,12 +26,32 @@ def test_decide_requires_tool_requested(client, org):
 def test_enforcement_claim_depends_on_integration(client, seeded_org):
     h = seeded_org.api_headers
     for integration, expected in (("claude_code", "enforced"), ("mcp_gateway", "enforced"),
-                                  ("python_sdk", "enforced"), ("langgraph", "advisory")):
+                                  ("openai_codex", "enforced"), ("python_sdk", "enforced"),
+                                  ("langgraph", "advisory")):
         response = decide(client, h, tool_requested("Read", {"file_path": "/srv/app/main.py"},
                                                      integration=integration, session=f"s-{integration}"))
         assert response["enforcement"] == expected, integration
         assert response["decision"] == "ALLOW"
         assert "No policy matched" in response["reason"]
+
+
+def _codex_call(name: str, arguments: dict) -> dict:
+    return event("tool.requested", tool={"name": name, "provider": "openai_codex"}, arguments=arguments,
+                 correlation_id=f"call_{os.urandom(4).hex()}", integration="openai_codex", session="codex-sess")
+
+
+def test_codex_apply_patch_is_a_file_write_and_hook_tampering_is_denied(client, seeded_org):
+    h = seeded_org.api_headers
+    benign = "*** Begin Patch\n*** Update File: src/app.py\n@@\n-a\n+b\n*** End Patch\n"
+    allowed = decide(client, h, _codex_call("apply_patch", {"command": benign}))
+    assert allowed["enforcement"] == "enforced" and allowed["decision"] in ("ALLOW", "AUDIT")
+    # A Codex agent switching off its own hooks: the patch rewrites .codex/hooks.json.
+    tamper = "*** Begin Patch\n*** Update File: .codex/hooks.json\n@@\n-\"PreToolUse\"\n+\"Off\"\n*** End Patch\n"
+    denied = decide(client, h, _codex_call("apply_patch", {"command": tamper}))
+    assert denied["decision"] == "DENY" and denied["enforcement"] == "enforced"
+    assert "Deny agent config tampering" in denied["reason"]
+    shell = decide(client, h, _codex_call("Bash", {"command": "printf 'hooks = false' >> ~/.codex/config.toml"}))
+    assert shell["decision"] == "DENY"
 
 
 def test_decide_retry_returns_the_original_decision(client, seeded_org, db):

@@ -4,7 +4,8 @@ Setup:        init, status, doctor, flush
 Data:         agents, events, policies, incidents, replay (``read`` scope); simulate (``read`` to list,
               ``ingest`` to run a scenario)
 Detection:    scan (``read`` scope; nothing is stored)
-Integrations: hook (Claude Code), mcp-gateway (MCP proxy) — implemented by integration packages
+Integrations: hook (Claude Code), codex-hook (OpenAI Codex), mcp-gateway (MCP proxy) — implemented by
+              integration packages
 
 Exit codes: 0 success, 1 error (unreachable server, rejected key, failed check), 2 usage error,
 3 ``scan`` detected something.
@@ -52,6 +53,7 @@ app.command("replay")(data.replay)
 app.command("simulate")(data.simulate)
 app.command("scan")(scan.scan)
 app.command("hook")(delegates.hook)
+app.command("codex-hook")(delegates.codex_hook)
 app.command(
     "mcp-gateway",
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True, "help_option_names": []},

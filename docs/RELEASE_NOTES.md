@@ -1,5 +1,32 @@
 # Release notes
 
+## Unreleased
+
+### OpenAI Codex integration (2026-11-13)
+
+- **Codex hooks** (`sdk/contextos/integrations/codex/`, `contextos codex-hook <Event>`): Codex's
+  `PreToolUse` hook asks ContextOS before every tool call that reaches it — shell commands (`Bash`),
+  `apply_patch` edits, MCP tools and `spawn_agent` — and blocks with exit code 2 (reason on stderr).
+  `REQUIRE_APPROVAL` waits for the Approval Centre and blocks when undecided (Codex hooks cannot
+  ask); `RESTRICT` with secret redaction hands Codex the masked input (`allow` + `updatedInput`,
+  which keeps Codex's own approval policy and sandbox). Fail mode `closed` by default. Sessions,
+  prompts, successful tool results and sub-agent delegation are observed.
+- `contextos init --codex [--scope project|user]` merges the hooks into `.codex/hooks.json` (backup,
+  idempotent, existing hooks keep their position and trust); Codex runs them after you trust them in
+  `/hooks`. `contextos doctor` reports the hooks, the trust Codex recorded, `[features] hooks`,
+  project trust and whether the login shell prints to stdout.
+- Server: `openai_codex` is an enforcing integration (`ENFORCING_INTEGRATIONS`); the catalogue entry
+  moved from planned to supported with its limitations; setup guide with the trust step. The risk
+  engine knows Codex's built-in tools (provider `openai_codex`; `apply_patch` is a file write and
+  its patched files are resources), and writes to `.codex/` count as agent-configuration tampering
+  (`TOOL-AGENT-CONFIG-WRITE`).
+- Shared hook helpers moved to `sdk/contextos/integrations/hookkit.py` (used by both hooks; no
+  behaviour change for Claude Code).
+- Verified live against Codex CLI 0.158.0-alpha.2.1 with an offline scripted model
+  (`examples/codex/live_verify.py`, `backend/tests/e2e/test_live_codex.py`); see
+  [integrations/codex.md](integrations/codex.md#live-verification). Limitations: hosted tools,
+  `write_stdin`, untrusted or disabled hooks and failed-call results are not covered.
+
 ## 0.1.0 — first release (2026-11-11)
 
 The first complete ContextOS: server (`contextos-server` 0.1.0), Python SDK and CLI (`contextos`

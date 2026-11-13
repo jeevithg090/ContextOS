@@ -33,8 +33,10 @@ PY_ROOTS = {"app": REPO / "backend" / "app", "contextos": REPO / "sdk" / "contex
 HOST_PATHS = {  # files in the project ContextOS is installed into, or in the user's tools — not here
     ".claude/settings.json", ".claude/settings.local.json", ".claude/settings.json.contextos-backup",
     ".mcp.json", ".cursor/mcp.json", "claude_desktop_config.json", ".env",
+    "hooks.json", "config.toml", "hooks.json.contextos-backup",  # Codex (~/.codex or <project>/.codex)
 }
-HOST_PREFIXES = (".contextos/", "backend/data/", "frontend/dist/", "node_modules/")  # runtime / generated
+# runtime / generated, the user's Codex configuration, and paths in the Codex source repository
+HOST_PREFIXES = (".contextos/", "backend/data/", "frontend/dist/", "node_modules/", ".codex/", "codex-rs/")
 KNOWN_ROOTS = {"backend", "frontend", "sdk", "docs", "examples", "scripts", ".claude", "app", "src", "tests",
                "contextos", "alembic"}
 SKIP_DIRS = {".git", "node_modules", ".venv", "dist", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache",
