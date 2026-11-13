@@ -84,7 +84,7 @@ class IntegrationsOut(BaseModel):
 
 
 class SetupCommandOut(BaseModel):
-    language: str  # bash | json | toml | python
+    language: str  # bash | json | toml | python | text
     code: str
     title: str | None = None
 

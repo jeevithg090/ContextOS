@@ -48,7 +48,7 @@ EXFIL_SERVICES = (
 AGENT_CONFIG_PATTERNS = (
     r"\.claude/settings[^/\s]*\.json", r"\.claude/", r"\.cursor/", r"\.cursorrules\b",
     r"\bAGENTS?\.md\b", r"\bCLAUDE\.md\b", r"\.mcp\.json\b", r"\.aider[^/\s]*\b",
-    r"\.continue/", r"\.github/copilot", r"\.windsurfrules\b",
+    r"\.continue/", r"\.github/copilot", r"\.windsurfrules\b", r"\.codex/",
 )
 
 TOOL_RULES: list[ToolRule] = [
@@ -192,9 +192,9 @@ TOOL_RULES: list[ToolRule] = [
         "Write to agent/editor configuration",
         Severity.HIGH,
         0.8,
-        "The call writes to an agent or editor configuration file (.claude/settings, .cursor/, "
-        "AGENTS.md, CLAUDE.md, .mcp.json). Editing these can silently grant new tools or inject "
-        "standing instructions into every future session.",
+        "The call writes to an agent or editor configuration file (.claude/settings, .codex/, .cursor/, "
+        "AGENTS.md, CLAUDE.md, .mcp.json). Editing these can silently grant new tools, switch off the "
+        "agent's hooks or inject standing instructions into every future session.",
         _rx("|".join(AGENT_CONFIG_PATTERNS)),
     ),
 ]

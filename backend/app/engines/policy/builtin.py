@@ -12,7 +12,7 @@ semantics: ``TOOL-DESTRUCTIVE-*`` rules report ``suspicious_tool_use`` (matched 
 writes, persistence and reverse shells ("Deny agent config tampering and privilege escalation").
 
 A decision only stops a tool call where the integration enforces it at an execution boundary
-(Claude Code PreToolUse hook, MCP gateway, SDK ``guard()``). Elsewhere the same decision is
+(Claude Code and Codex PreToolUse hooks, MCP gateway, SDK ``guard()``). Elsewhere the same decision is
 advisory or observed, and the UI labels it that way.
 
 Every ``conditions`` object here must pass ``validate_conditions`` (asserted by the unit tests).

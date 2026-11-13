@@ -1,7 +1,7 @@
 """Tool-name parsing and keyword inference (pure data + small helpers).
 
-Knows the Claude Code built-in tools, the ``mcp__<server>__<tool>`` naming convention and common
-MCP / framework verbs. Inference is ordered from most to least specific so that, for example,
+Knows the Claude Code and OpenAI Codex built-in tools, the ``mcp__<server>__<tool>`` naming
+convention and common MCP / framework verbs. Inference is ordered from most to least specific so that, for example,
 ``execute_sql`` is a database tool (not code execution) and ``gmail_fetch`` is email (not HTTP).
 """
 
@@ -40,6 +40,46 @@ BUILTINS: dict[str, tuple[str, str, str | None]] = {
     "ExitPlanMode": (C.OTHER, "leaves planning mode", None),
     "SlashCommand": (C.OTHER, "runs a user-defined slash command prompt", None),
 }
+
+# OpenAI Codex built-ins, as Codex names them in its hook payloads (provider ``openai_codex``).
+# ``apply_patch`` carries ``{"command": <patch text>}``: without this entry the ``command`` argument
+# would make it look like a shell call.
+CODEX_PROVIDER = "openai_codex"
+CODEX_BUILTINS: dict[str, tuple[str, str, str | None]] = {
+    "Bash": (C.SHELL, "runs shell commands (exec_command)", None),
+    "apply_patch": (C.FILE_WRITE, "edits files by applying a patch", None),
+    "view_image": (C.FILE_READ, "reads a local image", None),
+    "spawn_agent": (C.AGENT_DELEGATION, "starts a sub-agent with a task", None),
+    "send_input": (C.AGENT_DELEGATION, "sends more work to a running sub-agent", None),
+    "send_message": (C.AGENT_DELEGATION, "sends more work to a running sub-agent", None),
+    "followup_task": (C.AGENT_DELEGATION, "sends more work to a running sub-agent", None),
+    "resume_agent": (C.AGENT_DELEGATION, "resumes a sub-agent", None),
+    "wait_agent": (C.OTHER, "waits for sub-agents to finish", None),
+    "list_agents": (C.OTHER, "lists the session's sub-agents", None),
+    "close_agent": (C.OTHER, "stops a sub-agent and runs nothing new", None),
+    "interrupt_agent": (C.OTHER, "interrupts a sub-agent and runs nothing new", None),
+    "update_plan": (C.OTHER, "updates the agent's own plan", None),
+    "request_user_input": (C.OTHER, "asks the user a question", None),
+    "list_mcp_resources": (C.FILE_READ, "lists resources exposed by connected MCP servers", None),
+    "list_mcp_resource_templates": (C.FILE_READ, "lists resource templates exposed by connected MCP servers", None),
+    "read_mcp_resource": (C.FILE_READ, "reads a resource exposed by a connected MCP server", None),
+}
+# Codex names a namespaced tool "<namespace><name>" in hook payloads (``flat_tool_name``), so the
+# multi-agent v1 tools arrive as e.g. "multi_agent_v1wait_agent" (spawn_agent alone is special-cased).
+CODEX_MULTI_AGENT_NAMESPACE = "multi_agent_v1"
+CODEX_BUILTINS.update({
+    CODEX_MULTI_AGENT_NAMESPACE + name: entry for name, entry in list(CODEX_BUILTINS.items())
+    if entry[0] == C.AGENT_DELEGATION or name.endswith("_agent") or name == "list_agents"
+})
+_HOST_LABELS = {CODEX_PROVIDER: "Codex"}
+
+
+def builtin_for(tool: str, provider: str | None) -> tuple[tuple[str, str, str | None] | None, str]:
+    """``(entry, host label)`` for a host built-in; Codex names resolve only for its own provider."""
+    if (provider or "").strip().lower() == CODEX_PROVIDER:
+        return CODEX_BUILTINS.get(tool), _HOST_LABELS[CODEX_PROVIDER]
+    return BUILTINS.get(tool), "Claude Code"
+
 
 FILE_OBJECTS = {"file", "files", "directory", "directories", "dir", "folder", "path", "paths", "contents",
                 "content", "notebook", "document", "documents", "tree"}

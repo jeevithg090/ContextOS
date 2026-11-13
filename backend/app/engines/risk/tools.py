@@ -16,11 +16,11 @@ from app.domain.enums import OUTBOUND_CATEGORIES, RiskLevel, ToolCategory
 from app.engines.risk.resources import command_text, extract_resources
 from app.engines.risk.shell import analyze_command
 from app.engines.risk.tool_names import (
-    BUILTINS,
     READ_VERBS,
     SEND_VERBS,
     WEB_SEARCH_TOKENS,
     ParsedName,
+    builtin_for,
     infer_category,
     name_tokens,
     parse_tool_name,
@@ -91,11 +91,12 @@ def _shape_category(args: dict[str, Any]) -> tuple[str, str] | None:
     return None
 
 
-def _resolve_category(parsed: ParsedName, hint: str | None, args: dict[str, Any]) -> tuple[str, str, bool]:
+def _resolve_category(parsed: ParsedName, hint: str | None, args: dict[str, Any],
+                      provider: str | None = None) -> tuple[str, str, bool]:
     """(category, reason, came_from_hint)."""
-    builtin = BUILTINS.get(parsed.tool) if not parsed.is_mcp else None
+    builtin, host = builtin_for(parsed.tool, provider) if not parsed.is_mcp else (None, "")
     if builtin:
-        return builtin[0], f"Claude Code built-in '{parsed.tool}' {builtin[1]}.", False
+        return builtin[0], f"{host} built-in '{parsed.tool}' {builtin[1]}.", False
     origin = f"MCP tool '{parsed.tool}' on server '{parsed.server}'" if parsed.is_mcp and parsed.server else (
         f"MCP tool '{parsed.tool}'" if parsed.is_mcp else f"Tool '{parsed.tool}'")
     found = infer_category(name_tokens(parsed.tool))
@@ -142,12 +143,12 @@ def classify_tool(
 ) -> ToolClassification:
     args = arguments if isinstance(arguments, dict) else {}
     parsed = parse_tool_name(name, provider, server)
-    category, reason, from_hint = _resolve_category(parsed, category_hint, args)
+    category, reason, from_hint = _resolve_category(parsed, category_hint, args, provider)
     reasons = [reason]
     risk = BASE_RISK.get(category, RiskLevel.LOW)
     tokens = name_tokens(parsed.tool) | (name_tokens(parsed.server) if parsed.server else set())
 
-    builtin = BUILTINS.get(parsed.tool) if not parsed.is_mcp else None
+    builtin = builtin_for(parsed.tool, provider)[0] if not parsed.is_mcp else None
     if builtin and builtin[2]:
         risk = builtin[2]
     if from_hint and parsed.is_mcp:

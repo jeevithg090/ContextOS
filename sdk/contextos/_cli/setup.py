@@ -31,7 +31,7 @@ FAIL_MODE_MEANING = {"closed": "guarded tools are denied", "open": "guarded tool
 
 SCOPE_PURPOSE = {
     "ingest": "report events (sessions, context, tool results); run Simulation Lab scenarios (contextos simulate)",
-    "decide": "enforce policy before tools run (guard(), Claude Code PreToolUse, MCP gateway)",
+    "decide": "enforce policy before tools run (guard(), Claude Code and Codex PreToolUse, MCP gateway)",
     "read": "CLI data commands (agents, events, policies, incidents, replay, simulate --list) and scan",
 }
 
@@ -54,11 +54,15 @@ def init(
     key_location: str = typer.Option("user", "--key-location", help="Where to store the key: user (~/.contextos, default) or project."),
     skip_verify: bool = typer.Option(False, "--skip-verify", help="Write the config without contacting the server."),
     claude_code: bool = typer.Option(False, "--claude-code", help="Also install the Claude Code hooks for this project."),
-    scope: str = typer.Option("project", "--scope", help="Claude Code settings scope for --claude-code: project, local or user."),
+    codex: bool = typer.Option(False, "--codex", help="Also install the OpenAI Codex hooks (.codex/hooks.json) for this project."),
+    scope: str = typer.Option("project", "--scope", help="Hook scope: project, local or user for --claude-code; project or user for --codex."),
 ) -> None:
     """Configure this project for ContextOS and verify the server and API key."""
     if fail_mode is not None and fail_mode not in FAIL_MODES:
         err().print(f"[red]--fail-mode must be one of {', '.join(FAIL_MODES)}[/red]")
+        raise typer.Exit(EXIT_ERROR)
+    if codex and scope not in ("project", "user"):
+        err().print("[red]--scope for --codex must be 'project' (.codex/hooks.json) or 'user' (~/.codex/hooks.json)[/red]")
         raise typer.Exit(EXIT_ERROR)
     if key_location not in ("user", "project"):
         err().print("[red]--key-location must be 'user' or 'project'[/red]")
@@ -131,7 +135,26 @@ def init(
             raise typer.Exit(EXIT_ERROR) from None
         console.print(f"[green]✓[/green] Claude Code hooks installed ({escape(scope)} scope)"
                       + (f": {escape(str(result))}" if isinstance(result, (str, Path)) else ""))
+    if codex:
+        _install_codex(project, scope)
     console.print("Next: [bold]contextos doctor[/bold] to re-check, or wrap tools with [bold]@contextos.guard(...)[/bold].")
+
+
+def _install_codex(project: Path, scope: str) -> None:
+    install = load_optional("contextos.integrations.codex.install", "install_hooks", "Codex hooks")
+    if install is None:
+        raise typer.Exit(EXIT_ERROR)
+    try:
+        report = install(project, scope)
+    except (OSError, ValueError, ContextOSError) as exc:
+        err().print(f"[red]Installing the Codex hooks failed:[/red] {escape(str(exc))}")
+        raise typer.Exit(EXIT_ERROR) from None
+    console = out()
+    console.print(f"[green]✓[/green] Codex hooks installed ({escape(scope)} scope): {escape(str(report))}")
+    if getattr(report, "backup", None):
+        console.print(f"  original file kept at {escape(str(report.backup))}")
+    for warning in getattr(report, "warnings", []):
+        console.print(f"[yellow]![/yellow] {escape(warning)}")
 
 
 def status() -> None:
@@ -172,8 +195,24 @@ def _hooks_check(project: Path) -> tuple[bool | None, str]:
     return None, str(detail or "not installed (optional): contextos init --claude-code")
 
 
+def _codex_check(project: Path) -> tuple[bool | None, str]:
+    hooks_status = load_optional("contextos.integrations.codex.install", "hooks_status", "Codex hooks", quiet=True)
+    if hooks_status is None:
+        return None, "Codex integration is not available in this SDK build"
+    try:
+        result = hooks_status(project)
+    except (OSError, ValueError) as exc:
+        return False, f"could not read the Codex hooks: {exc}"
+    detail = str(result.get("detail") or "")
+    if not result.get("ok", True):
+        return False, detail
+    if result.get("installed") and not result.get("warning"):
+        return True, detail
+    return None, detail or "not installed (optional): contextos init --codex"
+
+
 def doctor(project_dir: Path = typer.Option(Path("."), "--project-dir", help="Project to check.", file_okay=False)) -> None:
-    """Diagnose configuration, connectivity, key scopes, the offline spool and Claude Code hooks."""
+    """Diagnose configuration, connectivity, key scopes, the offline spool, and the Claude Code and Codex hooks."""
     project = project_dir.resolve()
     checks: list[tuple[str, bool | None, str]] = []  # (check, ok / None = warning, detail)
     try:
@@ -230,6 +269,8 @@ def doctor(project_dir: Path = typer.Option(Path("."), "--project-dir", help="Pr
         checks.append(("Offline spool", spool_ok, detail))
     ok, detail = _hooks_check(project)
     checks.append(("Claude Code hooks", ok, detail))
+    ok, detail = _codex_check(project)
+    checks.append(("Codex hooks", ok, detail))
 
     _print_checks(checks)
     if any(ok is False for _, ok, _ in checks):

@@ -8,7 +8,8 @@ imports server code.
 - `AgentSession`: report sessions, prompts, context, inter-agent messages, delegation
 - `guard()` / `ToolGuard`: ask for a decision before a tool runs and enforce it
 - `contextos` CLI: `init`, `status`, `doctor`, `flush`, `agents`, `events`, `policies`,
-  `incidents`, `replay`, `simulate`, `scan`, plus `hook` (Claude Code) and `mcp-gateway`
+  `incidents`, `replay`, `simulate`, `scan`, plus `hook` (Claude Code), `codex-hook` (OpenAI Codex)
+  and `mcp-gateway`
 
 ```bash
 pip install -e sdk            # or: pip install -e 'sdk[mcp]' for the MCP gateway
@@ -142,15 +143,16 @@ Retry rules:
 
 | Command | Purpose |
 |---|---|
-| `contextos init [--claude-code]` | Write the project config after checking `/health` and the key's scopes. With `--claude-code`, also install the Claude Code hooks |
+| `contextos init [--claude-code] [--codex]` | Write the project config after checking `/health` and the key's scopes. With `--claude-code` / `--codex`, also install the Claude Code hooks (`.claude/settings.json`) or the Codex hooks (`.codex/hooks.json`; `--scope user` for `~/.codex/hooks.json`) |
 | `contextos status` | Show the active config (key masked), where each value came from, the spool, and whether the server is reachable |
-| `contextos doctor` | Check the config, connectivity, key, scopes, spool size and Claude Code hooks |
+| `contextos doctor` | Check the config, connectivity, key, scopes, spool size, and the Claude Code and Codex hooks (for Codex also the trust Codex recorded, `[features] hooks`, project trust and login-shell stdout) |
 | `contextos flush` | Re-send spooled events now |
 | `contextos agents` / `events [--session ID]` / `policies` / `incidents [--status S]` | Read commands (`--json` prints the raw response). Simulation Lab data is labelled; `agents` and `incidents` leave it out unless `--include-simulated` |
 | `contextos replay <session_id>` | Print a session's recorded timeline. Takes the ContextOS id (`asn_…`) or the integration's own session id (e.g. the SDK's `ses_…`) |
 | `contextos simulate --list` / `simulate <scenario_id>` | Run a Simulation Lab scenario through the real pipeline (needs `ingest` as well as `read`). Results are flagged as simulation |
 | `contextos scan <path…\|->` | Run detection without storing anything. Files at sensitive paths (`.env`, keys, credentials) are not uploaded unless you pass `--force` |
 | `contextos hook <Event>` | Claude Code hook entry point (Claude Code integration package) |
+| `contextos codex-hook <Event>` | OpenAI Codex hook entry point; PreToolUse blocks with exit 2 ([docs/integrations/codex.md](../docs/integrations/codex.md)) |
 | `contextos mcp-gateway …` | MCP gateway (MCP gateway package). Arguments are passed through |
 
 Exit codes:
@@ -162,8 +164,9 @@ Exit codes:
 | 2 | Usage error |
 | 3 | `scan` detected something (turn off with `--no-fail`) |
 
-If the Claude Code hook module cannot be loaded, `contextos hook PreToolUse` exits with 2, which
-tells Claude Code to block the tool call. A broken install therefore fails closed.
+If the Claude Code or Codex hook module cannot be loaded, `contextos hook PreToolUse` /
+`contextos codex-hook PreToolUse` exits with 2 and a reason on stderr, which tells the host to block
+the tool call. A broken install therefore fails closed.
 
 ## Example
 

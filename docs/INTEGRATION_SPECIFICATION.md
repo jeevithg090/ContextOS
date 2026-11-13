@@ -3,7 +3,8 @@
 How agent hosts talk to ContextOS: the event envelope, the decision and approval calls, what each
 shipped adapter observes and enforces, how it fails, and its limits. The adapter-specific details
 are in [integrations/claude-code.md](integrations/claude-code.md),
-[integrations/mcp.md](integrations/mcp.md) and [../sdk/README.md](../sdk/README.md); this document
+[integrations/codex.md](integrations/codex.md), [integrations/mcp.md](integrations/mcp.md) and
+[../sdk/README.md](../sdk/README.md); this document
 is the cross-adapter contract. Building a new adapter: `.claude/skills/integration-builder/SKILL.md`.
 
 ## Transport and authentication
@@ -38,7 +39,7 @@ classifications server-side. Strings are capped at 200 000 characters.
 | `session_id` | id | yes | the integration's own session id |
 | `parent_session_id` | id | no | links a delegated session to its parent |
 | `correlation_id` | ≤ 200 chars | no | pairs `tool.requested` with `tool.completed`/`tool.failed` |
-| `integration` | ≤ 64 chars | no | `claude_code`, `mcp_gateway`, `python_sdk`, or anything else (default `custom`) — decides the enforcement claim |
+| `integration` | ≤ 64 chars | no | `claude_code`, `openai_codex`, `mcp_gateway`, `python_sdk`, or anything else (default `custom`) — decides the enforcement claim |
 | `collected_via` | ≤ 200 chars | no | which hook/callback observed it, e.g. `claude_code:PostToolUse:WebFetch` |
 | `source` | `SourceRef` {`type` (`SourceType`), `identifier` ≤ 2048, `display_name`, `metadata`} | per type | where context came from |
 | `tool` | `ToolRef` {`name`, `provider`=`unknown`, `server`, `category_hint`, `description`} | per type | `category_hint` is recorded for comparison only; the server classifies the tool |
@@ -53,12 +54,12 @@ classifications server-side. Strings are capped at 200 000 characters.
 | `event_type` | Required fields | Typical sender |
 |---|---|---|
 | `session.started`, `session.ended` | — | all |
-| `prompt.submitted` | `content` | Claude Code `UserPromptSubmit`, SDK `AgentSession.prompt` |
+| `prompt.submitted` | `content` | Claude Code and Codex `UserPromptSubmit`, SDK `AgentSession.prompt` |
 | `context.ingested` | `source`, `content` | SDK `ingest_context`, gateway resources/prompts |
 | `tool.requested` | `tool` | `/decide` before the call (or `/events` when observed only / spooled) |
 | `tool.completed`, `tool.failed` | `tool` | after the call |
-| `agent.delegated` | `delegation` | Claude Code `Agent`/`Task`, SDK `child_session` |
-| `agent.message` | `message` | subagent results, SDK `message` |
+| `agent.delegated` | `delegation` | Claude Code `Agent`/`Task`, Codex `spawn_agent`, SDK `child_session` |
+| `agent.message` | `message` | subagent results, a Codex sub-agent's task, SDK `message` |
 | `mcp.server_connected` | `source` (`mcp_server`) | gateway after `tools/list` (tool descriptions and schemas in `metadata`) |
 
 Limits: `POST /events` takes 1–500 events per batch; each event's serialised size must fit
@@ -80,8 +81,8 @@ The SDK truncates content over 200 000 characters with a visible marker.
 ## Decisions and the honest enforcement claim
 
 `decision` is one of `ALLOW`, `AUDIT`, `RESTRICT`, `REQUIRE_APPROVAL`, `DENY`. `enforcement` is the
-server's claim: `enforced` only for `/decide` calls from `claude_code`, `mcp_gateway` or
-`python_sdk` (`ENFORCING_INTEGRATIONS`), `advisory` for `/decide` from any other integration name,
+server's claim: `enforced` only for `/decide` calls from `claude_code`, `openai_codex`,
+`mcp_gateway` or `python_sdk` (`ENFORCING_INTEGRATIONS`), `advisory` for `/decide` from any other integration name,
 `observed` for everything sent to `/events`. A new adapter stays `advisory` until it is added to
 that set with tests proving the boundary.
 
@@ -108,10 +109,11 @@ The same data is served by `GET /api/v1/integrations` (catalogue in
 | Integration (`integration`) | Enforced (before the action) | Observed (after the fact) | Not covered |
 |---|---|---|---|
 | Claude Code hooks (`claude_code`) | `PreToolUse` → `/decide`: DENY → `deny`; REQUIRE_APPROVAL → wait, then no decision / `deny` / `ask`; RESTRICT `redact_secrets` → `ask` with masked input; other restrictions checked or `deny` | `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure`, `SubagentStop`, `SessionEnd` | disabled hooks (`disableAllHooks`, `--settings`, `--bare`, untrusted workspace); anything done without a tool call; files a shell command touches. The hook never answers `allow`, so it can only make Claude Code stricter. |
+| OpenAI Codex hooks (`openai_codex`) | `PreToolUse` → `/decide` for `Bash`, `apply_patch`, `mcp__<server>__<tool>`, `spawn_agent` and other function tools: DENY → exit 2 (blocked); REQUIRE_APPROVAL → wait, then continue or block (Codex cannot ask); RESTRICT `redact_secrets` → `allow` + masked `updatedInput`; other restrictions checked or block | `SessionStart`, `UserPromptSubmit` (a sub-agent's task → `agent.message`), `PostToolUse` (successful calls only), `SubagentStop`, `SessionEnd` | hosted tools (web search); `write_stdin` into a running command; hooks Codex does not run (untrusted/modified in `/hooks`, `[features] hooks = false`); results of failed calls; another hook rewriting the input. The hook never grants approval, so Codex's own approval policy and sandbox still apply. |
 | MCP gateway (`mcp_gateway`) | `tools/call` → `/decide` before the upstream server is contacted | `tools/list` (`mcp.server_connected`, poisoning scan), tool results, `resources/read`, `prompts/get` | other MCP servers the host talks to directly; sampling/elicitation/roots requests; subscriptions; remote (HTTP) upstreams |
 | Python SDK `guard()` (`python_sdk`) | each guarded function call → `/decide` | `AgentSession` events (sessions, prompts, context, messages, delegation), tool results | code that calls the underlying API directly; tools the framework runs itself |
 | Any other HTTP client | — (decisions are `advisory`) | whatever it sends to `/events` | everything it does not report |
-| Planned: OpenAI Codex, Cursor | — | — | no native adapter; interim path: wrap their MCP servers with the gateway |
+| Planned: Cursor | — | — | no native adapter; interim path: wrap its MCP servers with the gateway |
 | Planned: LangGraph, CrewAI, OpenAI Agents SDK, Claude Agent SDK | — | — | no native adapter; interim path: wrap Python tool functions with `guard()` (stdio MCP servers via the gateway) |
 
 An integration counts as **connected** while ContextOS received an event from it in the last 24
@@ -122,6 +124,7 @@ hours (`stale_after_hours: 24` in `GET /integrations`); otherwise it is `stale`.
 | Adapter | Setting | Default | `closed` | `ask` | `open` |
 |---|---|---|---|---|---|
 | Claude Code hook | `claude_code.fail_mode` / `CONTEXTOS_HOOK_FAIL_MODE` | `ask` | `deny` | `ask` (Claude Code's own prompt; headless `-p` treats it as a denial) | no decision + warning |
+| Codex hook | `codex.fail_mode` / `CONTEXTOS_CODEX_FAIL_MODE` | `closed` | blocked (exit 2) | treated as `closed` (Codex hooks cannot ask) | continues without a decision, `systemMessage` warning |
 | MCP gateway | `--fail-mode` / `CONTEXTOS_FAIL_MODE` | `closed` | error result, not forwarded | treated as `closed` | forwarded without a decision, warning on stderr |
 | SDK `guard()` | `fail_mode` / `CONTEXTOS_FAIL_MODE` | `closed` | raises `ToolDenied` | raises `ApprovalRequired(approval_id=None)` | runs, logs a warning, raises a `RuntimeWarning` |
 
@@ -134,7 +137,7 @@ integration applies its own setting locally (ContextOS cannot answer while unrea
 
 `REQUIRE_APPROVAL` creates an `Approval` (expires after the organisation's `approval_timeout_s`,
 default 600 s). The adapter polls `GET /decide/approvals/{id}` and proceeds only on `approved`.
-When it stops waiting — hook budget (`approval_wait_s`, default 45 s), gateway
+When it stops waiting — hook budget (`approval_wait_s`, default 45 s, Claude Code and Codex), gateway
 `--approval-timeout` (default 300 s), SDK `approval_timeout_s` (default 300 s), or the MCP host
 cancelling the call — it withdraws the request with `POST /decide/approvals/{id}/cancel`, so a
 reviewer cannot approve a call nothing is waiting for. If a person decided it a moment earlier,
@@ -154,7 +157,9 @@ environment, and keys are read from `~/.contextos/config.json` (mode 600), the p
 - `make test-sdk` — mapping per hook/message type, every decision → host answer, fail modes,
   restriction failure → deny, "never allow", spool on failure, envelope contract against the server
   model (`sdk/tests/test_client_contract.py`).
-- `backend/tests/e2e/test_live_hooks.py`, `test_live_mcp_gateway.py`, `test_live_sdk_guard.py`,
-  `test_live_cli.py` — a real `contextos-server` process and the real adapters as subprocesses
-  (part of `make test-backend`).
-- Live Claude Code record: [integrations/claude-code.md](integrations/claude-code.md#live-verification).
+- `backend/tests/e2e/test_live_hooks.py`, `test_live_codex.py`, `test_live_mcp_gateway.py`,
+  `test_live_sdk_guard.py`, `test_live_cli.py` — a real `contextos-server` process and the real
+  adapters as subprocesses (part of `make test-backend`). `test_live_codex.py` also drives the real
+  Codex binary with a scripted offline model when one is installed (skipped otherwise).
+- Live records: [integrations/claude-code.md](integrations/claude-code.md#live-verification),
+  [integrations/codex.md](integrations/codex.md#live-verification).

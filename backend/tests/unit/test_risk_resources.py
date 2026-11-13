@@ -56,6 +56,17 @@ def test_file_keys_and_sensitivity():
     assert not any(r["sensitive"] for r in multi)
 
 
+def test_apply_patch_files_are_resources():
+    patch = ("*** Begin Patch\n*** Add File: notes.md\n+hi\n*** Update File: src/app.py\n*** Move to: src/main.py\n"
+             "@@\n-a\n+b\n*** Delete File: .env\n*** End of File\n*** End Patch\n")
+    files = _by(extract_resources("file_write", {"command": patch}), "file")
+    assert set(files) == {"notes.md", "src/app.py", "src/main.py", ".env"}
+    assert files[".env"]["sensitive"] is True
+    # Only file-writing calls are read as patches; a shell command that merely mentions one is not.
+    assert not _by(extract_resources("file_write", {"command": "*** Update File: x.py"}), "file")
+    assert "x.py" not in _by(extract_resources("shell", {"command": f"echo '{patch}'"}), "file")
+
+
 def test_glob_and_credential_search_patterns():
     globbed = extract_resources("file_read", {"pattern": "**/*.pem"})
     assert _by(globbed, "glob")["**/*.pem"]["sensitive"] is True

@@ -14,52 +14,11 @@
 
 from __future__ import annotations
 
-import logging
-from dataclasses import dataclass
 from typing import Any
 
-from contextos.client import ContextOSClient, approval_status_of
-from contextos.errors import ApprovalTimeout, ContextOSError
-from contextos.models import ApprovalStatus
+from contextos.integrations.hookkit import ApprovalOutcome, await_approval
 
 from . import state
-
-log = logging.getLogger("contextos.claude_code.approval")
-
-DECIDED = frozenset({ApprovalStatus.APPROVED, ApprovalStatus.REJECTED, ApprovalStatus.EXPIRED, ApprovalStatus.CANCELLED})
-
-
-@dataclass(frozen=True)
-class ApprovalOutcome:
-    """``status``: approved | rejected | expired | cancelled | pending (still undecided) | error."""
-
-    approval_id: str
-    status: str
-    note: str | None = None
-    error: str | None = None
-
-    @property
-    def approved(self) -> bool:
-        return self.status == ApprovalStatus.APPROVED
-
-
-def await_approval(client: ContextOSClient, approval_id: str, wait_s: float, poll_s: float = 1.5) -> ApprovalOutcome:
-    """Wait up to ``wait_s`` for a person to decide. Never raises."""
-    try:
-        if wait_s <= 0:
-            approval = client.get_approval(approval_id)
-        else:
-            approval = client.wait_for_approval(approval_id, timeout_s=wait_s, poll_s=max(0.2, poll_s))
-    except ApprovalTimeout:
-        return ApprovalOutcome(approval_id, ApprovalStatus.PENDING)
-    except ContextOSError as exc:  # unreachable at the first poll, auth, 404 ...
-        return ApprovalOutcome(approval_id, "error", error=str(exc))
-    status = approval_status_of(approval) or "error"
-    note = approval.get("decision_note") if isinstance(approval, dict) else None
-    if status not in DECIDED and status != ApprovalStatus.PENDING:
-        return ApprovalOutcome(approval_id, "error", error=f"unrecognised approval status '{status}'")
-    return ApprovalOutcome(approval_id, status, note=str(note)[:500] if note else None)
-
 
 # -- host-prompt records ----------------------------------------------------------------------------
 
