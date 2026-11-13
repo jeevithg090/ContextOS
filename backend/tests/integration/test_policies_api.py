@@ -269,7 +269,7 @@ def test_match_stats_and_policy_decisions(client, db, seeded_org):
     dry_run = by_name(client, seeded_org, "Dry run: approval for HTTP to unknown destinations")
     assert dry_run["stats"]["monitor_matched"] == 2 and dry_run["stats"]["matched"] == 0
 
-    page = client.get(f"{BASE}/{block['id']}/decisions", headers=h).json()
+    page = client.get(f"{BASE}/{block['id']}/decisions", params={"include_simulated": "true"}, headers=h).json()
     assert page["total"] == 4  # 30-day default window includes the 10-day-old decision
     first, second = page["items"][0], page["items"][1]
     assert first["is_simulation"] is True  # newest first: the simulated decision was recorded last
@@ -277,10 +277,10 @@ def test_match_stats_and_policy_decisions(client, db, seeded_org):
     assert all(i["match_mode"] == "enforce" and i["matched_outcome"] == "DENY" for i in page["items"])
     assert second["tool_name"] == "Bash" and second["agent_name"] == "release-bot"
     assert "secrets_in_arguments" in second["match_explanation"]
-    real_only = client.get(f"{BASE}/{block['id']}/decisions", params={"include_simulation": "false", "days": 7},
-                           headers=h).json()
-    assert real_only["total"] == 2
-    monitor = client.get(f"{BASE}/{dry_run['id']}/decisions", headers=h).json()
+    real_only = client.get(f"{BASE}/{block['id']}/decisions", params={"days": 7}, headers=h).json()
+    assert real_only["total"] == 2  # simulated decisions are excluded by default
+    assert not any(i["is_simulation"] for i in real_only["items"])
+    monitor = client.get(f"{BASE}/{dry_run['id']}/decisions", params={"include_simulated": "true"}, headers=h).json()
     assert monitor["total"] == 4 and monitor["items"][0]["match_mode"] == "monitor"
     audit_shell = by_name(client, seeded_org, "Audit shell commands")
     shell_page = client.get(f"{BASE}/{audit_shell['id']}/decisions", headers=h).json()
@@ -290,6 +290,11 @@ def test_match_stats_and_policy_decisions(client, db, seeded_org):
     assert [i["id"] for i in recent["items"]] == [shell.id]
     by_session = client.get(f"{BASE}/recent-decisions", params={"session_id": exfil.session_id}, headers=h).json()
     assert [i["id"] for i in by_session["items"]] == [exfil.id]
+    deny_real = client.get(f"{BASE}/recent-decisions", params={"decision": "DENY"}, headers=h).json()
+    assert deny_real["total"] == 3 and not any(i["is_simulation"] for i in deny_real["items"])
+    deny_all = client.get(f"{BASE}/recent-decisions", params={"decision": "DENY", "include_simulated": "true"},
+                          headers=h).json()
+    assert deny_all["total"] == 4 and sum(i["is_simulation"] for i in deny_all["items"]) == 1
 
 
 # ----------------------------------------------------------------------------- dry-run tests

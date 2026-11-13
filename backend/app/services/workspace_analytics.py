@@ -211,12 +211,12 @@ def state_reason(rem: Remediation, card: TaskCardOut | None) -> str:
     return f"{key} is done and a passed verification run proves the fix. The finding can now be resolved.{others}"
 
 
-def _open_findings(db: Session, org_id: str, *, include_simulations: bool, severity: str | None = None,
+def _open_findings(db: Session, org_id: str, *, include_simulated: bool, severity: str | None = None,
                    q: str | None = None) -> list[Any]:
     query = select(SecurityFinding.id, SecurityFinding.severity, SecurityFinding.first_seen_at,
                    SecurityFinding.last_seen_at).where(
         SecurityFinding.organization_id == org_id, SecurityFinding.status.in_(OPEN_FINDING_STATUSES))
-    if not include_simulations:
+    if not include_simulated:
         query = query.where(SecurityFinding.is_simulation.is_(False))
     if severity:
         query = query.where(SecurityFinding.severity == severity)
@@ -225,13 +225,13 @@ def _open_findings(db: Session, org_id: str, *, include_simulations: bool, sever
     return list(db.execute(query).all())
 
 
-def _completion_rate(db: Session, org_id: str, links: dict[str, list[Link]], include_simulations: bool) -> RatioOut:
+def _completion_rate(db: Session, org_id: str, links: dict[str, list[Link]], include_simulated: bool) -> RatioOut:
     ids = list(links)
     existing: set[str] = set()
     for start in range(0, len(ids), 500):
         query = select(SecurityFinding.id).where(SecurityFinding.organization_id == org_id,
                                                  SecurityFinding.id.in_(ids[start:start + 500]))
-        if not include_simulations:
+        if not include_simulated:
             query = query.where(SecurityFinding.is_simulation.is_(False))
         existing.update(db.scalars(query))
     done = sum(1 for fid in existing if any(column.is_done_column for _, column in links[fid]))
@@ -243,11 +243,11 @@ def _completion_rate(db: Session, org_id: str, links: dict[str, list[Link]], inc
 
 def remediation_pipeline(
     db: Session, org_id: str, *, state: str | None = None, severity: str | None = None, q: str | None = None,
-    include_simulations: bool = True, limit: int = 50, offset: int = 0,
+    include_simulated: bool = False, limit: int = 50, offset: int = 0,
 ) -> RemediationPageOut:
     """Open findings, most severe first (then most recently seen), each with its remediation state."""
     links = finding_links(db, org_id)
-    rows = _open_findings(db, org_id, include_simulations=include_simulations, severity=severity, q=q)
+    rows = _open_findings(db, org_id, include_simulated=include_simulated, severity=severity, q=q)
     states = {row.id: remediation_of(links.get(row.id, [])) for row in rows}
     counts = Counter(rem.state for rem in states.values())
     matching = [row for row in rows if state is None or states[row.id].state == state]
@@ -324,7 +324,7 @@ def _outstanding_critical(
 
 
 def engineering_analytics(
-    db: Session, org_id: str, *, board_id: str | None = None, window_days: int = 30, include_simulations: bool = True,
+    db: Session, org_id: str, *, board_id: str | None = None, window_days: int = 30, include_simulated: bool = False,
     now: datetime | None = None,
 ) -> EngineeringAnalyticsOut:
     if board_id:
@@ -359,13 +359,13 @@ def engineering_analytics(
     runs = dict(db.execute(runs_query.group_by(VerificationRun.status)).all())
 
     links = finding_links(db, org_id)
-    findings = _open_findings(db, org_id, include_simulations=include_simulations)
+    findings = _open_findings(db, org_id, include_simulated=include_simulated)
     states = {row.id: remediation_of(links.get(row.id, [])) for row in findings}
     finding_counts = Counter(rem.state for rem in states.values())
 
     return EngineeringAnalyticsOut(
         generated_at=moment, window_days=window_days, window_start=start, board_id=board_id,
-        include_simulations=include_simulations, open_tasks=len(open_rows), overdue=overdue,
+        include_simulated=include_simulated, open_tasks=len(open_rows), overdue=overdue,
         by_priority=[CountOut(key=p, count=by_priority.get(p, 0)) for p in PRIORITIES],
         by_type=[CountOut(key=t, count=by_type[t]) for t in known_types],
         by_status_key=[CountOut(key=s, count=by_status.get(s, 0)) for s in STATUS_KEYS if s != "done"],
@@ -376,7 +376,7 @@ def engineering_analytics(
         findings_awaiting_remediation=FindingBacklogOut(
             total=finding_counts["no_task"] + finding_counts["task_open"], no_task=finding_counts["no_task"],
             task_open=finding_counts["task_open"], open_findings=len(findings)),
-        remediation_completion_rate=_completion_rate(db, org_id, links, include_simulations),
+        remediation_completion_rate=_completion_rate(db, org_id, links, include_simulated),
         reopened_issues=ReopenedOut(reopen_events=int(reopen_sum or 0), tasks_reopened=int(reopened_tasks or 0)),
         failed_verification_runs=_ratio(int(runs.get("failed", 0)), int(sum(runs.values()))),
         outstanding_critical=_outstanding_critical(db, org_id, board_id, findings, states, links),

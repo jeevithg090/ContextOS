@@ -29,6 +29,23 @@ describe("EvidenceLinks", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(5);
   });
 
+  it("opens session-scoped records in the session they belong to", () => {
+    render(
+      <TestRouter>
+        <EvidenceLinks
+          sessionId="ses_parent"
+          evidence={[
+            { type: "tool_invocation", id: "tiv_child", session_id: "ses_child" },
+            { type: "tool_invocation", id: "tiv_parent" },
+          ]}
+        />
+      </TestRouter>,
+    );
+    const links = screen.getAllByRole("link");
+    expect(links[0]).toHaveAttribute("href", "/sessions/ses_child?invocation=tiv_child");
+    expect(links[1]).toHaveAttribute("href", "/sessions/ses_parent?invocation=tiv_parent");
+  });
+
   it("renders nothing without evidence", () => {
     const { container } = render(<EvidenceLinks evidence={[]} sessionId={null} />);
     expect(container).toBeEmptyDOMElement();

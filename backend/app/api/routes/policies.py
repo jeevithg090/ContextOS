@@ -121,14 +121,14 @@ def recent_decisions(
     decision: DecisionName | None = None,
     session_id: str | None = None,
     agent_id: str | None = None,
-    include_simulation: bool = True,
+    include_simulated: bool = Query(False, description="Include decisions recorded by Simulation Lab runs"),
     limit: int = Query(25, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> Page[DecisionSummaryOut]:
     """Recorded decisions to use as dry-run test inputs (their redacted input snapshots)."""
     items, total = policy_service.recent_decisions(
         db, principal.org_id, limit=limit, offset=offset, decision=decision, session_id=session_id,
-        agent_id=agent_id, include_simulation=include_simulation,
+        agent_id=agent_id, include_simulated=include_simulated,
     )
     return Page(items=[DecisionSummaryOut.model_validate(i) for i in items], total=total, limit=limit, offset=offset)
 
@@ -200,13 +200,13 @@ def policy_decisions(
     principal: Principal = DECISIONS_READ,
     db: Session = Depends(get_db),
     days: int = Query(30, ge=1, le=365),
-    include_simulation: bool = True,
+    include_simulated: bool = Query(False, description="Include decisions recorded by Simulation Lab runs"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> Page[PolicyDecisionMatchOut]:
     """Recorded decisions in which this policy matched (enforce or monitor), newest first."""
     items, total = policy_service.decisions_for_policy(
-        db, principal.org_id, policy_id, days=days, limit=limit, offset=offset, include_simulation=include_simulation
+        db, principal.org_id, policy_id, days=days, limit=limit, offset=offset, include_simulated=include_simulated
     )
     return Page(
         items=[PolicyDecisionMatchOut.model_validate(i) for i in items], total=total, limit=limit, offset=offset

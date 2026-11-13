@@ -7,7 +7,7 @@ import { formatDateTime, pluralize, timeAgo } from "@/lib/format";
 import { usePolicyDecisions } from "./api";
 
 export function PolicyMatchesTab({ policyId, onTest }: { policyId: string; onTest: (decisionId: string) => void }) {
-  const [includeSimulation, setIncludeSimulation] = useState(true);
+  const [includeSimulation, setIncludeSimulation] = useState(false);
   const q = usePolicyDecisions(policyId, includeSimulation);
 
   return (
@@ -17,7 +17,7 @@ export function PolicyMatchesTab({ policyId, onTest }: { policyId: string; onTes
           Decisions from the last 30 days where this policy matched. An <span className="text-fg">enforce</span> match took part in the decision; a{" "}
           <span className="text-fg">monitor</span> match was recorded only.
         </p>
-        <Checkbox label="Include simulations" checked={includeSimulation} onChange={setIncludeSimulation} />
+        <Checkbox label="Include simulated" checked={includeSimulation} onChange={setIncludeSimulation} />
       </div>
       {q.isLoading ? (
         <LoadingRows rows={4} />

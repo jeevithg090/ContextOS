@@ -18,9 +18,9 @@ export function EngineeringAnalyticsPage() {
   const { get, set } = useUrlState();
   const range = oneOf(get("window"), ANALYTICS_WINDOWS, "30d");
   const boardId = get("board_id") || undefined;
-  const includeSimulations = get("simulations") !== "exclude";
+  const includeSimulated = get("sim") === "1";
   const boards = useBoards();
-  const query = useEngineeringAnalytics({ window: range, board_id: boardId, include_simulations: includeSimulations });
+  const query = useEngineeringAnalytics({ window: range, board_id: boardId, include_simulated: includeSimulated });
   const data = query.data;
   const loading = query.isLoading;
 
@@ -50,8 +50,8 @@ export function EngineeringAnalyticsPage() {
         />
         <Checkbox
           label="Include Simulation Lab findings"
-          checked={includeSimulations}
-          onChange={(v) => set({ simulations: v ? null : "exclude" })}
+          checked={includeSimulated}
+          onChange={(v) => set({ sim: v ? "1" : null })}
         />
         {boardId && (
           <span className="inline-flex items-center gap-1.5 text-xs text-fg-muted">

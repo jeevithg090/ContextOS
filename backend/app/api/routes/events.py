@@ -134,7 +134,7 @@ def list_events(
     event_type: EventType | None = None,
     since: datetime | None = Query(default=None, description="Only events received at or after this time"),
     processing_status: str | None = Query(default=None, pattern="^(processed|error)$"),
-    is_simulation: bool | None = None,
+    include_simulated: bool = Query(default=False, description="Include events from Simulation Lab runs"),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     principal: Principal = READ,
@@ -143,7 +143,7 @@ def list_events(
     items, total = ingestion_queries.list_events(
         db, principal.org_id, bound_agent_id=principal.bound_agent_id, agent_id=agent_id, session_id=session_id,
         event_type=event_type.value if event_type else None, since=since, processing_status=processing_status,
-        is_simulation=is_simulation, limit=limit, offset=offset,
+        is_simulation=None if include_simulated else False, limit=limit, offset=offset,
     )
     return Page[IngestedEventOut](items=[IngestedEventOut.model_validate(i) for i in items], total=total,
                                   limit=limit, offset=offset)

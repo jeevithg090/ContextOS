@@ -218,9 +218,6 @@ Latency: a PreToolUse decision against a local backend took 51–69 ms per call 
   `approved_at_host_prompt` metadata naming the withdrawn approval. ContextOS cannot verify that
   approval, so it records the low-severity finding `CTX-APPROVED-AT-HOST-PROMPT` for review instead
   of `CTX-DECISION-NOT-HONOURED`.
-- Claude Code's internal `ToolSearch` tool (loads deferred tool definitions) is not in the server's
-  built-in tool table; it is classified as a generic search tool, so its result is labelled a web
-  search.
 
 ## Live verification
 

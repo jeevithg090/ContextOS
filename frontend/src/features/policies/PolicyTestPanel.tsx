@@ -61,7 +61,7 @@ export function PolicyTestPanel({
   }, [preselectedDecisionId]);
 
   const matched = usePolicyDecisions(policyId && source === "recorded" && list === "matched" ? policyId : null, true);
-  const recent = useRecentDecisions({ session_id: debouncedSession || undefined }, source === "recorded" && list === "recent");
+  const recent = useRecentDecisions({ session_id: debouncedSession || undefined, include_simulated: true }, source === "recorded" && list === "recent");
   const active = list === "matched" ? matched : recent;
 
   let customInput: Record<string, unknown> | null = null;

@@ -210,3 +210,29 @@ def test_verify_with_simulation_records_a_real_run(client, seeded_org):
                       json={"scenario_id": "sensitive-file-exfiltration"}, headers=h)
     assert out.status_code == 201, out.text
     assert out.json()["status"] == "passed" and out.json()["kind"] == "simulation"
+
+
+def test_steps_and_evidence_name_their_session_and_enforcement(client, seeded_org, db):
+    """Evidence from the delegated sub-agent opens in the child session, not the parent's."""
+    from app.models import AgentSession, PolicyDecision, ToolInvocation
+
+    run = _run(client, seeded_org.user_headers, "multi-agent-contamination")
+    steps = {r["step"]: r for r in run["results"] if r["kind"] == "observation"}
+    sessions = {s.external_session_id: s.id for s in db.scalars(
+        select(AgentSession).where(AgentSession.simulation_run_id == run["id"]))}
+    parent, child = sessions[f"{run['id']}-main"], sessions[f"{run['id']}-child"]
+
+    assert steps["subagent-fetch"]["session_id"] == child
+    assert steps["upload-env"]["session_id"] == parent and steps["delegate-research"]["session_id"] == parent
+    assert steps["upload-env"]["enforcement"] == "enforced"
+    assert steps["upload-env"]["decision"] in {"DENY", "REQUIRE_APPROVAL"}
+    assert steps["delegate-research"]["enforcement"] is None  # no tool decision at this step
+
+    for row in steps["subagent-fetch"]["evidence"]:
+        assert row["session_id"] == child
+        model = {"policy_decision": PolicyDecision, "tool_invocation": ToolInvocation}.get(row["type"])
+        if model is not None:  # the referenced record really belongs to the child session
+            assert db.get(model, row["id"]).session_id == child
+    checks = {r["step"]: r for r in run["results"] if r["kind"] == "expectation"}
+    contamination = checks["finding:cross_agent_contamination"]["evidence"]
+    assert contamination and all(e["session_id"] in {parent, child} for e in contamination)

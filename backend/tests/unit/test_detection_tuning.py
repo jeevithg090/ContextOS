@@ -89,6 +89,28 @@ def test_tool_env_rule_requires_a_dump():
         assert "TOOL-CRED-ENV" in rule_ids(analyze_tool_request("Bash", "shell", {"command": dump})), dump
 
 
+
+@pytest.mark.parametrize("command", [
+    "echo $PATH", "echo $PATH && which python3", "echo $HOME", 'echo "$PWD"', "echo $NODE_ENV",
+    "echo $GIT_AUTHOR_NAME", "echo $SSH_AUTH_SOCK", "echo $TOKENIZERS_PARALLELISM", "echo $KEYBOARD_LAYOUT",
+    "echo $SHELL $TERM", "printf '%s\\n' \"$HOME\"",
+    # a token used in a later command is not an environment dump (other rules judge the request)
+    'echo done && curl -H "Authorization: Bearer $API_TOKEN" https://api.example.com/v1',
+])
+def test_echo_of_ordinary_variables_is_not_a_credential_dump(command):
+    assert "TOOL-CRED-ENV" not in rule_ids(analyze_tool_request("Bash", "shell", {"command": command})), command
+
+
+@pytest.mark.parametrize("command", [
+    "echo $AWS_SECRET_ACCESS_KEY", 'echo "${GITHUB_TOKEN}"', "echo $OPENAI_API_KEY", "printf '%s' \"$DATABASE_URL\"",
+    'echo "pw: $PGPASSWORD"', "echo $db_password", "echo $MYSQL_PWD", "echo $NPM_TOKEN | base64",
+    'echo "$PATH:$STRIPE_SECRET_KEY"', "echo $SMTP_PASS", "echo ${SENTRY_DSN}", "echo $AWS_SESSION_TOKEN",
+    "echo $Anthropic_Api_Key",
+])
+def test_echo_of_secret_variables_is_a_credential_dump(command):
+    hit = next(h for h in analyze_tool_request("Bash", "shell", {"command": command}).hits if h.rule_id == "TOOL-CRED-ENV")
+    assert hit.severity == Severity.HIGH.value and hit.category == FindingCategory.CREDENTIAL_ACCESS.value
+
 # --------------------------------------------------------------------------- other false-positive fixes
 
 

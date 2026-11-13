@@ -79,12 +79,12 @@ export function usePolicyDecisions(id: string | null, includeSimulation: boolean
   return useQuery({
     queryKey: policyKeys.decisions(id ?? "", includeSimulation),
     queryFn: () =>
-      api.get<Page<PolicyDecisionMatch>>(`/policies/${enc(id ?? "")}/decisions`, { limit: 25, days: 30, include_simulation: includeSimulation }),
+      api.get<Page<PolicyDecisionMatch>>(`/policies/${enc(id ?? "")}/decisions`, { limit: 25, days: 30, include_simulated: includeSimulation }),
     enabled: !!id,
   });
 }
 
-export function useRecentDecisions(filters: { session_id?: string; decision?: string }, enabled: boolean) {
+export function useRecentDecisions(filters: { session_id?: string; decision?: string; include_simulated?: boolean }, enabled: boolean) {
   return useQuery({
     queryKey: policyKeys.recent(filters),
     queryFn: () => api.get<Page<DecisionSummary>>("/policies/recent-decisions", { ...filters, limit: 25 }),

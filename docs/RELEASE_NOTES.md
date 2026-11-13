@@ -20,7 +20,8 @@ The first complete ContextOS: server (`contextos-server` 0.1.0), Python SDK and 
 - **Detection**: deterministic prompt-injection, instruction-override, credential-seeking,
   exfiltration, MCP tool-poisoning, cross-agent contamination and dangerous-tool rules over
   normalised views (decoding, hidden text, homoglyphs, leetspeak, 13 languages for core families).
-  Measured: content test split precision 0.968 / recall 0.931; tool requests 0.850 / 0.895
+  Measured: content test split precision 0.968 / recall 0.931; tool requests 1.000 / 0.895 after a
+  disclosed post-review fix (0.850 / 0.895 on the first held-out run)
   ([DETECTION_EVALUATION.md](DETECTION_EVALUATION.md)).
 - **Policy Studio**: condition DSL with 17 operators and a field catalogue, visual and JSON editors,
   enforce and monitor (dry-run) modes, restrictions, tests against recorded decisions, match
@@ -95,6 +96,30 @@ The full Definition-of-Done checklist with evidence is in [../CONTEXT.md](../CON
   `vite` 6.0.5 → 6.4.6 and `vitest` 2.1.8 → 2.1.9 (dev-server file-read advisories), plus
   `npm audit fix` for non-breaking transitive updates. `backend/pyproject.toml` now sets floors
   `starlette>=0.49.1` and `h11>=0.16` (FastAPI/uvicorn alone allowed vulnerable releases).
+
+### Changes after the release review (2026-11-13)
+
+- **One name and default for simulated data (API change).** `GET /policies/{id}/decisions` and
+  `GET /policies/recent-decisions` took `include_simulation` (default `true`); `GET /workspace/analytics`
+  and `/workspace/analytics/remediation` took `include_simulations` (default `true`, and the response
+  field was named the same); `GET /events` took a tri-state `is_simulation`. All now take
+  `include_simulated`, default `false`, like every other route, and the analytics response field is
+  `include_simulated`. The dashboard's switches default to off; the Policy Studio test-input picker
+  still offers simulated decisions, labelled. `contextos events` gained `--include-simulated`.
+- **Simulation Lab run detail.** Each step reports its `enforcement` and the `session_id` it was
+  recorded in, and evidence rows carry their record's session, so a delegated sub-agent's tool call
+  opens in the sub-agent's session rather than the parent's.
+- **Detection.** TOOL-CRED-ENV's `echo $VAR` clause now fires only for secret-looking variable names
+  (`echo $PATH` no longer raises a high-severity finding; `echo $AWS_SECRET_ACCESS_KEY` still does,
+  and `printf` is covered too).
+- **Claude Code `ToolSearch`** is recognised as an internal tool (category `other`) instead of a web
+  search.
+- **Tests.** A single end-to-end Workspace test (`tests/e2e/test_workspace_remediation_flow.py`)
+  covers finding → task → fix context → edit and export → fix attempt → claim (rejected as proof)
+  → verification → done → analytics. The 19 pages that lacked one now have a page-level render
+  test (loading, error, empty and data states; honest enforcement wording), with a shared
+  `frontend/src/test/pageHarness.tsx`. Suites after these changes: backend 1780, SDK 387, frontend
+  492 (66 files).
 
 ### Known limitations
 

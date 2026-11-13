@@ -27,9 +27,11 @@ integration calls in depth), [DATA_MODEL.md](DATA_MODEL.md), [SECURITY_MODEL.md]
 - **Lists** return `Page[T]` = `{items, total, limit, offset}`; `limit` 1–500 (default 50),
   `offset` ≥ 0. A few small catalogues return plain lists (`list` below).
 - **Simulation data**: lists and metrics leave out Simulation Lab rows unless
-  `include_simulated=true` (agents, sessions, findings, incidents, approvals, context, trust
-  sources/destinations/summary, overview). Workspace analytics uses `include_simulations`; the event
-  list takes `is_simulation`. Simulated rows are labelled in every response that includes them.
+  `include_simulated=true` (agents, sessions, findings, incidents, approvals, events, context, trust
+  sources/destinations/summary, overview, policy decisions and recent decisions, workspace analytics
+  and the remediation pipeline). Every route uses this one parameter name, default `false`, including
+  when a list is filtered by a simulated session. Simulated rows are labelled (`is_simulation`) in every
+  response that includes them.
 - **Errors**: `{"error": {"code", "message", "details"}}` with codes `bad_request` (400),
   `unauthenticated` (401), `forbidden` (403), `attribution_rejected` (403), `not_found` (404),
   `conflict` (409), `payload_too_large` (413), `validation_failed` (422), `rate_limited` (429, repeated
@@ -80,7 +82,7 @@ Paths are relative to `/api/v1`. Status is 200 unless shown.
 | GET | `/decide/approvals/{approval_id}` | `decide` | — | `ApprovalPollOut` | Integration polls an approval (status, note, expiry; lazy expiry persisted). |
 | POST | `/decide/approvals/{approval_id}/cancel` | `decide` | `ApprovalCancelIn` | `ApprovalPollOut` | Withdraw a pending approval the integration is no longer waiting for (idempotent; 409 once a person decided it or it expired). The held call is recorded as cancelled. |
 | POST | `/scan` | `read` | `ScanIn` | `ScanOut` | Run secret and prompt-injection detection on content without storing anything. |
-| GET | `/events` | `read` | — | `Page[IngestedEventOut]` | Ingested events (redacted), filterable by agent, session, type, time, status, `is_simulation`. |
+| GET | `/events` | `read` | — | `Page[IngestedEventOut]` | Ingested events (redacted), filterable by agent, session, type, time, status; simulated events only with `include_simulated=true`. |
 | GET | `/events/{event_id}` | `read` | — | `IngestedEventDetailOut` | One ingested event with its redacted payload and `refs`. |
 | GET | `/stream` | `read` | — | — | Server-Sent Events: small notifications ({"type", "id", ...}); clients refetch details. |
 
@@ -152,13 +154,13 @@ Paths are relative to `/api/v1`. Status is 200 unless shown.
 | GET | `/policies/operators` | `read` | — | `list` | Condition operators with their plain-English label and the kind of value they take. |
 | POST | `/policies/validate` | `read` | `ValidateIn` | `ValidateOut` | Validate a condition/restriction draft; returns errors and the plain-English explanation. |
 | POST | `/policies/test` | `read` | `PolicyTestIn` | `PolicyTestOut` | Dry run: evaluate a draft and/or saved policies against an input. Nothing is persisted. |
-| GET | `/policies/recent-decisions` | `read` | — | `Page[DecisionSummaryOut]` | Recorded decisions to use as dry-run test inputs (their redacted input snapshots). |
+| GET | `/policies/recent-decisions` | `read` | — | `Page[DecisionSummaryOut]` | Recorded decisions to use as dry-run test inputs (their redacted input snapshots); `include_simulated`. |
 | GET | `/policies` | `read` | — | `Page[PolicyOut]` | Policies ordered by evaluation precedence, each with its last-7-days match statistics. |
 | POST | `/policies` | `policy:manage` | `PolicyCreate` | `PolicyOut` (201) | Create a policy (validated). |
 | GET | `/policies/{policy_id}` | `read` | — | `PolicyOut` | One policy. |
 | PATCH | `/policies/{policy_id}` | `policy:manage` | `PolicyPatch` | `PolicyOut` | Edit a policy (`version` increments). |
 | DELETE | `/policies/{policy_id}` | `policy:manage` | — | — (204) | Delete a custom policy; built-ins answer 409 (disable them instead). |
-| GET | `/policies/{policy_id}/decisions` | `read` | — | `Page[PolicyDecisionMatchOut]` | Recorded decisions in which this policy matched (enforce or monitor), newest first. |
+| GET | `/policies/{policy_id}/decisions` | `read` | — | `Page[PolicyDecisionMatchOut]` | Recorded decisions in which this policy matched (enforce or monitor), newest first; `include_simulated`. |
 
 ### Approvals
 
@@ -191,7 +193,7 @@ Paths are relative to `/api/v1`. Status is 200 unless shown.
 | GET | `/simulations/scenarios/{scenario_id}` | `read` | — | `ScenarioOut` | One scenario: steps and expectations. |
 | POST | `/simulations/runs` | `write` (user) / `ingest` (key) | `RunIn` | `SimulationRunOut` (201) | Run one scenario through the real pipeline (`is_simulation`). |
 | GET | `/simulations/runs` | `read` | — | `Page[SimulationRunOut]` | Run history. |
-| GET | `/simulations/runs/{run_id}` | `read` | — | `SimulationRunOut` | One run with per-check results and evidence ids. |
+| GET | `/simulations/runs/{run_id}` | `read` | — | `SimulationRunOut` | One run with per-check results and evidence. Step observations carry `decision`, `enforcement` and the `session_id` they were recorded in (a delegated sub-agent's own session in multi-agent runs); evidence rows carry their record's `session_id` when it has one. |
 | POST | `/simulations/suites` | `write` (user) / `ingest` (key) | `SuiteIn` | `SuiteOut` (201) | Run several scenarios as a regression suite. |
 | GET | `/simulations/suites` | `read` | — | `Page[SuiteSummaryOut]` | Suite runs. |
 | GET | `/simulations/suites/compare` | `read` | — | `SuiteCompareOut` | Compare two suite runs check by check. |
@@ -285,7 +287,7 @@ Paths are relative to `/api/v1`. Status is 200 unless shown.
 
 | Method | Path | Permission | Request | Response | Purpose |
 |---|---|---|---|---|---|
-| GET | `/workspace/analytics` | `read` | — | `EngineeringAnalyticsOut` | Engineering analytics from persisted tasks and findings (`include_simulations`). |
+| GET | `/workspace/analytics` | `read` | — | `EngineeringAnalyticsOut` | Engineering analytics from persisted tasks and findings (`include_simulated`). |
 | GET | `/workspace/analytics/remediation` | `read` | — | `RemediationPageOut` | Findings with their remediation state (task, attempts, verification). |
 
 ## Notes on selected endpoints

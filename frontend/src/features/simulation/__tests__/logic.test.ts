@@ -70,6 +70,13 @@ describe("run results", () => {
     // A step without a decision never claims a mode, whatever its text says.
     expect(observationEnforcement({ actual: "DENY (enforced)", decision: null })).toBeNull();
   });
+
+  it("prefers the server's enforcement field over the wording", () => {
+    expect(observationEnforcement({ actual: "DENY (enforced)", decision: "DENY", enforcement: "advisory" })).toBe("advisory");
+    expect(observationEnforcement({ actual: "DENY", decision: "DENY", enforcement: "enforced" })).toBe("enforced");
+    expect(observationEnforcement({ actual: "recorded", decision: null, enforcement: "enforced" })).toBeNull();
+    expect(describeObservation({ actual: "DENY (enforced)", decision: "DENY", enforcement: "advisory" }).text).not.toMatch(/^Denied before it ran/);
+  });
 });
 
 describe("honest step wording", () => {

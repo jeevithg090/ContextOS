@@ -39,7 +39,12 @@ def _findings(rv: RunView) -> list[SecurityFinding]:
 
 
 def _ev(rows: Iterable[Any], kind: str) -> list[dict[str, str]]:
-    return [{"type": kind, "id": row.id} for row in rows][:10]
+    """Evidence references; rows that belong to a session carry it so links open in the right one."""
+    out: list[dict[str, str]] = []
+    for row in rows:
+        session_id = getattr(row, "session_id", None) or getattr(row, "primary_session_id", None)
+        out.append({"type": kind, "id": row.id, **({"session_id": session_id} if session_id else {})})
+    return out[:10]
 
 
 def _join(values: Iterable[str]) -> str:

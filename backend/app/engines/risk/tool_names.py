@@ -39,6 +39,7 @@ BUILTINS: dict[str, tuple[str, str, str | None]] = {
     "TodoWrite": (C.OTHER, "updates the agent's own task list", None),
     "ExitPlanMode": (C.OTHER, "leaves planning mode", None),
     "SlashCommand": (C.OTHER, "runs a user-defined slash command prompt", None),
+    "ToolSearch": (C.OTHER, "loads the definitions of the agent's own deferred tools (no outside access)", None),
 }
 
 FILE_OBJECTS = {"file", "files", "directory", "directories", "dir", "folder", "path", "paths", "contents",

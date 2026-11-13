@@ -51,6 +51,13 @@ AGENT_CONFIG_PATTERNS = (
     r"\.continue/", r"\.github/copilot", r"\.windsurfrules\b",
 )
 
+# Environment-variable names that usually hold credentials (matched case-insensitively). Ordinary
+# variables (PATH, HOME, PWD, SHELL, NODE_ENV, GIT_AUTHOR_NAME, SSH_AUTH_SOCK …) do not match.
+CREDENTIAL_VAR_NAME = (
+    r"(?:[A-Z0-9_]*(?:KEY(?!BOARD|MAP)|TOKEN(?!IZER)|SECRET|PASSW(?:OR)?D|PASSPHRASE|CREDENTIAL|PRIVATE"
+    r"|COOKIE|AUTHORIZATION|DSN|DATABASE_URL)[A-Z0-9_]*|[A-Z0-9_]*_PASS|MYSQL_PWD)"
+)
+
 TOOL_RULES: list[ToolRule] = [
     ToolRule(
         "TOOL-CRED-ENV",
@@ -61,9 +68,10 @@ TOOL_RULES: list[ToolRule] = [
         "The command dumps environment variables, which routinely hold API keys, tokens and "
         "passwords. Printing them is a common first step in credential theft.",
         # ``env`` alone (or piped / redirected) dumps the environment; ``env VAR=1 cmd`` only sets it.
+        # echo/printf count only for secret-looking variable names (``echo $PATH`` is routine).
         # process.env counts when the whole object reaches an output or transmit call.
         _rx(r"(?:^|[\n;&|]\s*)(?:printenv(?![\w.=/])|env(?=[ \t]*(?:$|[|>;&\n])))|\bcat\b[^|\n]{0,40}/proc/\d+/environ"
-            r"|\becho\b[^|\n]{0,20}\$(?:[A-Z_]{2,}|\{[A-Z_]{2,}\})"
+            r"|\b(?:echo|printf)\b[^|\n;&]{0,80}?\$\{?" + CREDENTIAL_VAR_NAME + r"\b"
             r"|\b(?:log|print|dump|send|post|stringify|write|upload|show|display)\b[^.\n;]{0,30}?\bprocess\.env\b(?!\s*(?:\.\s*\w|\[))"),
     ),
     ToolRule(

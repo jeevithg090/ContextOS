@@ -15,6 +15,7 @@ from app.core.logging import get_logger
 from app.core.timeutil import utcnow
 from app.domain.enums import EventType, SourceType
 from app.events.envelope import EventEnvelope
+from app.models import ToolInvocation
 from app.services.ingestion import IngestContext, decide_tool_request, ingest_event
 from app.services.ingestion_entities import find_session_by_external
 from app.simulations.model import (
@@ -128,25 +129,25 @@ def _run_step(db: Any, ctx: IngestContext, b: _Builder, step: Any, rv: RunVars) 
             EventType.CONTEXT_INGESTED, actor=step.actor,
             source={"type": step.source_type, "identifier": step.identifier},
             content=resolve_text(step.content, rv), content_type=step.content_type))
-        return StepOutcome(label=step.label, kind="context", refs=refs)
+        return StepOutcome(label=step.label, kind="context", refs=refs, session_id=refs.get("session_id"))
     if isinstance(step, McpListing):
         refs = ingest(db, ctx, b.envelope(
             EventType.MCP_SERVER_CONNECTED, integration="mcp_gateway",
             source={"type": SourceType.MCP_SERVER.value, "identifier": step.server},
             metadata={"tools": [{"name": n, "description": d} for n, d in step.tools]}))
-        return StepOutcome(label=step.label, kind="mcp_listing", refs=refs)
+        return StepOutcome(label=step.label, kind="mcp_listing", refs=refs, session_id=refs.get("session_id"))
     if isinstance(step, Delegate):
         refs = ingest(db, ctx, b.envelope(
             EventType.AGENT_DELEGATED,
             delegation={"child_agent": {"name": b.actors.child_agent, "framework": "simulation"},
                         "child_session_id": b.actors.child_session, "task": step.task}))
-        return StepOutcome(label=step.label, kind="delegation", refs=refs)
+        return StepOutcome(label=step.label, kind="delegation", refs=refs, session_id=refs.get("session_id"))
     if isinstance(step, ChildReply):
         refs = ingest(db, ctx, b.envelope(
             EventType.AGENT_MESSAGE,
             message={"from_agent": b.actors.child_agent, "from_session_id": b.actors.child_session,
                      "to_agent": b.actors.agent_name, "content": resolve_text(step.content, rv) or ""}))
-        return StepOutcome(label=step.label, kind="agent_message", refs=refs)
+        return StepOutcome(label=step.label, kind="agent_message", refs=refs, session_id=refs.get("session_id"))
     raise TypeError(f"unknown step type {type(step).__name__}")
 
 
@@ -164,6 +165,8 @@ def _tool_call(db: Any, ctx: IngestContext, b: _Builder, step: ToolCall, rv: Run
               "approval_id": response.approval_id, "risk": dict(response.risk or {}),
               "matched_policies": [m.get("name") for m in response.matched_policies][:5]},
     )
+    invocation = db.get(ToolInvocation, response.tool_invocation_id)  # server-generated id from this run
+    outcome.session_id = invocation.session_id if invocation is not None else None
     outcome.executed = response.decision in _RUNS
     result = resolve_text(step.result, rv)
     if outcome.executed and result is not None:

@@ -21,6 +21,7 @@ from tests.integration.workspace_support import API, add_member, ok, verify
 
 ANALYTICS = f"{API}/analytics"
 REMEDIATION = f"{API}/analytics/remediation"
+WITH_SIM = {"include_simulated": "true"}
 
 
 def _actor(ctx) -> Actor:
@@ -165,7 +166,7 @@ def remediation_world(client, org, db):
 
 def test_remediation_pipeline_states_order_and_reasons(client, org, remediation_world):
     f, t = remediation_world
-    page = ok(client.get(REMEDIATION, headers=org.user_headers))
+    page = ok(client.get(REMEDIATION, params=WITH_SIM, headers=org.user_headers))
     assert page["counts"] == {"no_task": 2, "task_open": 3, "task_done_unverified": 1, "verified": 1}
     assert page["total"] == 7 and f["resolved"].id not in {i["finding_id"] for i in page["items"]}
     ranks = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
@@ -186,11 +187,14 @@ def test_remediation_pipeline_states_order_and_reasons(client, org, remediation_
     assert verified["task"]["is_done"] is True and "can now be resolved" in verified["state_reason"]
     assert by_id[f["sim"].id]["is_simulation"] is True
 
-    only = ok(client.get(REMEDIATION, params={"state": "verified"}, headers=org.user_headers))
+    only = ok(client.get(REMEDIATION, params={"state": "verified", **WITH_SIM}, headers=org.user_headers))
     assert [i["finding_id"] for i in only["items"]] == [f["low_verified"].id] and only["total"] == 1
     assert only["counts"] == page["counts"]
-    real = ok(client.get(REMEDIATION, params={"include_simulations": "false"}, headers=org.user_headers))
+    real = ok(client.get(REMEDIATION, headers=org.user_headers))  # simulated findings are excluded by default
     assert real["counts"]["no_task"] == 1 and real["total"] == 6
+    assert f["sim"].id not in {i["finding_id"] for i in real["items"]}
+    explicit = ok(client.get(REMEDIATION, params={"include_simulated": "false"}, headers=org.user_headers))
+    assert explicit["counts"] == real["counts"] and explicit["total"] == 6
     crit = ok(client.get(REMEDIATION, params={"severity": "critical", "limit": 1}, headers=org.user_headers))
     assert crit["total"] == 2 and len(crit["items"]) == 1 and crit["counts"]["no_task"] == 1
     second = ok(client.get(REMEDIATION, params={"severity": "critical", "limit": 1, "offset": 1}, headers=org.user_headers))
@@ -201,7 +205,7 @@ def test_remediation_pipeline_states_order_and_reasons(client, org, remediation_
 
 def test_analytics_remediation_metrics_and_outstanding_critical(client, org, remediation_world):
     f, t = remediation_world
-    out = ok(client.get(ANALYTICS, headers=org.user_headers))
+    out = ok(client.get(ANALYTICS, params=WITH_SIM, headers=org.user_headers))
     assert out["findings_awaiting_remediation"] == {"total": 5, "no_task": 2, "task_open": 3, "open_findings": 7}
     # Linked: crit_open, high_open, info_ref (open) and med_done, low_verified, resolved (done).
     assert out["remediation_completion_rate"] == {"numerator": 3, "denominator": 6, "rate": 0.5}
@@ -212,12 +216,13 @@ def test_analytics_remediation_metrics_and_outstanding_critical(client, org, rem
     assert kinds[2] == ("task", t["manual_critical"].id)
     assert critical["items"][1]["task"]["id"] == t["crit_open"].id and critical["items"][1]["state"] == "task_open"
 
-    real = ok(client.get(ANALYTICS, params={"include_simulations": "false"}, headers=org.user_headers))
-    assert real["findings_awaiting_remediation"]["no_task"] == 1 and real["include_simulations"] is False
+    assert out["include_simulated"] is True
+    real = ok(client.get(ANALYTICS, headers=org.user_headers))  # simulated findings are excluded by default
+    assert real["findings_awaiting_remediation"]["no_task"] == 1 and real["include_simulated"] is False
 
     security = next(b for b in ok(client.get(f"{API}/boards", headers=org.user_headers))["items"]
                     if b["name"] == "Security Remediation")
-    scoped = ok(client.get(ANALYTICS, params={"board_id": security["id"]}, headers=org.user_headers))
+    scoped = ok(client.get(ANALYTICS, params={"board_id": security["id"], **WITH_SIM}, headers=org.user_headers))
     assert scoped["board_id"] == security["id"] and scoped["open_tasks"] == 2  # crit_open + high_open
     assert scoped["completed_in_window"] == 2 and scoped["findings_awaiting_remediation"]["total"] == 5
     assert scoped["outstanding_critical"]["tasks"] == 1  # the manual critical task is on Engineering
