@@ -1,9 +1,6 @@
----
-paths:
-  - "backend/app/**/*.py"
----
-
 # Backend architecture (FastAPI modular monolith)
+
+Applies to: `backend/app/**/*.py`
 
 Layer rules (`docs/ARCHITECTURE.md` → "Layers and dependency rules"):
 

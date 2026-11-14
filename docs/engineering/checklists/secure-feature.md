@@ -1,20 +1,16 @@
----
-name: secure-feature
-description: Build a new ContextOS feature or endpoint end to end the secure way — model, migration, scoped service with redaction, audit and live notifications, permissioned route, schemas, frontend api.ts hooks and page states, and tests including org isolation and adversarial cases. Use whenever you add or extend a backend resource, an API route, a dashboard view backed by new data, or any code path that stores agent-derived content.
-argument-hint: "<feature name / short description>"
----
-
 # Secure feature, end to end
 
+> Build a new ContextOS feature or endpoint end to end the secure way — model, migration, scoped service with redaction, audit and live notifications, permissioned route, schemas, frontend api.ts hooks and page states, and tests including org isolation and adversarial cases. Use whenever you add or extend a backend resource, an API route, a dashboard view backed by new data, or any code path that stores agent-derived content.
+
 Work top-down through the steps; tick the checklist at the end before saying you are done.
-Read first: `docs/ARCHITECTURE.md`, `.claude/rules/backend-architecture.md`,
-`.claude/rules/security-engineering.md`, and the existing feature closest to yours (e.g.
+Read first: `docs/ARCHITECTURE.md`, `docs/engineering/backend-architecture.md`,
+`docs/engineering/security-engineering.md`, and the existing feature closest to yours (e.g.
 `backend/app/services/findings.py` + `api/routes/findings.py` + `frontend/src/features/intelligence/`).
 
 ## 1. Threat sketch (5 minutes, write it down)
 Answer: what agent-derived or secret data does it touch? Who may read / change it (which
 `Permission`)? Which ids can a caller supply (each must be org-scoped)? Is anything presented as
-enforced, causal or historical? For anything non-trivial run the `threat-model` skill.
+enforced, causal or historical? For anything non-trivial follow the [threat-model](threat-model.md) checklist.
 
 ## 2. Model (`backend/app/models/<area>.py`)
 ```python
@@ -31,9 +27,9 @@ Add `"widget": "wdg"` to `PREFIXES` in `backend/app/core/ids.py`; export the mod
 `backend/app/models/__init__.py`.
 
 ## 3. Migration (`backend/alembic/versions/`)
-Autogenerate against a scratch DB and fix the output as `.claude/rules/database-migrations.md`
+Autogenerate against a scratch DB and fix the output as `docs/engineering/database-migrations.md`
 describes (imports for `UTCDateTime`, `sa.Text()` in JSONB, batch ops, real `downgrade`). Verify with
-the round trip in `.claude/skills/test-and-verify/SKILL.md` §3. If migrations are owned by another
+the round trip in `docs/engineering/checklists/test-and-verify.md` §3. If migrations are owned by another
 work package in the current wave, put the exact model diff under "requests" instead.
 
 ## 4. Pure logic (only if there are rules/decisions)
@@ -116,12 +112,12 @@ Frontend `src/features/<feature>/__tests__/`: render loading/error/empty/data st
 invalidation; no raw colour classes.
 
 ## 11. Docs
-Update the API/data docs listed in `CLAUDE.md` for the new routes and table, and `CONTEXT.md`
-(what works, limitations). Run `backend/.venv/bin/python .claude/skills/repo-audit/scripts/doc_paths.py`.
+Update the API/data docs listed in `CONTRIBUTING.md` for the new routes and table, and `CONTEXT.md`
+(what works, limitations). Run `backend/.venv/bin/python scripts/audit/doc_paths.py`.
 
 ## 12. Verify and report
-Run the `test-and-verify` skill (targeted, then full backend suite; ruff; tsc/eslint/vitest) and
-`backend/.venv/bin/python .claude/skills/repo-audit/scripts/route_audit.py --tests tests/integration/test_<area>_api.py`
+Follow the [test-and-verify](test-and-verify.md) checklist (targeted, then full backend suite; ruff; tsc/eslint/vitest) and
+`backend/.venv/bin/python scripts/audit/route_audit.py --tests tests/integration/test_<area>_api.py`
 — your new routes must not appear under "never requested in an other_org test".
 
 ## Checklist

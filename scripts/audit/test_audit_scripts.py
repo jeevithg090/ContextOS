@@ -1,6 +1,6 @@
 """Tests for route_audit.py and doc_paths.py.
 
-    backend/.venv/bin/python -m pytest -q -p no:cacheprovider .claude/skills/repo-audit/scripts
+    backend/.venv/bin/python -m pytest -q -p no:cacheprovider scripts/audit
 """
 
 from __future__ import annotations

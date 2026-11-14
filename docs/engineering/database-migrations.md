@@ -1,12 +1,6 @@
----
-paths:
-  - "backend/app/models/**/*.py"
-  - "backend/app/database/**/*.py"
-  - "backend/alembic/**"
-  - "backend/alembic.ini"
----
-
 # Database models and migrations (SQLite for dev/tests, PostgreSQL in production)
+
+Applies to: `backend/app/models/**/*.py`, `backend/app/database/**/*.py`, `backend/alembic/**`, `backend/alembic.ini`
 
 Models (`backend/app/models/`)
 - Tenant-owned tables mix in `OrgScopedMixin` (indexed `organization_id`, `ON DELETE CASCADE`) and
@@ -45,8 +39,8 @@ Migrations (`backend/alembic/versions/`)
   (`server_default` or an `op.execute` update), then tighten.
 - Verify before finishing (fresh scratch DB): `alembic upgrade head`, `alembic check` ("No new
   upgrade operations detected"), `alembic downgrade base && alembic upgrade head` — the exact
-  command is in `.claude/skills/test-and-verify/SKILL.md` §3. For PostgreSQL-specific behaviour also
+  command is in `docs/engineering/checklists/test-and-verify.md` §3. For PostgreSQL-specific behaviour also
   run against a scratch Postgres (`initdb` + `pg_ctl -o "-p <18000-18999>"`, URL
   `postgresql+psycopg://…`) and stop it afterwards.
 - Add a test for the behaviour the schema change enables, plus an isolation test if the table is
-  org-owned (see `.claude/rules/testing.md`).
+  org-owned (see `docs/engineering/testing.md`).

@@ -1,14 +1,6 @@
----
-paths:
-  - "sdk/contextos/**/*.py"
-  - "examples/**"
-  - "docs/integrations/**"
-  - "backend/app/events/**/*.py"
-  - "backend/app/api/routes/events.py"
-  - "backend/app/services/ingestion*.py"
----
-
 # Integration adapters (Claude Code and Codex hooks, MCP gateway, Python SDK `guard()`)
+
+Applies to: `sdk/contextos/**/*.py`, `examples/**`, `docs/integrations/**`, `backend/app/events/**/*.py`, `backend/app/api/routes/events.py`, `backend/app/services/ingestion*.py`
 
 - Adapters live in `sdk/contextos/integrations/<name>/` and speak HTTP only (`POST /events`,
   `POST /decide`, `GET /decide/approvals/{id}`) through `contextos.client.ContextOSClient`.

@@ -1,15 +1,11 @@
----
-name: architecture-review
-description: Review a proposed design or an implemented change against ContextOS's architecture — layer boundaries (pure engines, services, thin routes), stable cross-module contracts, the ingestion pipeline, tenancy, the enforcement model, persistence and migrations, live notifications and frontend data flow — and return required changes with evidence. Use before building a new module or cross-cutting feature, when a change touches more than one layer or a stable contract, or when asked whether something "fits the architecture".
-argument-hint: "<design doc, PR, branch or paths>"
----
-
 # Architecture review
+
+> Review a proposed design or an implemented change against ContextOS's architecture — layer boundaries (pure engines, services, thin routes), stable cross-module contracts, the ingestion pipeline, tenancy, the enforcement model, persistence and migrations, live notifications and frontend data flow — and return required changes with evidence. Use before building a new module or cross-cutting feature, when a change touches more than one layer or a stable contract, or when asked whether something "fits the architecture".
 
 ## 1. Gather
 - The design or diff: `git diff --stat main...HEAD`, `git diff main...HEAD -- <paths>`, or the doc.
 - `docs/ARCHITECTURE.md` (layers table, pipeline steps 1–12, enforcement model, stable contracts),
-  `CLAUDE.md`, `CONTEXT.md`, and the area docs listed there.
+  `CONTRIBUTING.md`, `CONTEXT.md`, and the area docs listed there.
 - The nearest existing implementation of the same kind (find it with
   `grep -rn "<similar concept>" backend/app frontend/src/features sdk/contextos`).
 

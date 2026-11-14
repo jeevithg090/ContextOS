@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Find repository paths and Python modules referenced in Markdown that do not exist.
 
-    backend/.venv/bin/python .claude/skills/repo-audit/scripts/doc_paths.py            # default doc set
-    backend/.venv/bin/python .claude/skills/repo-audit/scripts/doc_paths.py docs/ARCHITECTURE.md
+    backend/.venv/bin/python scripts/audit/doc_paths.py            # default doc set
+    backend/.venv/bin/python scripts/audit/doc_paths.py docs/ARCHITECTURE.md
     ... --strict   # exit 1 when anything is missing
 
 Checks inline code spans (`backend/app/core/errors.py`, `app.services.scoping.scoped`) and relative
@@ -25,8 +25,8 @@ from fnmatch import fnmatch
 from functools import lru_cache
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[4]
-DEFAULT_DOCS = ["CLAUDE.md", "AGENTS.md", "CONTEXT.md", "README.md", "docs/**/*.md", ".claude/**/*.md",
+REPO = Path(__file__).resolve().parents[2]
+DEFAULT_DOCS = ["CONTRIBUTING.md", "CONTEXT.md", "README.md", "docs/**/*.md",
                 "sdk/README.md", "examples/**/*.md"]
 BASES = ["", "backend", "frontend", "sdk"]
 PY_ROOTS = {"app": REPO / "backend" / "app", "contextos": REPO / "sdk" / "contextos"}

@@ -13,7 +13,7 @@ record that supersedes it.
   built SPA when `CONTEXTOS_SERVE_FRONTEND=true`.
 - **Consequences**: one deployable and one transaction per event; scaling out needs a shared bus and
   shared rate limiting (ADR-004, PRODUCT_IMPROVEMENTS). Boundaries are enforced by convention and
-  review (`.claude/rules/backend-architecture.md`), not by packages.
+  review (`docs/engineering/backend-architecture.md`), not by packages.
 
 ## ADR-002 Pure engines
 - **Decision**: redaction, detection, trust, policy, risk and provenance live in
@@ -111,7 +111,7 @@ record that supersedes it.
   `decide_tool_request` with `is_simulation=True`; nothing is executed. Rows carry the flag and the
   run id; metrics, lists and counters exclude them unless `include_simulated=true`. Demo data
   (`seed-demo`) is produced the same way.
-- **Why**: tests real controls, never fakes data in product surfaces (CLAUDE.md rule 7).
+- **Why**: tests real controls, never fakes data in product surfaces (CONTRIBUTING.md rule 7).
 - **Evidence**: runs of the `malicious-web-page` and `poisoned-mcp-server` scenarios exposed two
   gaps that led to the built-in policies "Deny credentials in tool arguments after prompt
   injection" (DENY) and "Require approval for outbound calls after prompt injection"

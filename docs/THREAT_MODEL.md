@@ -119,5 +119,5 @@ cd backend && .venv/bin/python -m pytest -q -p no:cacheprovider tests/integratio
   tests/integration/test_ingestion_redaction.py tests/unit/test_request_limits.py tests/unit/test_log_redaction.py
 cd sdk && ../backend/.venv/bin/python -m pytest -q -p no:cacheprovider tests/test_claude_code_enforce.py \
   tests/test_mcp_gateway_enforcement.py tests/test_guard.py tests/test_guard_restrictions.py tests/test_client.py
-backend/.venv/bin/python .claude/skills/repo-audit/scripts/route_audit.py   # from the repository root
+backend/.venv/bin/python scripts/audit/route_audit.py   # from the repository root
 ```

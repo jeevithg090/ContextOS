@@ -2,8 +2,8 @@
 
 ContextOS is a security product: its tests must show that controls hold against adversarial input,
 that organisations cannot see each other's data, that secrets never reach storage, and that
-enforcement claims are honest. Rules for writing tests: `.claude/rules/testing.md`; how to run and
-read the suites: `.claude/skills/test-and-verify/SKILL.md`.
+enforcement claims are honest. Rules for writing tests: `docs/engineering/testing.md`; how to run and
+read the suites: `docs/engineering/checklists/test-and-verify.md`.
 
 ## Layers
 
@@ -16,7 +16,7 @@ read the suites: `.claude/skills/test-and-verify/SKILL.md`.
 | Detection corpus | `backend/tests/corpus/`, `tests/unit/test_detection_corpus.py`, `test_detection_tuning.py` | Precision/recall floors on a labelled, reproducible corpus (below) | `make test-backend` |
 | SDK, CLI, adapters | `sdk/tests/` (19 files) | Client retries and spool, envelope contract against the server model, `guard()` decisions/restrictions/fail modes (sync and async), CLI commands, Claude Code mapping per hook and decision → hook answer (never `allow`), installer, MCP gateway mapping, enforcement, proxy (in-memory MCP stack) and an integration run against the real backend | `make test-sdk` |
 | Frontend | `frontend/src/**/__tests__/` (46 files) | Pages and components with Vitest + Testing Library: loading/error/empty states, filters, forms and validation, live invalidation, honest wording (e.g. simulated and advisory labels) | `make test-frontend` |
-| Smoke | `.claude/skills/release-readiness/scripts/smoke.py` | Fresh database, real server process, real HTTP: setup, ingest, deny with `enforcement=enforced`, approval end to end, incident and audit chain, redaction at rest and in logs, org isolation | run by hand before a release |
+| Smoke | `scripts/smoke.py` | Fresh database, real server process, real HTTP: setup, ingest, deny with `enforcement=enforced`, approval end to end, incident and audit chain, redaction at rest and in logs, org isolation | run by hand before a release |
 
 Every feature has happy-path, validation (422), permission (403 per role/scope), not-found and
 cross-organisation (404) cases; security logic has adversarial cases (obfuscation, encodings,

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Clean-environment smoke test: a fresh database, a real server process and real HTTP traffic.
 
-    backend/.venv/bin/python .claude/skills/release-readiness/scripts/smoke.py           # random port 18000-18999
-    backend/.venv/bin/python .claude/skills/release-readiness/scripts/smoke.py --port 18421 --keep --json
+    backend/.venv/bin/python scripts/smoke.py           # random port 18000-18999
+    backend/.venv/bin/python scripts/smoke.py --port 18421 --keep --json
 
 Every step goes through the shipped entry points (``contextos-server`` CLI, ``uvicorn app.main:app``,
 ``/api/v1``); nothing is inserted directly. The synthetic GitHub-format token and the injection text are
@@ -32,7 +32,7 @@ from typing import Any
 
 import httpx
 
-REPO = Path(__file__).resolve().parents[4]
+REPO = Path(__file__).resolve().parents[1]
 BACKEND = REPO / "backend"
 BIN = BACKEND / ".venv" / "bin"
 API = "/api/v1"

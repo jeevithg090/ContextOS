@@ -1,10 +1,6 @@
----
-name: release-readiness
-description: Decide whether ContextOS meets its Definition of Done for a release or milestone by verifying each checklist item with evidence from this repo — a clean-environment smoke run of the real server, test suites, isolation and redaction checks, docs and limitations — and report met / partial / not met with the gap for each. Use when asked "is it ready?", before tagging or demoing a release, at the end of a build wave, or when updating the release status in CONTEXT.md.
-argument-hint: "[milestone name]"
----
-
 # Release readiness
+
+> Decide whether ContextOS meets its Definition of Done for a release or milestone by verifying each checklist item with evidence from this repo — a clean-environment smoke run of the real server, test suites, isolation and redaction checks, docs and limitations — and report met / partial / not met with the gap for each. Use when asked "is it ready?", before tagging or demoing a release, at the end of a build wave, or when updating the release status in CONTEXT.md.
 
 The answer is the checklist with evidence. "Met" requires a command output, a test node id or a
 file reference you checked today; anything else is "partial" or "not met". Do not round up.
@@ -13,20 +9,20 @@ file reference you checked today; anything else is "partial" or "not met". Do no
 ```bash
 # 1. Whole system from an empty database: CLI init-db → orgs/keys → uvicorn → real HTTP traffic
 #    (frontend served if frontend/dist exists — run `cd frontend && npm run build` first)
-backend/.venv/bin/python .claude/skills/release-readiness/scripts/smoke.py --json
+backend/.venv/bin/python scripts/smoke.py --json
 # 2. Suites (see test-and-verify for interpretation)
 cd backend && .venv/bin/python -m pytest -q -p no:cacheprovider tests
 cd backend && .venv/bin/ruff check app tests
 cd sdk && ../backend/.venv/bin/python -m pytest -q -p no:cacheprovider tests
 cd frontend && npx tsc -b --noEmit && npx eslint src && npx vitest run && npm run build
 # 3. API surface: auth, placeholders, isolation coverage
-backend/.venv/bin/python .claude/skills/repo-audit/scripts/route_audit.py
+backend/.venv/bin/python scripts/audit/route_audit.py
 # 4. Migrations agree with the models and round-trip
 cd backend && S=$(mktemp -d) && export CONTEXTOS_DATABASE_URL=sqlite:///$S/a.db \
   && .venv/bin/alembic upgrade head && .venv/bin/alembic check \
   && .venv/bin/alembic downgrade base && .venv/bin/alembic upgrade head; rm -rf "$S"; unset CONTEXTOS_DATABASE_URL
 # 5. Docs reference real files
-backend/.venv/bin/python .claude/skills/repo-audit/scripts/doc_paths.py
+backend/.venv/bin/python scripts/audit/doc_paths.py
 ```
 `smoke.py` checks (names as printed): `init-db (migrations)`, `organisations + API keys`,
 `server starts`, `frontend served`, `owner login`, `events ingested`, `policy decision on exfiltration`,

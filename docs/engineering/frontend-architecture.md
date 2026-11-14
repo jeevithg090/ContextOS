@@ -1,11 +1,6 @@
----
-paths:
-  - "frontend/src/**/*.{ts,tsx}"
-  - "frontend/tailwind.config.js"
-  - "frontend/src/styles/**"
----
-
 # Frontend architecture (React 18 + TS + Vite + Tailwind + TanStack Query)
+
+Applies to: `frontend/src/**/*.{ts,tsx}`, `frontend/tailwind.config.js`, `frontend/src/styles/**`
 
 - Each feature owns `src/features/<feature>/`; pages are lazy-loaded from `src/app/routes.tsx`,
   navigation lives in `src/app/nav.ts`.
