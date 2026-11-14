@@ -18,7 +18,9 @@ class Tool(TimestampMixin, OrgScopedMixin, Base):
 
     id: Mapped[str] = id_column()
     name: Mapped[str] = mapped_column(String(200))
-    provider: Mapped[str] = mapped_column(String(200), default="unknown")  # "claude_code", "mcp:<server>", ...
+    provider: Mapped[str] = mapped_column(
+        String(200), default="unknown"
+    )  # "claude_code", "mcp:<server>", ...
     server: Mapped[str | None] = mapped_column(String(200), default=None)  # MCP server name when applicable
     category: Mapped[str] = mapped_column(String(32), default="other")  # server-classified ToolCategory
     risk_level: Mapped[str] = mapped_column(String(16), default="low")
@@ -62,7 +64,9 @@ class ToolInvocation(TimestampMixin, OrgScopedMixin, Base):
     tool_id: Mapped[str] = mapped_column(String(40), ForeignKey("tools.id", ondelete="CASCADE"), index=True)
     request_event_id: Mapped[str | None] = mapped_column(String(40), default=None)
     result_event_id: Mapped[str | None] = mapped_column(String(40), default=None)
-    correlation_id: Mapped[str | None] = mapped_column(String(200), default=None)  # e.g. Claude Code tool_use_id
+    correlation_id: Mapped[str | None] = mapped_column(
+        String(200), default=None
+    )  # e.g. Claude Code tool_use_id
     # requested -> allowed|denied|pending_approval|approved|rejected|restricted -> completed|failed
     status: Mapped[str] = mapped_column(String(32), default="requested")
     decision: Mapped[str | None] = mapped_column(String(32), default=None)  # Decision
@@ -71,7 +75,9 @@ class ToolInvocation(TimestampMixin, OrgScopedMixin, Base):
     approval_id: Mapped[str | None] = mapped_column(String(40), default=None)
     arguments_redacted: Mapped[dict[str, Any]] = mapped_column(default=dict)
     argument_hash: Mapped[str | None] = mapped_column(String(64), default=None)
-    resources: Mapped[list[Any]] = mapped_column(default=list)  # [{"kind": "file"|"url"|..., "id": str, "sensitive": bool, "reason": str|None}]
+    resources: Mapped[list[Any]] = mapped_column(
+        default=list
+    )  # [{"kind": "file"|"url"|..., "id": str, "sensitive": bool, "reason": str|None}]
     destination_id: Mapped[str | None] = mapped_column(String(40), default=None, index=True)
     sensitive_data_detected: Mapped[bool] = mapped_column(Boolean, default=False)
     secret_fingerprints: Mapped[list[Any]] = mapped_column(default=list)

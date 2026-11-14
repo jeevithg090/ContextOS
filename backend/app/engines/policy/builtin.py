@@ -290,7 +290,9 @@ _PACK: list[dict[str, Any]] = [
         "mode": "enforce",
         "priority": 300,
         "severity": "medium",
-        "conditions": {"all": [{"field": "tool.category", "op": "eq", "value": "file_read"}, _TOUCHES_SENSITIVE]},
+        "conditions": {
+            "all": [{"field": "tool.category", "op": "eq", "value": "file_read"}, _TOUCHES_SENSITIVE]
+        },
         "restrictions": {},
         "tags": ["sensitive-data", "audit"],
     },

@@ -26,23 +26,73 @@ from functools import lru_cache
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-DEFAULT_DOCS = ["CONTRIBUTING.md", "CONTEXT.md", "README.md", "docs/**/*.md",
-                "sdk/README.md", "examples/**/*.md"]
+DEFAULT_DOCS = [
+    "CONTRIBUTING.md",
+    "CONTEXT.md",
+    "README.md",
+    "docs/**/*.md",
+    "sdk/README.md",
+    "examples/**/*.md",
+]
 BASES = ["", "backend", "frontend", "sdk"]
 PY_ROOTS = {"app": REPO / "backend" / "app", "contextos": REPO / "sdk" / "contextos"}
 HOST_PATHS = {  # files in the project ContextOS is installed into, or in the user's tools — not here
-    ".claude/settings.json", ".claude/settings.local.json", ".claude/settings.json.contextos-backup",
-    ".mcp.json", ".cursor/mcp.json", "claude_desktop_config.json", ".env",
-    "hooks.json", "config.toml", "hooks.json.contextos-backup",  # Codex (~/.codex or <project>/.codex)
+    ".claude/settings.json",
+    ".claude/settings.local.json",
+    ".claude/settings.json.contextos-backup",
+    ".mcp.json",
+    ".cursor/mcp.json",
+    "claude_desktop_config.json",
+    ".env",
+    "hooks.json",
+    "config.toml",
+    "hooks.json.contextos-backup",  # Codex (~/.codex or <project>/.codex)
 }
 # runtime / generated, the user's Codex configuration, and paths in the Codex source repository
 HOST_PREFIXES = (".contextos/", "backend/data/", "frontend/dist/", "node_modules/", ".codex/", "codex-rs/")
-KNOWN_ROOTS = {"backend", "frontend", "sdk", "docs", "examples", "scripts", ".claude", "app", "src", "tests",
-               "contextos", "alembic"}
-SKIP_DIRS = {".git", "node_modules", ".venv", "dist", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache",
-             "data"}
-EXTENSIONS = (".md", ".py", ".ts", ".tsx", ".js", ".json", ".toml", ".ini", ".yaml", ".yml", ".css",
-              ".html", ".sh", ".mako", ".txt", ".cfg")
+KNOWN_ROOTS = {
+    "backend",
+    "frontend",
+    "sdk",
+    "docs",
+    "examples",
+    "scripts",
+    ".claude",
+    "app",
+    "src",
+    "tests",
+    "contextos",
+    "alembic",
+}
+SKIP_DIRS = {
+    ".git",
+    "node_modules",
+    ".venv",
+    "dist",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".mypy_cache",
+    "data",
+}
+EXTENSIONS = (
+    ".md",
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".json",
+    ".toml",
+    ".ini",
+    ".yaml",
+    ".yml",
+    ".css",
+    ".html",
+    ".sh",
+    ".mako",
+    ".txt",
+    ".cfg",
+)
 _SPAN = re.compile(r"(?<!`)`([^`\n]+)`(?!`)")
 _LINK = re.compile(r"\]\(([^)\s]+)\)")
 _DOTTED = re.compile(r"^(app|contextos)(\.[A-Za-z_][A-Za-z0-9_]*)+$")
@@ -60,7 +110,11 @@ def _expand_braces(pattern: str) -> list[str]:
     m = re.search(r"\{([^{}]*,[^{}]*)\}", pattern)
     if not m:
         return [pattern]
-    return [x for alt in m.group(1).split(",") for x in _expand_braces(pattern[:m.start()] + alt + pattern[m.end():])]
+    return [
+        x
+        for alt in m.group(1).split(",")
+        for x in _expand_braces(pattern[: m.start()] + alt + pattern[m.end() :])
+    ]
 
 
 def looks_like_path(token: str) -> bool:
@@ -110,8 +164,10 @@ def _exists(candidate: str, doc_dir: Path) -> bool:
         if any((root / bare).exists() for root in [REPO / b for b in BASES] + [doc_dir]):
             return True
         suffix = bare + ("/" if is_dir else "")
-        if any(e == suffix or e.endswith("/" + suffix) or (not is_dir and e.rstrip("/").endswith("/" + bare))
-               for e in repo_index()):
+        if any(
+            e == suffix or e.endswith("/" + suffix) or (not is_dir and e.rstrip("/").endswith("/" + bare))
+            for e in repo_index()
+        ):
             return True
     return False
 
@@ -157,7 +213,9 @@ def scan_document(doc: Path) -> list[Missing]:
         if in_fence:
             continue
         refs = [m.group(1).strip() for m in _SPAN.finditer(line)]
-        refs += [m.group(1) for m in _LINK.finditer(line) if not m.group(1).startswith(("http", "#", "mailto:"))]
+        refs += [
+            m.group(1) for m in _LINK.finditer(line) if not m.group(1).startswith(("http", "#", "mailto:"))
+        ]
         for ref in refs:
             token = re.sub(r"(#[\w\-]*|:\d+(-\d+)?)$", "", ref).rstrip(".,;:")
             dotted = _dotted_alternatives(token)

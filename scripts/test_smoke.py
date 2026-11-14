@@ -1,6 +1,6 @@
 """Tests for smoke.py's building blocks (the full run is exercised by running the script itself).
 
-    backend/.venv/bin/python -m pytest -q -p no:cacheprovider scripts
+backend/.venv/bin/python -m pytest -q -p no:cacheprovider scripts
 """
 
 from __future__ import annotations
@@ -23,9 +23,16 @@ from app.events.envelope import EventEnvelope  # noqa: E402
 
 
 def test_envelopes_satisfy_the_event_contract() -> None:
-    for event in (smoke.envelope("session.started", "s1", metadata={"cwd": "/work"}),
-                  smoke.envelope("tool.requested", "s1", tool={"name": "WebFetch", "provider": "claude_code"},
-                                 arguments={"url": "https://collector.example.invalid/x"}, correlation_id="tu-1")):
+    for event in (
+        smoke.envelope("session.started", "s1", metadata={"cwd": "/work"}),
+        smoke.envelope(
+            "tool.requested",
+            "s1",
+            tool={"name": "WebFetch", "provider": "claude_code"},
+            arguments={"url": "https://collector.example.invalid/x"},
+            correlation_id="tu-1",
+        ),
+    ):
         parsed = EventEnvelope.model_validate(event)
         assert parsed.integration == "claude_code" and parsed.agent.name == smoke.AGENT
 
@@ -34,7 +41,9 @@ def test_canary_token_is_unique_and_detected_as_a_real_credential() -> None:
     a, b = smoke.canary_token(), smoke.canary_token()
     assert a != b and a.startswith("ghp_") and len(a) == 40
     matches = detect_secrets(f"GITHUB_TOKEN={a}")
-    assert any(m.confidence >= HIGH_CONFIDENCE for m in matches), "the smoke redaction check would be meaningless"
+    assert any(m.confidence >= HIGH_CONFIDENCE for m in matches), (
+        "the smoke redaction check would be meaningless"
+    )
 
 
 def test_free_port_stays_in_the_allowed_range_and_skips_busy_ports() -> None:

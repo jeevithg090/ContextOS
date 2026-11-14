@@ -71,7 +71,9 @@ def default_agent_ref(config: Config | None = None) -> AgentRef:
     if not name:
         script = Path(sys.argv[0]).stem if sys.argv and sys.argv[0] not in ("", "-c") else ""
         name = script or "python-agent"
-    return AgentRef(name=name[:200], framework="python_sdk", environment=config.environment if config else None)
+    return AgentRef(
+        name=name[:200], framework="python_sdk", environment=config.environment if config else None
+    )
 
 
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
@@ -140,8 +142,11 @@ class ContextOSClient(ReadAPIMixin):
         self.base_url = _normalise_base_url(base_url)
         self._api_key = api_key
         if api_key and sends_credentials_in_clear(self.base_url):
-            log.warning("ContextOS at %s is plain HTTP to another host: the API key and event data travel "
-                        "unencrypted. Use an https:// URL.", self.base_url)
+            log.warning(
+                "ContextOS at %s is plain HTTP to another host: the API key and event data travel "
+                "unencrypted. Use an https:// URL.",
+                self.base_url,
+            )
         self.timeout = timeout
         self.agent = agent or default_agent_ref()
         self.integration = integration
@@ -188,26 +193,42 @@ class ContextOSClient(ReadAPIMixin):
 
     # -- transport ------------------------------------------------------------------------------
 
-    def _send_raw(self, method: str, path: str, *, json_body: Any = None, params: dict[str, Any] | None = None,
-                  retry: RetryPolicy = "all", auth: bool = True) -> httpx.Response:
+    def _send_raw(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_body: Any = None,
+        params: dict[str, Any] | None = None,
+        retry: RetryPolicy = "all",
+        auth: bool = True,
+    ) -> httpx.Response:
         headers: dict[str, str] = {}
         if auth:
             if not self._api_key:
-                raise AuthError(401, "no_api_key", "No API key configured: set CONTEXTOS_API_KEY or run `contextos init`")
+                raise AuthError(
+                    401, "no_api_key", "No API key configured: set CONTEXTOS_API_KEY or run `contextos init`"
+                )
             headers["Authorization"] = f"Bearer {self._api_key}"
         url = self.base_url + API_PREFIX + path
         clean_params = {k: v for k, v in (params or {}).items() if v is not None and v != ""}
         attempt = 0
         while True:
             try:
-                response = self._http.request(method, url, json=json_body, params=clean_params or None, headers=headers)
+                response = self._http.request(
+                    method, url, json=json_body, params=clean_params or None, headers=headers
+                )
             except httpx.TransportError as exc:
-                retryable = retry == "all" or (retry == "connect" and isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)))
+                retryable = retry == "all" or (
+                    retry == "connect" and isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout))
+                )
                 if retryable and attempt < self.max_retries:
                     self._backoff(attempt)
                     attempt += 1
                     continue
-                raise Unreachable(f"Cannot reach ContextOS at {self.base_url} ({type(exc).__name__})") from None
+                raise Unreachable(
+                    f"Cannot reach ContextOS at {self.base_url} ({type(exc).__name__})"
+                ) from None
             if response.status_code in _RETRY_STATUSES and retry == "all" and attempt < self.max_retries:
                 self._backoff(attempt, response.headers.get("Retry-After"))
                 attempt += 1
@@ -221,8 +242,16 @@ class ContextOSClient(ReadAPIMixin):
             delay = min(max(delay, float(retry_after)), 30.0)
         self._sleep(delay)
 
-    def _request(self, method: str, path: str, *, json_body: Any = None, params: dict[str, Any] | None = None,
-                 retry: RetryPolicy = "all", auth: bool = True) -> Any:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_body: Any = None,
+        params: dict[str, Any] | None = None,
+        retry: RetryPolicy = "all",
+        auth: bool = True,
+    ) -> Any:
         response = self._send_raw(method, path, json_body=json_body, params=params, retry=retry, auth=auth)
         if response.status_code in _GATEWAY_STATUSES:
             raise Unreachable(f"ContextOS at {self.base_url} is unavailable (HTTP {response.status_code})")
@@ -233,7 +262,9 @@ class ContextOSClient(ReadAPIMixin):
         try:
             return response.json()
         except ValueError:
-            raise APIError(response.status_code, "invalid_response", "Server returned a non-JSON response") from None
+            raise APIError(
+                response.status_code, "invalid_response", "Server returned a non-JSON response"
+            ) from None
 
     # -- events ---------------------------------------------------------------------------------
 
@@ -246,7 +277,9 @@ class ContextOSClient(ReadAPIMixin):
     def send_event(self, event: EventEnvelope | dict[str, Any], *, spool: bool = True) -> SendResult:
         return self.send_events([event], spool=spool)
 
-    def send_events(self, events: Iterable[EventEnvelope | dict[str, Any]], *, spool: bool = True) -> SendResult:
+    def send_events(
+        self, events: Iterable[EventEnvelope | dict[str, Any]], *, spool: bool = True
+    ) -> SendResult:
         """POST events in batches (<= 500 events, < 2 MB). Unreachable server → spooled (if enabled)."""
         wire = [e.to_wire() if isinstance(e, EventEnvelope) else dict(e) for e in events]
         outcome = SendResult()
@@ -261,14 +294,24 @@ class ContextOSClient(ReadAPIMixin):
                 try:
                     stored = self.spool.append(pending)
                 except OSError as exc:
-                    log.warning("ContextOS unreachable and the spool at %s could not be written (%s): "
-                                "%d event(s) not recorded", self.spool.path, exc.strerror or exc, len(pending))
+                    log.warning(
+                        "ContextOS unreachable and the spool at %s could not be written (%s): "
+                        "%d event(s) not recorded",
+                        self.spool.path,
+                        exc.strerror or exc,
+                        len(pending),
+                    )
                     return outcome
                 outcome.spooled.extend(e["event_id"] for e in pending[:stored])
                 # Warn once per outage; later spooled events are logged at debug level.
                 level = logging.DEBUG if self._outage_reported else logging.WARNING
-                log.log(level, "ContextOS unreachable: %d event(s) spooled to %s; they are re-sent automatically "
-                        "after the next successful send", stored, self.spool.path)
+                log.log(
+                    level,
+                    "ContextOS unreachable: %d event(s) spooled to %s; they are re-sent automatically "
+                    "after the next successful send",
+                    stored,
+                    self.spool.path,
+                )
                 self._outage_reported = True
                 return outcome
         self._outage_reported = False
@@ -285,7 +328,9 @@ class ContextOSClient(ReadAPIMixin):
             if exc.status_code not in (413, 422) or isinstance(exc, (AuthError, ServerError)):
                 raise
             if len(batch) == 1:  # isolate a poison event instead of blocking the rest
-                return [EventResult(event_id=str(batch[0].get("event_id")), status="rejected", error=exc.message)]
+                return [
+                    EventResult(event_id=str(batch[0].get("event_id")), status="rejected", error=exc.message)
+                ]
             middle = len(batch) // 2
             return self._post_batch(batch[:middle]) + self._post_batch(batch[middle:])
         results = data.get("results", []) if isinstance(data, dict) else []
@@ -308,7 +353,9 @@ class ContextOSClient(ReadAPIMixin):
     def _flush_spool_quietly(self) -> None:
         if self.spool is None or not self.spool.path.parent.exists():
             return
-        if not self.spool.path.exists() and not any(self.spool.path.parent.glob(self.spool.path.name + ".*.flushing")):
+        if not self.spool.path.exists() and not any(
+            self.spool.path.parent.glob(self.spool.path.name + ".*.flushing")
+        ):
             return
         try:
             delivered = self.flush_spool()
@@ -336,10 +383,13 @@ class ContextOSClient(ReadAPIMixin):
         raises :class:`APIError` 409 once a person decided it or it expired (``details["status"]``).
         Retried only when the connection could not be opened."""
         body = {"reason": reason.strip()[:500]} if reason and reason.strip() else None
-        return self._request("POST", f"/decide/approvals/{quote(approval_id, safe='')}/cancel", json_body=body,
-                             retry="connect")
+        return self._request(
+            "POST", f"/decide/approvals/{quote(approval_id, safe='')}/cancel", json_body=body, retry="connect"
+        )
 
-    def wait_for_approval(self, approval_id: str, timeout_s: float = 300.0, poll_s: float = 2.0) -> dict[str, Any]:
+    def wait_for_approval(
+        self, approval_id: str, timeout_s: float = 300.0, poll_s: float = 2.0
+    ) -> dict[str, Any]:
         """Poll until the approval leaves ``pending``; returns the approval. Raises :class:`ApprovalTimeout`."""
         deadline = self._clock() + timeout_s
         last_status: str | None = None
@@ -439,5 +489,12 @@ def _batches(events: list[dict[str, Any]]) -> Iterable[list[dict[str, Any]]]:
         yield batch
 
 
-__all__ = ["API_PREFIX", "MAX_BATCH_EVENTS", "ContextOSClient", "SendResult", "approval_status_of", "default_agent_ref",
-           "withdraw_approval"]
+__all__ = [
+    "API_PREFIX",
+    "MAX_BATCH_EVENTS",
+    "ContextOSClient",
+    "SendResult",
+    "approval_status_of",
+    "default_agent_ref",
+    "withdraw_approval",
+]

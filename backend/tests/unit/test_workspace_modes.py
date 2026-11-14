@@ -61,8 +61,9 @@ def test_preset_notes_are_product_specific_and_generic_has_none():
 def test_generation_options_defaults_roundtrip_and_validation():
     opts = GenerationOptions()
     assert GenerationOptions.from_dict(opts.to_dict()) == opts
-    custom = GenerationOptions.from_dict({"technical_depth": "deep", "constraints": [" keep API ", ""],
-                                          "output_format": "xml_tagged"})
+    custom = GenerationOptions.from_dict(
+        {"technical_depth": "deep", "constraints": [" keep API ", ""], "output_format": "xml_tagged"}
+    )
     assert custom.constraints == ["keep API"]
     assert custom.to_dict()["output_format"] == "xml_tagged"
     with pytest.raises(ValueError, match="technical_depth"):

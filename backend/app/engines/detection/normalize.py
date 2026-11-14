@@ -65,17 +65,69 @@ def _strip_invisible(text: str) -> tuple[str, str]:
 _HOMOGLYPHS = str.maketrans(
     {
         # Cyrillic
-        "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "і": "i", "ј": "j",
-        "ѕ": "s", "ԁ": "d", "һ": "h", "ӏ": "l", "ɡ": "g", "к": "k", "м": "m", "н": "h", "т": "t",
-        "в": "b", "ԛ": "q", "ԝ": "w",
-        "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P", "С": "C",
-        "Т": "T", "Х": "X", "У": "Y", "І": "I", "Ј": "J", "Ѕ": "S",
+        "а": "a",
+        "е": "e",
+        "о": "o",
+        "р": "p",
+        "с": "c",
+        "у": "y",
+        "х": "x",
+        "і": "i",
+        "ј": "j",
+        "ѕ": "s",
+        "ԁ": "d",
+        "һ": "h",
+        "ӏ": "l",
+        "ɡ": "g",
+        "к": "k",
+        "м": "m",
+        "н": "h",
+        "т": "t",
+        "в": "b",
+        "ԛ": "q",
+        "ԝ": "w",
+        "А": "A",
+        "В": "B",
+        "Е": "E",
+        "К": "K",
+        "М": "M",
+        "Н": "H",
+        "О": "O",
+        "Р": "P",
+        "С": "C",
+        "Т": "T",
+        "Х": "X",
+        "У": "Y",
+        "І": "I",
+        "Ј": "J",
+        "Ѕ": "S",
         # Greek
-        "α": "a", "ο": "o", "ρ": "p", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "τ": "t", "υ": "u",
-        "Α": "A", "Β": "B", "Ε": "E", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O",
-        "Ρ": "P", "Τ": "T", "Χ": "X", "Υ": "Y", "Ζ": "Z",
+        "α": "a",
+        "ο": "o",
+        "ρ": "p",
+        "ε": "e",
+        "ι": "i",
+        "κ": "k",
+        "ν": "v",
+        "τ": "t",
+        "υ": "u",
+        "Α": "A",
+        "Β": "B",
+        "Ε": "E",
+        "Η": "H",
+        "Ι": "I",
+        "Κ": "K",
+        "Μ": "M",
+        "Ν": "N",
+        "Ο": "O",
+        "Ρ": "P",
+        "Τ": "T",
+        "Χ": "X",
+        "Υ": "Y",
+        "Ζ": "Z",
         # Latin lookalikes
-        "ı": "i", "ℓ": "l",
+        "ı": "i",
+        "ℓ": "l",
     }
 )
 
@@ -86,7 +138,9 @@ def fold_homoglyphs(text: str) -> str:
 
 # --- leetspeak / spaced letters ---------------------------------------------------------------
 
-_LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s", "!": "i"})
+_LEET = str.maketrans(
+    {"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s", "!": "i"}
+)
 # Only digits trigger a leetspeak pass: '@', '$' and '!' occur far too often in ordinary text
 # (markdown images, emails, shell) to gate on, though they are still folded inside a leet word.
 _LEET_CHARS = frozenset("0134578")
@@ -130,7 +184,10 @@ _HIDDEN_ELEMENT = re.compile(
     r"[^\"']*[\"'][^>]*>(?P<body>.*?)</(?P=tag)\s*>",
     re.S | re.I,
 )
-_HIDDEN_ATTR_ELEMENT = re.compile(r"<(?P<tag>[a-z][a-z0-9]*)\b[^>]*\b(?:hidden|aria-hidden\s*=\s*[\"']true[\"'])[^>]*>(?P<body>.*?)</(?P=tag)\s*>", re.S | re.I)
+_HIDDEN_ATTR_ELEMENT = re.compile(
+    r"<(?P<tag>[a-z][a-z0-9]*)\b[^>]*\b(?:hidden|aria-hidden\s*=\s*[\"']true[\"'])[^>]*>(?P<body>.*?)</(?P=tag)\s*>",
+    re.S | re.I,
+)
 _SCRIPT = re.compile(r"<(script|style|noscript|template)\b[^>]*>(.*?)</\1\s*>", re.S | re.I)
 _META = re.compile(r"<meta\b[^>]*\bcontent\s*=\s*[\"']([^\"']+)[\"']", re.I)
 _ATTRS = re.compile(r"\b(?:alt|title|aria-label|data-[a-z-]+)\s*=\s*[\"']([^\"']{8,})[\"']", re.I)

@@ -33,8 +33,12 @@ GRADES = ((90, "A"), (80, "B"), (70, "C"), (60, "D"))
 class PostureInputs:
     agent: dict[str, Any]  # {"id","name","environment","framework","status"}
     declared_tools: list[dict[str, Any]] = field(default_factory=list)
-    observed_tools: list[dict[str, Any]] = field(default_factory=list)  # [{"name","category","risk_level","count"}]
-    policies: list[dict[str, Any]] = field(default_factory=list)  # enabled policies: [{"id","name","outcome","mode","conditions"}]
+    observed_tools: list[dict[str, Any]] = field(
+        default_factory=list
+    )  # [{"name","category","risk_level","count"}]
+    policies: list[dict[str, Any]] = field(
+        default_factory=list
+    )  # enabled policies: [{"id","name","outcome","mode","conditions"}]
     trust_rule_count: int = 0
     untrusted_source_count: int = 0
     open_findings: list[dict[str, Any]] = field(default_factory=list)  # [{"id","severity","category"}]
@@ -69,12 +73,21 @@ def _capabilities(inputs: PostureInputs) -> list[dict[str, Any]]:
         name = str(tool.get("name") or tool.get("category") or "")
         if not name:
             continue
-        cls = classify_tool(name, str(tool.get("provider") or "observed"), category_hint=tool.get("category"),
-                            server=tool.get("server"))
+        cls = classify_tool(
+            name,
+            str(tool.get("provider") or "observed"),
+            category_hint=tool.get("category"),
+            server=tool.get("server"),
+        )
         category = str(tool.get("category") or cls.category)
-        caps[name] = {"name": name, "category": category, "risk_level": str(tool.get("risk_level") or cls.risk_level),
-                      "outbound": cls.outbound or category == ToolCategory.SHELL, "source": "observed",
-                      "count": int(tool.get("count") or 0)}
+        caps[name] = {
+            "name": name,
+            "category": category,
+            "risk_level": str(tool.get("risk_level") or cls.risk_level),
+            "outbound": cls.outbound or category == ToolCategory.SHELL,
+            "source": "observed",
+            "count": int(tool.get("count") or 0),
+        }
     for tool in inputs.declared_tools:
         name = str(tool.get("name") or tool.get("category") or "")
         if not name:
@@ -82,15 +95,27 @@ def _capabilities(inputs: PostureInputs) -> list[dict[str, Any]]:
         if name in caps:
             caps[name]["source"] = "declared and observed"
             continue
-        cls = classify_tool(name, str(tool.get("provider") or "declared"), category_hint=tool.get("category"),
-                            server=tool.get("server"))
-        caps[name] = {"name": name, "category": cls.category, "risk_level": cls.risk_level,
-                      "outbound": cls.outbound or cls.category == ToolCategory.SHELL, "source": "declared", "count": 0}
+        cls = classify_tool(
+            name,
+            str(tool.get("provider") or "declared"),
+            category_hint=tool.get("category"),
+            server=tool.get("server"),
+        )
+        caps[name] = {
+            "name": name,
+            "category": cls.category,
+            "risk_level": cls.risk_level,
+            "outbound": cls.outbound or cls.category == ToolCategory.SHELL,
+            "source": "declared",
+            "count": 0,
+        }
     return list(caps.values())
 
 
 def _summary(score: int, grade: str, dims: list[PostureDimension]) -> str:
-    missing = sorted((d for d in dims if d.score < d.max_score), key=lambda d: (d.score / d.max_score, -d.max_score))
+    missing = sorted(
+        (d for d in dims if d.score < d.max_score), key=lambda d: (d.score / d.max_score, -d.max_score)
+    )
     text = f"Posture {score}/100 (grade {grade})."
     if missing:
         weakest = ", ".join(f"{d.label.lower()} {d.score}/{d.max_score}" for d in missing[:3])
@@ -114,8 +139,12 @@ def compute_agent_posture(inputs: PostureInputs) -> PostureAssessment:
         policy_coverage(caps, policies),
         approval_controls(inputs, caps, policies),
         detection_coverage(policies),
-        unresolved_findings(sorted(inputs.open_findings,
-                                   key=lambda f: -SEVERITY_RANK.get(str(f.get("severity") or "").lower(), 0))),
+        unresolved_findings(
+            sorted(
+                inputs.open_findings,
+                key=lambda f: -SEVERITY_RANK.get(str(f.get("severity") or "").lower(), 0),
+            )
+        ),
         trifecta_exposure(inputs.sessions_with_trifecta, inputs.total_sessions),
     ]
     score = max(0, min(100, sum(d.score for d in dims)))

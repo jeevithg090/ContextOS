@@ -28,21 +28,37 @@ from tests.integration.workspace_support import (
 
 
 def test_create_task_numbers_defaults_and_redaction(client, org, db):
-    first = create_task(client, org.user_headers, "Rotate credentials",
-                        description=f"Leaked token {GITHUB_TOKEN} in CI logs", related_files=["ci/deploy.sh"])
+    first = create_task(
+        client,
+        org.user_headers,
+        "Rotate credentials",
+        description=f"Leaked token {GITHUB_TOKEN} in CI logs",
+        related_files=["ci/deploy.sh"],
+    )
     second = create_task(client, org.user_headers, "Second")
     assert (first["key"], second["key"]) == ("CTX-1", "CTX-2")
     assert first["board_name"] == "Engineering" and first["column_name"] == "Backlog"
     assert (first["position"], second["position"]) == (0.0, 1.0)
-    assert first["priority"] == "medium" and first["task_type"] == "task" and first["verification_status"] == "unverified"
+    assert (
+        first["priority"] == "medium"
+        and first["task_type"] == "task"
+        and first["verification_status"] == "unverified"
+    )
     assert GITHUB_TOKEN not in first["description"] and "[REDACTED:" in first["description"]
     assert first["reporter"]["id"] == org.user_id and first["related_files"] == ["ci/deploy.sh"]
     db.rollback()
     stored = db.get(Task, first["id"])
     assert GITHUB_TOKEN not in stored.description
-    assert db.scalar(select(AuditEvent).where(AuditEvent.organization_id == org.org_id,
-                                              AuditEvent.action == "task.created", AuditEvent.target_id == first["id"]))
-    unknown_board = client.post(f"{API}/tasks", json={"title": "x", "board_id": "brd_nope"}, headers=org.user_headers)
+    assert db.scalar(
+        select(AuditEvent).where(
+            AuditEvent.organization_id == org.org_id,
+            AuditEvent.action == "task.created",
+            AuditEvent.target_id == first["id"],
+        )
+    )
+    unknown_board = client.post(
+        f"{API}/tasks", json={"title": "x", "board_id": "brd_nope"}, headers=org.user_headers
+    )
     assert unknown_board.status_code == 404
 
 
@@ -57,10 +73,20 @@ def test_service_mutations_queue_task_notifications(db, org):
 def test_update_records_one_activity_per_changed_field(client, org):
     task = create_task(client, org.user_headers)
     due = (datetime.now(UTC) + timedelta(days=3)).isoformat()
-    updated = ok(client.patch(f"{API}/tasks/{task['id']}", json={
-        "title": "Fix the thing properly", "priority": "urgent", "due_date": due, "severity": "high",
-        "acceptance_criteria": [{"text": "Tests pass"}], "description": task["description"],
-    }, headers=org.user_headers))
+    updated = ok(
+        client.patch(
+            f"{API}/tasks/{task['id']}",
+            json={
+                "title": "Fix the thing properly",
+                "priority": "urgent",
+                "due_date": due,
+                "severity": "high",
+                "acceptance_criteria": [{"text": "Tests pass"}],
+                "description": task["description"],
+            },
+            headers=org.user_headers,
+        )
+    )
     changes = {a["details"]["field"]: a for a in updated["activity"] if a["kind"] == "updated"}
     assert set(changes) == {"title", "priority", "due_date", "severity", "acceptance_criteria"}
     assert changes["priority"]["from_value"] == "medium" and changes["priority"]["to_value"] == "urgent"
@@ -74,8 +100,13 @@ def test_update_records_one_activity_per_changed_field(client, org):
 def test_move_respects_wip_limits_with_explicit_override(client, org):
     board = board_by_name(client, org.user_headers, "Engineering")
     progress = column(board, "In Progress")
-    ok(client.patch(f"{API}/boards/{board['id']}/columns/{progress['id']}", json={"wip_limit": 1},
-                    headers=org.user_headers))
+    ok(
+        client.patch(
+            f"{API}/boards/{board['id']}/columns/{progress['id']}",
+            json={"wip_limit": 1},
+            headers=org.user_headers,
+        )
+    )
     a, b = create_task(client, org.user_headers, "A"), create_task(client, org.user_headers, "B")
     ok(move(client, org.user_headers, a["id"], progress["id"]))
     refused = move(client, org.user_headers, b["id"], progress["id"])
@@ -104,8 +135,13 @@ def test_verification_gate_done_transitions_and_reopen(client, org):
     assert "needs passed verification evidence" in gated.json()["error"]["message"]
     assert gated.json()["error"]["details"]["reason"] == "verification_required"
     downstream = move(client, org.user_headers, task["id"], done["id"])
-    assert downstream.status_code == 409 and "comes after the verification gate" in downstream.json()["error"]["message"]
-    direct = client.post(f"{API}/tasks", json={"title": "x", "column_id": verified["id"]}, headers=org.user_headers)
+    assert (
+        downstream.status_code == 409
+        and "comes after the verification gate" in downstream.json()["error"]["message"]
+    )
+    direct = client.post(
+        f"{API}/tasks", json={"title": "x", "column_id": verified["id"]}, headers=org.user_headers
+    )
     assert direct.status_code == 409
 
     run = verify(client, org.user_headers, task["id"], "passed")
@@ -121,8 +157,13 @@ def test_verification_gate_done_transitions_and_reopen(client, org):
 def test_done_column_that_requires_verification(client, org):
     board = board_by_name(client, org.user_headers, "Engineering")
     done = column(board, "Done")
-    ok(client.patch(f"{API}/boards/{board['id']}/columns/{done['id']}", json={"requires_verification": True},
-                    headers=org.user_headers))
+    ok(
+        client.patch(
+            f"{API}/boards/{board['id']}/columns/{done['id']}",
+            json={"requires_verification": True},
+            headers=org.user_headers,
+        )
+    )
     task = create_task(client, org.user_headers)
     blocked = move(client, org.user_headers, task["id"], done["id"])
     assert blocked.status_code == 409 and "'Done' requires it" in blocked.json()["error"]["message"]
@@ -134,19 +175,39 @@ def test_done_column_that_requires_verification(client, org):
 
 def test_automation_rules_fire_and_never_bypass_gates(client, org):
     board = board_by_name(client, org.user_headers, "Security Remediation")
-    progress, review, testing, verified = (column(board, n) for n in ("In Progress", "Review", "Testing", "Verified"))
+    progress, review, testing, verified = (
+        column(board, n) for n in ("In Progress", "Review", "Testing", "Verified")
+    )
     cols = f"{API}/boards/{board['id']}/columns"
-    ok(client.patch(f"{cols}/{progress['id']}", json={
-        "automation": [{"trigger": "pr_linked", "move_to_column_id": review["id"]}]}, headers=org.user_headers))
-    ok(client.patch(f"{cols}/{testing['id']}", json={"automation": [
-        {"trigger": "fix_attempt_started", "move_to_column_id": verified["id"]},
-        {"trigger": "verification_passed", "move_to_column_id": verified["id"]},
-    ]}, headers=org.user_headers))
+    ok(
+        client.patch(
+            f"{cols}/{progress['id']}",
+            json={"automation": [{"trigger": "pr_linked", "move_to_column_id": review["id"]}]},
+            headers=org.user_headers,
+        )
+    )
+    ok(
+        client.patch(
+            f"{cols}/{testing['id']}",
+            json={
+                "automation": [
+                    {"trigger": "fix_attempt_started", "move_to_column_id": verified["id"]},
+                    {"trigger": "verification_passed", "move_to_column_id": verified["id"]},
+                ]
+            },
+            headers=org.user_headers,
+        )
+    )
     task = create_task(client, org.user_headers, board_id=board["id"], column_id=progress["id"])
 
-    ok(client.post(f"{API}/tasks/{task['id']}/links", json={"kind": "pull_request",
-                                                           "url": "https://github.com/acme/app/pull/7"},
-                   headers=org.user_headers), 201)
+    ok(
+        client.post(
+            f"{API}/tasks/{task['id']}/links",
+            json={"kind": "pull_request", "url": "https://github.com/acme/app/pull/7"},
+            headers=org.user_headers,
+        ),
+        201,
+    )
     detail = get_task(client, org.user_headers, task["id"])
     assert detail["column_name"] == "Review"
     auto = next(a for a in detail["activity"] if a["kind"] == "automation")
@@ -154,8 +215,12 @@ def test_automation_rules_fire_and_never_bypass_gates(client, org):
     assert (auto["from_value"], auto["to_value"]) == ("In Progress", "Review")
 
     ok(move(client, org.user_headers, task["id"], testing["id"]))
-    ok(client.post(f"{API}/tasks/{task['id']}/fix-attempts", json={"status": "in_progress"},
-                   headers=org.user_headers), 201)
+    ok(
+        client.post(
+            f"{API}/tasks/{task['id']}/fix-attempts", json={"status": "in_progress"}, headers=org.user_headers
+        ),
+        201,
+    )
     detail = get_task(client, org.user_headers, task["id"])
     assert detail["column_name"] == "Testing"  # the gate held: started work is not verification
     skipped = next(a for a in detail["activity"] if a["kind"] == "automation_skipped")
@@ -169,8 +234,11 @@ def test_dependencies_reject_cycles(client, org):
     a, b, c = (create_task(client, org.user_headers, n) for n in ("A", "B", "C"))
 
     def depend(x, y, kind="blocks"):
-        return client.post(f"{API}/tasks/{x['id']}/dependencies", json={"depends_on_task_id": y["id"], "kind": kind},
-                           headers=org.user_headers)
+        return client.post(
+            f"{API}/tasks/{x['id']}/dependencies",
+            json={"depends_on_task_id": y["id"], "kind": kind},
+            headers=org.user_headers,
+        )
 
     dep_ab = ok(depend(a, b), 201)
     assert dep_ab["task"]["id"] == b["id"]
@@ -199,23 +267,37 @@ def test_subtasks_and_parent_cycles(client, org):
     detail = get_task(client, org.user_headers, parent["id"])
     assert detail["subtasks_total"] == 1 and [s["id"] for s in detail["subtasks"]] == [child["id"]]
     assert get_task(client, org.user_headers, child["id"])["parent"]["id"] == parent["id"]
-    cycle = client.patch(f"{API}/tasks/{parent['id']}", json={"parent_task_id": grandchild["id"]},
-                         headers=org.user_headers)
+    cycle = client.patch(
+        f"{API}/tasks/{parent['id']}", json={"parent_task_id": grandchild["id"]}, headers=org.user_headers
+    )
     assert cycle.status_code == 409 and cycle.json()["error"]["details"]["reason"] == "parent_cycle"
-    itself = client.patch(f"{API}/tasks/{parent['id']}", json={"parent_task_id": parent["id"]}, headers=org.user_headers)
+    itself = client.patch(
+        f"{API}/tasks/{parent['id']}", json={"parent_task_id": parent["id"]}, headers=org.user_headers
+    )
     assert itself.status_code == 422
     listed = ok(client.get(f"{API}/tasks?parent_task_id={child['id']}", headers=org.user_headers))
     assert [t["id"] for t in listed["items"]] == [grandchild["id"]]
-    detached = ok(client.patch(f"{API}/tasks/{child['id']}", json={"parent_task_id": None}, headers=org.user_headers))
+    detached = ok(
+        client.patch(f"{API}/tasks/{child['id']}", json={"parent_task_id": None}, headers=org.user_headers)
+    )
     assert detached["parent"] is None
 
 
 def test_labels_and_assignees(client, org, other_org, db):
-    label = ok(client.post(f"{API}/tasks/labels", json={"name": "security", "color": "high"},
-                           headers=org.user_headers), 201)
+    label = ok(
+        client.post(
+            f"{API}/tasks/labels", json={"name": "security", "color": "high"}, headers=org.user_headers
+        ),
+        201,
+    )
     duplicate = client.post(f"{API}/tasks/labels", json={"name": "Security"}, headers=org.user_headers)
     assert duplicate.status_code == 409
-    assert client.post(f"{API}/tasks/labels", json={"name": "x", "color": "neon"}, headers=org.user_headers).status_code == 422
+    assert (
+        client.post(
+            f"{API}/tasks/labels", json={"name": "x", "color": "neon"}, headers=org.user_headers
+        ).status_code
+        == 422
+    )
     task = create_task(client, org.user_headers, label_ids=[label["id"]])
     other = create_task(client, org.user_headers, "Unlabelled")
     assert [lb["name"] for lb in task["labels"]] == ["security"]
@@ -225,11 +307,19 @@ def test_labels_and_assignees(client, org, other_org, db):
     assert usage == [{**label, "task_count": 1, "created_at": usage[0]["created_at"]}]
 
     dev_id, _ = add_member(db, org.org_id, Role.DEVELOPER.value, "Dev")
-    assignees = ok(client.put(f"{API}/tasks/{task['id']}/assignees", json={"assignees": [
-        {"user_id": org.user_id}, {"user_id": dev_id, "role": "reviewer"}]}, headers=org.user_headers))
+    assignees = ok(
+        client.put(
+            f"{API}/tasks/{task['id']}/assignees",
+            json={"assignees": [{"user_id": org.user_id}, {"user_id": dev_id, "role": "reviewer"}]},
+            headers=org.user_headers,
+        )
+    )
     assert {(a["user_id"], a["role"]) for a in assignees} == {(org.user_id, "assignee"), (dev_id, "reviewer")}
-    outsider = client.put(f"{API}/tasks/{task['id']}/assignees", json={"assignees": [{"user_id": other_org.user_id}]},
-                          headers=org.user_headers)
+    outsider = client.put(
+        f"{API}/tasks/{task['id']}/assignees",
+        json={"assignees": [{"user_id": other_org.user_id}]},
+        headers=org.user_headers,
+    )
     assert outsider.status_code == 422 and "not a member" in outsider.json()["error"]["message"]
     mine = ok(client.get(f"{API}/tasks?assignee=me", headers=org.user_headers))["items"]
     assert [t["id"] for t in mine] == [task["id"]] and other["id"] not in [t["id"] for t in mine]
@@ -241,16 +331,29 @@ def test_labels_and_assignees(client, org, other_org, db):
 def test_comments_author_edit_and_delete(client, org, db):
     task = create_task(client, org.user_headers)
     _, dev = add_member(db, org.org_id, Role.DEVELOPER.value, "Dev")
-    mine = ok(client.post(f"{API}/tasks/{task['id']}/comments", json={"body": f"token {GITHUB_TOKEN}"},
-                          headers=org.user_headers), 201)
+    mine = ok(
+        client.post(
+            f"{API}/tasks/{task['id']}/comments",
+            json={"body": f"token {GITHUB_TOKEN}"},
+            headers=org.user_headers,
+        ),
+        201,
+    )
     assert GITHUB_TOKEN not in mine["body"] and mine["author"]["id"] == org.user_id
     theirs = ok(client.post(f"{API}/tasks/{task['id']}/comments", json={"body": "LGTM"}, headers=dev), 201)
 
-    assert client.patch(f"{API}/tasks/comments/{mine['id']}", json={"body": "edited"}, headers=dev).status_code == 403
-    edited = ok(client.patch(f"{API}/tasks/comments/{mine['id']}", json={"body": "edited"}, headers=org.user_headers))
+    assert (
+        client.patch(f"{API}/tasks/comments/{mine['id']}", json={"body": "edited"}, headers=dev).status_code
+        == 403
+    )
+    edited = ok(
+        client.patch(f"{API}/tasks/comments/{mine['id']}", json={"body": "edited"}, headers=org.user_headers)
+    )
     assert edited["body"] == "edited" and edited["edited_at"] is not None
     assert client.delete(f"{API}/tasks/comments/{mine['id']}", headers=dev).status_code == 403
-    ok(client.delete(f"{API}/tasks/comments/{theirs['id']}", headers=org.user_headers), 204)  # admin moderation
+    ok(
+        client.delete(f"{API}/tasks/comments/{theirs['id']}", headers=org.user_headers), 204
+    )  # admin moderation
     detail = get_task(client, org.user_headers, task["id"])
     assert [c["id"] for c in detail["comments"]] == [mine["id"]]
     assert {"commented", "comment_edited", "comment_deleted"} <= set(activity_kinds(detail))
@@ -286,12 +389,19 @@ def test_list_filters_search_and_sorting(client, org):
 def test_archive_and_restore(client, org):
     task = create_task(client, org.user_headers)
     ok(client.delete(f"{API}/tasks/{task['id']}", headers=org.user_headers), 204)
-    assert task["id"] not in [t["id"] for t in ok(client.get(f"{API}/tasks", headers=org.user_headers))["items"]]
+    assert task["id"] not in [
+        t["id"] for t in ok(client.get(f"{API}/tasks", headers=org.user_headers))["items"]
+    ]
     board = board_by_name(client, org.user_headers, "Engineering")
     assert all(task["id"] not in [t["id"] for t in c["tasks"]] for c in board["columns"])
     assert move(client, org.user_headers, task["id"], column(board, "To Do")["id"]).status_code == 409
-    assert client.patch(f"{API}/tasks/{task['id']}", json={"title": "x"}, headers=org.user_headers).status_code == 409
-    restored = ok(client.patch(f"{API}/tasks/{task['id']}", json={"archived": False}, headers=org.user_headers))
+    assert (
+        client.patch(f"{API}/tasks/{task['id']}", json={"title": "x"}, headers=org.user_headers).status_code
+        == 409
+    )
+    restored = ok(
+        client.patch(f"{API}/tasks/{task['id']}", json={"archived": False}, headers=org.user_headers)
+    )
     assert restored["archived_at"] is None and {"archived", "restored"} <= set(activity_kinds(restored))
 
 
@@ -308,14 +418,21 @@ def test_tasks_are_isolated_between_organisations(client, org, other_org):
     assert task["id"] not in [t["id"] for t in ok(client.get(f"{API}/tasks", headers=h))["items"]]
     # Cross-org references are rejected as if the record did not exist.
     assert move(client, org.user_headers, task["id"], their_board["columns"][1]["id"]).status_code == 404
-    cross_dep = client.post(f"{API}/tasks/{task['id']}/dependencies", json={"depends_on_task_id": theirs["id"]},
-                            headers=org.user_headers)
+    cross_dep = client.post(
+        f"{API}/tasks/{task['id']}/dependencies",
+        json={"depends_on_task_id": theirs["id"]},
+        headers=org.user_headers,
+    )
     assert cross_dep.status_code == 404
-    cross_parent = client.post(f"{API}/tasks", json={"title": "x", "parent_task_id": theirs["id"]},
-                               headers=org.user_headers)
+    cross_parent = client.post(
+        f"{API}/tasks", json={"title": "x", "parent_task_id": theirs["id"]}, headers=org.user_headers
+    )
     assert cross_parent.status_code == 404
-    cross_column = client.post(f"{API}/tasks", json={"title": "x", "column_id": their_board["columns"][0]["id"]},
-                               headers=org.user_headers)
+    cross_column = client.post(
+        f"{API}/tasks",
+        json={"title": "x", "column_id": their_board["columns"][0]["id"]},
+        headers=org.user_headers,
+    )
     assert cross_column.status_code == 404
     assert theirs["key"] == "CTX-1"  # numbering is per organisation
 

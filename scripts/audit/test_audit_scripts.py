@@ -1,6 +1,6 @@
 """Tests for route_audit.py and doc_paths.py.
 
-    backend/.venv/bin/python -m pytest -q -p no:cacheprovider scripts/audit
+backend/.venv/bin/python -m pytest -q -p no:cacheprovider scripts/audit
 """
 
 from __future__ import annotations
@@ -57,20 +57,32 @@ def _tiny_app() -> FastAPI:
 
 
 def _infos(app: FastAPI) -> list[route_audit.RouteInfo]:
-    return [i for path, route, inh in route_audit.iter_api_routes(app.router) for i in route_audit.analyse(path, route, inh)]
+    return [
+        i
+        for path, route, inh in route_audit.iter_api_routes(app.router)
+        for i in route_audit.analyse(path, route, inh)
+    ]
 
 
 def test_walk_yields_full_paths_in_registration_order() -> None:
     paths = [(i.method, i.path) for i in _infos(_tiny_app())]
-    assert paths == [("GET", "/api/v1/items"), ("GET", "/api/v1/items/stats"), ("GET", "/api/v1/items/{item_id}"),
-                     ("PATCH", "/api/v1/items/{item_id}"), ("GET", "/api/v1/items/files/{path:path}"),
-                     ("GET", "/api/v1/items/me")]
+    assert paths == [
+        ("GET", "/api/v1/items"),
+        ("GET", "/api/v1/items/stats"),
+        ("GET", "/api/v1/items/{item_id}"),
+        ("PATCH", "/api/v1/items/{item_id}"),
+        ("GET", "/api/v1/items/files/{path:path}"),
+        ("GET", "/api/v1/items/me"),
+    ]
 
 
 def test_analyse_detects_principal_permissions_and_user_only() -> None:
     by = {(i.method, i.path): i for i in _infos(_tiny_app())}
     assert by[("GET", "/api/v1/items")].permissions == ["read"]
-    assert by[("GET", "/api/v1/items/{item_id}")].authenticated and by[("GET", "/api/v1/items/{item_id}")].permissions == []
+    assert (
+        by[("GET", "/api/v1/items/{item_id}")].authenticated
+        and by[("GET", "/api/v1/items/{item_id}")].permissions == []
+    )
     assert not by[("GET", "/api/v1/items/files/{path:path}")].authenticated
     assert by[("GET", "/api/v1/items/me")].user_only and by[("GET", "/api/v1/items/me")].authenticated
 
@@ -104,13 +116,20 @@ def test_recorder_captures_requests_only_inside_a_test_and_restores_transport() 
         recorder.pytest_sessionfinish(session=None, exitstatus=0)
     assert testclient._TestClientTransport.handle_request is original
     assert [(h.method, h.path, h.status) for h in recorder.hits] == [
-        ("GET", "/api/v1/items/files/a/b", 200), ("GET", "/api/v1/items", 401)]
+        ("GET", "/api/v1/items/files/a/b", 200),
+        ("GET", "/api/v1/items", 401),
+    ]
 
 
 def test_apply_hits_marks_requests_and_404s() -> None:
     infos = _infos(_tiny_app())
-    route_audit.apply_hits(infos, [route_audit.Hit("t", "GET", "/api/v1/items/x", 404),
-                                   route_audit.Hit("t", "GET", "/api/v1/items", 200)])
+    route_audit.apply_hits(
+        infos,
+        [
+            route_audit.Hit("t", "GET", "/api/v1/items/x", 404),
+            route_audit.Hit("t", "GET", "/api/v1/items", 200),
+        ],
+    )
     by = {(i.method, i.path): i for i in infos}
     assert by[("GET", "/api/v1/items/{item_id}")].isolation_404
     assert by[("GET", "/api/v1/items")].isolation_requests == 1
@@ -130,8 +149,17 @@ def test_doc_paths_heuristics() -> None:
     assert doc_paths.looks_like_path("backend/app/core/errors.py")
     assert doc_paths.looks_like_path("features/intelligence/api.ts")
     assert doc_paths.looks_like_path("docs/**/*.md")
-    for not_a_path in ("tools/call", "*Out", "Page[T]", "trust-*", "203.0.113.0/24", "/api/v1/events",
-                       "cd backend && pytest", "features/<name>/api.ts", "https://example.com/a.md"):
+    for not_a_path in (
+        "tools/call",
+        "*Out",
+        "Page[T]",
+        "trust-*",
+        "203.0.113.0/24",
+        "/api/v1/events",
+        "cd backend && pytest",
+        "features/<name>/api.ts",
+        "https://example.com/a.md",
+    ):
         assert not doc_paths.looks_like_path(not_a_path), not_a_path
 
 
@@ -143,16 +171,23 @@ def test_doc_paths_resolution(tmp_path: Path) -> None:
     assert doc_paths.check_dotted("app.services.scoping.get_scoped") is None
     assert doc_paths.check_dotted("app.core.errors") is None
     assert doc_paths.check_dotted("app.core.errors.NoSuchError") is not None
-    assert doc_paths.check_dotted("app.nowhere.deeper") == "'nowhere.deeper' not found in backend/app/__init__.py"
+    assert (
+        doc_paths.check_dotted("app.nowhere.deeper")
+        == "'nowhere.deeper' not found in backend/app/__init__.py"
+    )
     assert doc_paths.check_dotted("contextos.nowhere") is not None
     assert doc_paths._dotted_alternatives("app.services.scoping.scoped/get_scoped") == [
-        "app.services.scoping.scoped", "app.services.scoping.get_scoped"]
+        "app.services.scoping.scoped",
+        "app.services.scoping.get_scoped",
+    ]
 
 
 def test_doc_paths_scan_document_reports_only_missing(tmp_path: Path) -> None:
     doc = tmp_path / "doc.md"
-    doc.write_text("See `backend/app/main.py`, `app.core.ids.new_id` and `docs/MISSING.md`.\n"
-                   "```bash\ncat docs/ALSO_MISSING_BUT_IN_A_FENCE.md\n```\n"
-                   "Settings live in `.claude/settings.json` of your project. Link: [x](nope/gone.md)\n")
+    doc.write_text(
+        "See `backend/app/main.py`, `app.core.ids.new_id` and `docs/MISSING.md`.\n"
+        "```bash\ncat docs/ALSO_MISSING_BUT_IN_A_FENCE.md\n```\n"
+        "Settings live in `.claude/settings.json` of your project. Link: [x](nope/gone.md)\n"
+    )
     found = [(m.line, m.ref) for m in doc_paths.scan_document(doc)]
     assert found == [(1, "docs/MISSING.md"), (5, "nope/gone.md")]

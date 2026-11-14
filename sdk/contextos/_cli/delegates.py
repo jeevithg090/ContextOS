@@ -27,7 +27,9 @@ CODEX_BLOCK_EXIT = 2
 _OPTIONAL_DEPS = {"mcp": "contextos[mcp]"}
 
 
-def load_optional(module: str, attribute: str, feature: str, *, quiet: bool = False) -> Callable[..., Any] | None:
+def load_optional(
+    module: str, attribute: str, feature: str, *, quiet: bool = False
+) -> Callable[..., Any] | None:
     """Import ``module.attribute``; print why it is unavailable (unless ``quiet``) and return None."""
     try:
         target = getattr(importlib.import_module(module), attribute)
@@ -35,16 +37,22 @@ def load_optional(module: str, attribute: str, feature: str, *, quiet: bool = Fa
         missing = (exc.name or "").split(".")[0]
         if not quiet:
             if exc.name and exc.name.startswith("contextos"):
-                err().print(f"[red]{feature} unavailable in this installation[/red] (module {escape(exc.name)} not found). "
-                            "Upgrade the contextos package.")
+                err().print(
+                    f"[red]{feature} unavailable in this installation[/red] (module {escape(exc.name)} not found). "
+                    "Upgrade the contextos package."
+                )
             else:
                 extra = _OPTIONAL_DEPS.get(missing)
                 hint = f" Install it with: pip install '{escape(extra)}'" if extra else ""
-                err().print(f"[red]{feature} unavailable: optional dependency '{escape(missing)}' is not installed.[/red]{hint}")
+                err().print(
+                    f"[red]{feature} unavailable: optional dependency '{escape(missing)}' is not installed.[/red]{hint}"
+                )
         return None
     except AttributeError:
         if not quiet:
-            err().print(f"[red]{feature}: {escape(module)} has no '{escape(attribute)}'.[/red] Upgrade the contextos package.")
+            err().print(
+                f"[red]{feature}: {escape(module)} has no '{escape(attribute)}'.[/red] Upgrade the contextos package."
+            )
         return None
     return target if callable(target) else None
 
@@ -57,7 +65,11 @@ def _exit_code(result: Any) -> int:
     return result if isinstance(result, int) else 0
 
 
-def hook(event_name: str = typer.Argument(..., help="Claude Code hook event, e.g. PreToolUse, PostToolUse, SessionStart.")) -> None:
+def hook(
+    event_name: str = typer.Argument(
+        ..., help="Claude Code hook event, e.g. PreToolUse, PostToolUse, SessionStart."
+    ),
+) -> None:
     """Claude Code hook entry point (reads the hook payload from stdin). Installed by `contextos init --claude-code`."""
     main = load_optional("contextos.integrations.claude_code.hook", "main", "Claude Code hooks")
     if main is None:
@@ -65,13 +77,19 @@ def hook(event_name: str = typer.Argument(..., help="Claude Code hook event, e.g
     raise typer.Exit(_exit_code(main(event_name)))
 
 
-def codex_hook(event_name: str = typer.Argument(..., help="Codex hook event, e.g. PreToolUse, PostToolUse, SessionStart.")) -> None:
+def codex_hook(
+    event_name: str = typer.Argument(
+        ..., help="Codex hook event, e.g. PreToolUse, PostToolUse, SessionStart."
+    ),
+) -> None:
     """Codex hook entry point (reads the hook payload from stdin). Installed by `contextos init --codex`."""
     main = load_optional("contextos.integrations.codex.hook", "main", "Codex hooks")
     if main is None:
         if event_name == "PreToolUse":
-            err().print("ContextOS could not load its Codex hook, so this tool call was blocked (fail closed). "
-                        "Run `contextos doctor`.")
+            err().print(
+                "ContextOS could not load its Codex hook, so this tool call was blocked (fail closed). "
+                "Run `contextos doctor`."
+            )
             raise typer.Exit(CODEX_BLOCK_EXIT)
         raise typer.Exit(0)  # observation hooks never break the session
     raise typer.Exit(_exit_code(main(event_name)))

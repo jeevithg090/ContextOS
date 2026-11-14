@@ -64,8 +64,12 @@ WRITE = Depends(require(Permission.WRITE.value))
 def modes(
     principal: Principal = READ,
     db: Session = Depends(get_db),
-    task_id: str | None = Query(None, description="Also return the context-pack profile suggested for this task."),
-    mode: PromptModeName | None = Query(None, description="Mode for suggested_profile (default implement_fix)."),
+    task_id: str | None = Query(
+        None, description="Also return the context-pack profile suggested for this task."
+    ),
+    mode: PromptModeName | None = Query(
+        None, description="Mode for suggested_profile (default implement_fix)."
+    ),
 ) -> ModesOut:
     catalogue = templates.catalogue()
     if task_id is None:
@@ -78,8 +82,9 @@ def modes(
 
 
 @router.post("/context-packs", response_model=ContextPackOut, status_code=201)
-def create_context_pack(body: ContextPackCreate, principal: Principal = WRITE,
-                        db: Session = Depends(get_db)) -> ContextPackOut:
+def create_context_pack(
+    body: ContextPackCreate, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> ContextPackOut:
     task = get_task(db, principal.org_id, body.task_id)
     pack = packs.create_pack(db, as_actor(principal), task, body.profile, body.extra_paths)
     return packs.pack_out(pack, task)
@@ -96,15 +101,22 @@ def list_context_packs(
     query = scoped(ContextPack, principal.org_id)
     if task_id:
         query = query.where(ContextPack.task_id == get_task(db, principal.org_id, task_id).id)
-    rows, total = paginate(db, query.order_by(ContextPack.created_at.desc(), ContextPack.id.desc()),
-                           limit=limit, offset=offset)
+    rows, total = paginate(
+        db, query.order_by(ContextPack.created_at.desc(), ContextPack.id.desc()), limit=limit, offset=offset
+    )
     tasks = ai.tasks_by_id(db, principal.org_id, {r.task_id for r in rows})
-    return Page(items=[packs.pack_summary(r, tasks.get(r.task_id or "")) for r in rows], total=total, limit=limit,
-                offset=offset)
+    return Page(
+        items=[packs.pack_summary(r, tasks.get(r.task_id or "")) for r in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/context-packs/{pack_id}", response_model=ContextPackOut)
-def get_context_pack(pack_id: str, principal: Principal = READ, db: Session = Depends(get_db)) -> ContextPackOut:
+def get_context_pack(
+    pack_id: str, principal: Principal = READ, db: Session = Depends(get_db)
+) -> ContextPackOut:
     pack = packs.get_pack(db, principal.org_id, pack_id)
     return packs.pack_out(pack, packs.pack_task(db, pack))
 
@@ -114,21 +126,30 @@ def export_context_pack(pack_id: str, principal: Principal = READ, db: Session =
     """The pack as a JSON download (redacted again). Audited as ``context_pack.exported``."""
     pack = packs.get_pack(db, principal.org_id, pack_id)
     body, filename = packs.export_pack(db, as_actor(principal), pack)
-    return Response(content=body, media_type="application/json",
-                    headers={"Content-Disposition": f'attachment; filename="{filename}"',
-                             "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"})
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.patch("/context-packs/{pack_id}", response_model=ContextPackOut)
-def update_context_pack(pack_id: str, body: ContextPackPatch, principal: Principal = WRITE,
-                        db: Session = Depends(get_db)) -> ContextPackOut:
+def update_context_pack(
+    pack_id: str, body: ContextPackPatch, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> ContextPackOut:
     pack = packs.get_pack(db, principal.org_id, pack_id)
     packs.toggle_items(db, as_actor(principal), pack, [(i.key, i.included) for i in body.items])
     return packs.pack_out(pack, packs.pack_task(db, pack))
 
 
 @router.delete("/context-packs/{pack_id}", status_code=204)
-def delete_context_pack(pack_id: str, principal: Principal = WRITE, db: Session = Depends(get_db)) -> Response:
+def delete_context_pack(
+    pack_id: str, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> Response:
     packs.delete_pack(db, as_actor(principal), packs.get_pack(db, principal.org_id, pack_id))
     return Response(status_code=204)
 
@@ -137,8 +158,9 @@ def delete_context_pack(pack_id: str, principal: Principal = WRITE, db: Session 
 
 
 @router.post("/fix-context", response_model=FixContextOut)
-def fix_context(body: FixContextRequest, response: Response, principal: Principal = READ,
-                db: Session = Depends(get_db)) -> FixContextOut:
+def fix_context(
+    body: FixContextRequest, response: Response, principal: Principal = READ, db: Session = Depends(get_db)
+) -> FixContextOut:
     """Generate a fix-context prompt. ``save=true`` needs ``write`` and answers 201 with the stored prompt id."""
     if body.save:
         principal.require(Permission.WRITE.value)
@@ -146,15 +168,25 @@ def fix_context(body: FixContextRequest, response: Response, principal: Principa
     response.status_code = 201 if gen.prompt is not None else 200
     sections = [ai.section_out(s) for s in gen.sections]
     return FixContextOut(
-        prompt_id=gen.prompt.id if gen.prompt else None, saved=gen.prompt is not None,
-        version=gen.prompt.version if gen.prompt else None, task_id=gen.task.id, task_key=task_key(gen.task),
-        mode=gen.mode, mode_label=get_mode(gen.mode).label, preset=gen.preset,
-        preset_label=get_preset(gen.preset).label, may_modify_files=may_modify_files(get_mode(gen.mode), gen.options),
-        options=gen.options.to_dict(), template_id=gen.template.id if gen.template else None, sections=sections,
-        content=gen.content, token_estimate=estimate_tokens(gen.content),
+        prompt_id=gen.prompt.id if gen.prompt else None,
+        saved=gen.prompt is not None,
+        version=gen.prompt.version if gen.prompt else None,
+        task_id=gen.task.id,
+        task_key=task_key(gen.task),
+        mode=gen.mode,
+        mode_label=get_mode(gen.mode).label,
+        preset=gen.preset,
+        preset_label=get_preset(gen.preset).label,
+        may_modify_files=may_modify_files(get_mode(gen.mode), gen.options),
+        options=gen.options.to_dict(),
+        template_id=gen.template.id if gen.template else None,
+        sections=sections,
+        content=gen.content,
+        token_estimate=estimate_tokens(gen.content),
         sources=list(dict.fromkeys(src for s in sections for src in s.sources)),
         context_pack=packs.pack_summary(gen.pack, gen.task) if gen.pack is not None else None,
-        context_pack_profile=gen.profile, notes=gen.notes,
+        context_pack_profile=gen.profile,
+        notes=gen.notes,
         problems=ai.validate_sections(gen.sections, gen.mode),
     )
 
@@ -174,8 +206,12 @@ def list_prompts(
         task_id = get_task(db, principal.org_id, task_id).id
     rows, total = paginate(db, ai.prompt_query(principal.org_id, task_id), limit=limit, offset=offset)
     tasks = ai.tasks_by_id(db, principal.org_id, {r.task_id for r in rows})
-    return Page(items=[ai.prompt_summary(r, tasks.get(r.task_id or "")) for r in rows], total=total, limit=limit,
-                offset=offset)
+    return Page(
+        items=[ai.prompt_summary(r, tasks.get(r.task_id or "")) for r in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/prompts/{prompt_id}", response_model=PromptOut)
@@ -185,29 +221,40 @@ def get_prompt(prompt_id: str, principal: Principal = READ, db: Session = Depend
 
 
 @router.patch("/prompts/{prompt_id}", response_model=PromptOut)
-def update_prompt(prompt_id: str, body: PromptPatch, principal: Principal = WRITE,
-                  db: Session = Depends(get_db)) -> PromptOut:
+def update_prompt(
+    prompt_id: str, body: PromptPatch, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> PromptOut:
     prompt = ai.get_prompt(db, principal.org_id, prompt_id)
     notes = ai.update_prompt(db, as_actor(principal), prompt, body)
     return ai.prompt_out(prompt, ai.prompt_task(db, prompt), notes)
 
 
 @router.post("/prompts/{prompt_id}/regenerate-section", response_model=PromptOut)
-def regenerate_section(prompt_id: str, body: RegenerateSectionIn, principal: Principal = WRITE,
-                       db: Session = Depends(get_db)) -> PromptOut:
+def regenerate_section(
+    prompt_id: str, body: RegenerateSectionIn, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> PromptOut:
     prompt = ai.get_prompt(db, principal.org_id, prompt_id)
     notes = ai.regenerate_prompt_section(db, as_actor(principal), prompt, body.section_key)
     return ai.prompt_out(prompt, ai.prompt_task(db, prompt), notes)
 
 
 @router.get("/prompts/{prompt_id}/export")
-def export_prompt(prompt_id: str, format: ExportFormatName = Query("markdown"), principal: Principal = READ,
-                  db: Session = Depends(get_db)) -> Response:
+def export_prompt(
+    prompt_id: str,
+    format: ExportFormatName = Query("markdown"),
+    principal: Principal = READ,
+    db: Session = Depends(get_db),
+) -> Response:
     prompt = ai.get_prompt(db, principal.org_id, prompt_id)
     body, media_type, filename = ai.export_prompt(db, as_actor(principal), prompt, format)
-    return Response(content=body, media_type=media_type,
-                    headers={"Content-Disposition": f'attachment; filename="{filename}"',
-                             "X-Content-Type-Options": "nosniff"})
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 # ----------------------------------------------------------------------------- templates
@@ -219,7 +266,9 @@ def list_templates(principal: Principal = READ, db: Session = Depends(get_db)) -
 
 
 @router.post("/templates", response_model=TemplateOut, status_code=201)
-def create_template(body: TemplateCreate, principal: Principal = WRITE, db: Session = Depends(get_db)) -> TemplateOut:
+def create_template(
+    body: TemplateCreate, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> TemplateOut:
     return templates.template_out(templates.create_template(db, as_actor(principal), body.model_dump()))
 
 
@@ -229,14 +278,19 @@ def get_template(template_id: str, principal: Principal = READ, db: Session = De
 
 
 @router.patch("/templates/{template_id}", response_model=TemplateOut)
-def update_template(template_id: str, body: TemplatePatch, principal: Principal = WRITE,
-                    db: Session = Depends(get_db)) -> TemplateOut:
-    spec = templates.update_template(db, as_actor(principal), template_id, body.model_dump(exclude_unset=True))
+def update_template(
+    template_id: str, body: TemplatePatch, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> TemplateOut:
+    spec = templates.update_template(
+        db, as_actor(principal), template_id, body.model_dump(exclude_unset=True)
+    )
     return templates.template_out(spec)
 
 
 @router.delete("/templates/{template_id}", status_code=204)
-def delete_template(template_id: str, principal: Principal = WRITE, db: Session = Depends(get_db)) -> Response:
+def delete_template(
+    template_id: str, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> Response:
     templates.delete_template(db, as_actor(principal), template_id)
     return Response(status_code=204)
 
@@ -245,19 +299,35 @@ def delete_template(template_id: str, principal: Principal = WRITE, db: Session 
 
 
 @router.post("/breakdown", response_model=BreakdownOut)
-def draft_breakdown(body: BreakdownIn, principal: Principal = READ, db: Session = Depends(get_db)) -> BreakdownOut:
+def draft_breakdown(
+    body: BreakdownIn, principal: Principal = READ, db: Session = Depends(get_db)
+) -> BreakdownOut:
     task, plan, drafts = breakdown.draft_breakdown(db, principal.org_id, body.task_id, body.plan)
-    return BreakdownOut(task_id=task.id, task_key=task_key(task), plan=plan, plans=list(PLAN_KEYS),
-                        drafts=[SubtaskDraftOut(**d.to_dict()) for d in drafts],
-                        existing_subtasks=breakdown.existing_subtasks(db, task), note=breakdown.BREAKDOWN_NOTE)
+    return BreakdownOut(
+        task_id=task.id,
+        task_key=task_key(task),
+        plan=plan,
+        plans=list(PLAN_KEYS),
+        drafts=[SubtaskDraftOut(**d.to_dict()) for d in drafts],
+        existing_subtasks=breakdown.existing_subtasks(db, task),
+        note=breakdown.BREAKDOWN_NOTE,
+    )
 
 
 @router.post("/breakdown/apply", response_model=BreakdownApplyOut, status_code=201)
-def apply_breakdown(body: BreakdownApplyIn, principal: Principal = WRITE,
-                    db: Session = Depends(get_db)) -> BreakdownApplyOut:
-    result = breakdown.apply_breakdown(db, as_actor(principal), body.task_id, body.drafts, priority=body.priority,
-                                       override_wip=body.override_wip)
+def apply_breakdown(
+    body: BreakdownApplyIn, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> BreakdownApplyOut:
+    result = breakdown.apply_breakdown(
+        db,
+        as_actor(principal),
+        body.task_id,
+        body.drafts,
+        priority=body.priority,
+        override_wip=body.override_wip,
+    )
     return BreakdownApplyOut(
-        parent_task_id=result.parent.id, created=task_cards(db, principal.org_id, result.created),
+        parent_task_id=result.parent.id,
+        created=task_cards(db, principal.org_id, result.created),
         dependencies=[CreatedDependencyOut(task_id=a, depends_on_task_id=b) for a, b in result.dependencies],
     )

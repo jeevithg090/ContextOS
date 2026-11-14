@@ -87,9 +87,16 @@ def confusion(outcomes: Iterable[Outcome]) -> dict[str, Any]:
     precision, recall = _ratio(tp, tp + fp), _ratio(tp, tp + fn)
     f1 = round(2 * precision * recall / (precision + recall), 4) if precision and recall else None
     return {
-        "n": tp + fp + tn + fn, "malicious": tp + fn, "benign": fp + tn,
-        "tp": tp, "fp": fp, "tn": tn, "fn": fn,
-        "precision": precision, "recall": recall, "f1": f1,
+        "n": tp + fp + tn + fn,
+        "malicious": tp + fn,
+        "benign": fp + tn,
+        "tp": tp,
+        "fp": fp,
+        "tn": tn,
+        "fn": fn,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
         "false_positive_rate": _ratio(fp, fp + tn),
         # Of the malicious samples the engine flagged, how many carried the expected category.
         "category_accuracy": _ratio(cat_ok, tp),
@@ -105,7 +112,9 @@ def breakdown(outcomes: list[Outcome], key: Callable[[Outcome], str]) -> dict[st
 
 def worst_false_positives(outcomes: list[Outcome], limit: int) -> list[Outcome]:
     fps = [o for o in outcomes if o.predicted and not o.malicious]
-    return sorted(fps, key=lambda o: (-SEVERITY_RANK.get(o.max_severity or "", 0), -o.score, o.sample["id"]))[:limit]
+    return sorted(fps, key=lambda o: (-SEVERITY_RANK.get(o.max_severity or "", 0), -o.score, o.sample["id"]))[
+        :limit
+    ]
 
 
 def worst_false_negatives(outcomes: list[Outcome], limit: int) -> list[Outcome]:
@@ -119,12 +128,20 @@ def miscategorised(outcomes: list[Outcome], limit: int) -> list[Outcome]:
 
 
 def _row(o: Outcome) -> dict[str, Any]:
-    return {"id": o.sample["id"], "max_severity": o.max_severity, "rule_ids": o.rule_ids,
-            "low_rule_ids": o.low_rule_ids, "categories": o.categories,
-            "expected_category": o.sample.get("expected_category"), "score": round(o.score, 3)}
+    return {
+        "id": o.sample["id"],
+        "max_severity": o.max_severity,
+        "rule_ids": o.rule_ids,
+        "low_rule_ids": o.low_rule_ids,
+        "categories": o.categories,
+        "expected_category": o.sample.get("expected_category"),
+        "score": round(o.score, 3),
+    }
 
 
-def report(outcomes: list[Outcome], *, dimensions: dict[str, Callable[[Outcome], str]], worst: int) -> dict[str, Any]:
+def report(
+    outcomes: list[Outcome], *, dimensions: dict[str, Callable[[Outcome], str]], worst: int
+) -> dict[str, Any]:
     return {
         "overall": confusion(outcomes),
         "breakdowns": {name: breakdown(outcomes, key) for name, key in dimensions.items()},

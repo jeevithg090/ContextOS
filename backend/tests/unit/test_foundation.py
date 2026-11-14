@@ -36,7 +36,9 @@ def test_audit_details_are_redacted_before_storage(db, org):
     from app.models import AuditEvent
 
     token = "ghp_" + "Zq8RtY2uV4wX6yA1bC3dE5fG7hJ9kL0mN2pQ"
-    append_audit(db, org.org_id, action="test.secret", details={"note": f"leaked {token}", "nested": {"k": [token]}})
+    append_audit(
+        db, org.org_id, action="test.secret", details={"note": f"leaked {token}", "nested": {"k": [token]}}
+    )
     db.commit()
     stored = db.query(AuditEvent).filter_by(organization_id=org.org_id, action="test.secret").one()
     assert token not in json.dumps(stored.details) and "leaked" in stored.details["note"]

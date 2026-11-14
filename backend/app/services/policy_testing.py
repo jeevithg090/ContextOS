@@ -28,7 +28,8 @@ from app.services.scoping import get_scoped
 DRAFT_ID = "draft"
 MAX_TEST_INPUT_BYTES = 256 * 1024
 _INPUT_FIELDS: dict[str, type] = {
-    f.name: type(f.default_factory()) for f in dataclasses.fields(EvaluationInput)  # type: ignore[misc]
+    f.name: type(f.default_factory())
+    for f in dataclasses.fields(EvaluationInput)  # type: ignore[misc]
 }
 
 __all__ = ["DRAFT_ID", "MAX_TEST_INPUT_BYTES", "org_default_decision", "run_policy_test"]
@@ -43,7 +44,6 @@ def org_default_decision(db: Session, org_id: str) -> str:
     """The decision when no policy matches: the organisation's ``default_decision`` setting."""
     org = db.scalar(select(Organization).where(Organization.id == org_id))
     return str(effective_org_settings(org)["default_decision"]) if org else "ALLOW"
-
 
 
 def _prepare_input(data: dict[str, Any], warnings: list[str]) -> dict[str, Any]:
@@ -63,8 +63,10 @@ def _prepare_input(data: dict[str, Any], warnings: list[str]) -> dict[str, Any]:
         redacted, matches = redact_value(cleaned["arguments"])
         cleaned["arguments"] = redacted if isinstance(redacted, dict) else {}
         if matches:
-            warnings.append("Secrets in the test arguments were redacted before evaluation, as the ingestion "
-                            "pipeline does for real tool calls")
+            warnings.append(
+                "Secrets in the test arguments were redacted before evaluation, as the ingestion "
+                "pipeline does for real tool calls"
+            )
     return cleaned
 
 
@@ -78,7 +80,9 @@ def _recorded(row: PolicyDecision) -> dict[str, Any]:
         "enforcement": row.enforcement,
         "evaluated_at": row.evaluated_at,
         "explanation": row.explanation or "",
-        "matched_policy_names": [str(m.get("name")) for m in matched if isinstance(m, dict) and m.get("name")],
+        "matched_policy_names": [
+            str(m.get("name")) for m in matched if isinstance(m, dict) and m.get("name")
+        ],
         "is_simulation": bool(row.is_simulation),
     }
 
@@ -115,23 +119,37 @@ def run_policy_test(
         spec = policy_to_spec(policy)
         if not policy.enabled:
             spec = dataclasses.replace(spec, enabled=True)
-            warnings.append(f'"{policy.name}" is disabled; it was evaluated as if enabled to show whether it would match')
+            warnings.append(
+                f'"{policy.name}" is disabled; it was evaluated as if enabled to show whether it would match'
+            )
         specs[spec.id], meta[spec.id] = spec, (False, not policy.enabled)
     if draft is not None:
         _raise_if_invalid(
-            definition_errors(outcome=draft["outcome"], conditions=draft["conditions"],
-                              restrictions=draft.get("restrictions") or {}),
+            definition_errors(
+                outcome=draft["outcome"],
+                conditions=draft["conditions"],
+                restrictions=draft.get("restrictions") or {},
+            ),
             "The draft policy is invalid",
         )
         version = get_policy(db, org_id, draft["id"]).version if draft.get("id") else 1
         draft_id = draft.get("id") or DRAFT_ID
         if not draft.get("enabled", True):
-            warnings.append("The draft is disabled; it was evaluated as if enabled to show whether it would match")
+            warnings.append(
+                "The draft is disabled; it was evaluated as if enabled to show whether it would match"
+            )
         specs[draft_id] = PolicySpec(
-            id=draft_id, name=draft.get("name") or "Draft policy", outcome=draft["outcome"],
-            conditions=draft["conditions"], version=version, enabled=True, mode=draft.get("mode", "enforce"),
-            priority=draft.get("priority", 100), severity=draft.get("severity", "medium"),
-            restrictions=draft.get("restrictions") or {}, description=draft.get("description"),
+            id=draft_id,
+            name=draft.get("name") or "Draft policy",
+            outcome=draft["outcome"],
+            conditions=draft["conditions"],
+            version=version,
+            enabled=True,
+            mode=draft.get("mode", "enforce"),
+            priority=draft.get("priority", 100),
+            severity=draft.get("severity", "medium"),
+            restrictions=draft.get("restrictions") or {},
+            description=draft.get("description"),
         )
         meta[draft_id] = (True, not draft.get("enabled", True))
 
@@ -139,7 +157,11 @@ def run_policy_test(
     result = evaluate(inp, list(specs.values()), default_decision=default)
     evaluated = sorted(
         specs.values(),
-        key=lambda s: (-DECISION_PRECEDENCE.get(str(s.outcome).upper(), -1), -int(s.priority), s.name.casefold()),
+        key=lambda s: (
+            -DECISION_PRECEDENCE.get(str(s.outcome).upper(), -1),
+            -int(s.priority),
+            s.name.casefold(),
+        ),
     )
     return {
         "decision": result.decision,
@@ -151,8 +173,15 @@ def run_policy_test(
         "evaluation_errors": result.evaluation_errors,
         "default_decision": default,
         "evaluated_policies": [
-            {"id": s.id, "name": s.name, "version": s.version, "outcome": s.outcome, "mode": s.mode,
-             "draft": meta[s.id][0], "forced_enabled": meta[s.id][1]}
+            {
+                "id": s.id,
+                "name": s.name,
+                "version": s.version,
+                "outcome": s.outcome,
+                "mode": s.mode,
+                "draft": meta[s.id][0],
+                "forced_enabled": meta[s.id][1],
+            }
             for s in evaluated
         ],
         "source": source,

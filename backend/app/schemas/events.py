@@ -137,4 +137,6 @@ class ApprovalCancelIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    reason: str | None = Field(default=None, max_length=500, description="Why the integration stopped waiting")
+    reason: str | None = Field(
+        default=None, max_length=500, description="Why the integration stopped waiting"
+    )

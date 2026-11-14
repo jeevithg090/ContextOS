@@ -59,7 +59,9 @@ class ApiKey(TimestampMixin, OrgScopedMixin, Base):
     scopes: Mapped[list[Any]] = mapped_column(default=list)  # subset of API_KEY_SCOPES
     # When set, events authenticated by this key can only be attributed to this agent
     # (prevents one compromised integration from forging another agent's telemetry).
-    agent_id: Mapped[str | None] = mapped_column(String(40), ForeignKey("agents.id", ondelete="SET NULL"), default=None)
+    agent_id: Mapped[str | None] = mapped_column(
+        String(40), ForeignKey("agents.id", ondelete="SET NULL"), default=None
+    )
     created_by_user_id: Mapped[str | None] = mapped_column(String(40), default=None)
     last_used_at: Mapped[datetime | None] = mapped_column(default=None)
     expires_at: Mapped[datetime | None] = mapped_column(default=None)

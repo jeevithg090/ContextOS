@@ -95,7 +95,11 @@ def _text_of(tool_name: str, response: Any) -> str | None:
         return None
     if tool_name == "Read":
         file = response.get("file")
-        if response.get("type") in (None, "text") and isinstance(file, Mapping) and isinstance(file.get("content"), str):
+        if (
+            response.get("type") in (None, "text")
+            and isinstance(file, Mapping)
+            and isinstance(file.get("content"), str)
+        ):
             return file["content"]
         return None
     if tool_name in SHELL_TOOLS:
@@ -112,14 +116,17 @@ def _text_of(tool_name: str, response: Any) -> str | None:
         return "\n".join(str(n) for n in names) if isinstance(names, list) else None
     if tool_name in DELEGATION_TOOLS:
         return _texts_of_blocks(response.get("content")) or (
-            response["result"] if isinstance(response.get("result"), str) else None)
+            response["result"] if isinstance(response.get("result"), str) else None
+        )
     return None
 
 
 def _write_summary(response: Any) -> dict[str, Any] | str | None:
     if not isinstance(response, Mapping):
         return None if response is None else str(response)[:_MAX_SMALL]
-    kept = {k: response[k] for k in _WRITE_KEEP if k in response and isinstance(response[k], (str, bool, int))}
+    kept = {
+        k: response[k] for k in _WRITE_KEEP if k in response and isinstance(response[k], (str, bool, int))
+    }
     return kept or {"keys": sorted(str(k) for k in response)[:20]}
 
 
@@ -129,8 +136,11 @@ def extract_result(tool_name: str, response: Any, max_chars: int) -> str | dict[
         return None
     if tool_name in WRITE_TOOLS:
         return _write_summary(response)
-    if tool_name in DELEGATION_TOOLS and isinstance(response, Mapping) and (
-            response.get("isAsync") is True or response.get("status") == "async_launched"):
+    if (
+        tool_name in DELEGATION_TOOLS
+        and isinstance(response, Mapping)
+        and (response.get("isAsync") is True or response.get("status") == "async_launched")
+    ):
         # A background subagent was launched; its result arrives later as a <task-notification>.
         return {k: response[k] for k in _LAUNCH_KEEP if isinstance(response.get(k), (str, bool))}
     text = _text_of(tool_name, response)
@@ -139,15 +149,22 @@ def extract_result(tool_name: str, response: Any, max_chars: int) -> str | dict[
     return truncate_result(_strip_binary(to_jsonable(response)), max_chars)
 
 
-def bounded_arguments(arguments: Mapping[str, Any], max_string: int = 20_000, _depth: int = 0) -> dict[str, Any]:
+def bounded_arguments(
+    arguments: Mapping[str, Any], max_string: int = 20_000, _depth: int = 0
+) -> dict[str, Any]:
     """Copy of tool arguments for an *observation* event with long strings cut (marker appended).
 
     Only used where the server merely records the call (``tool.completed``); decision requests
     always carry the full arguments so nothing can hide past a cut.
     """
+
     def cut(value: Any, depth: int) -> Any:
         if isinstance(value, str):
-            return value if len(value) <= max_string else value[:max_string] + f"[TRUNCATED: {len(value) - max_string} more characters]"
+            return (
+                value
+                if len(value) <= max_string
+                else value[:max_string] + f"[TRUNCATED: {len(value) - max_string} more characters]"
+            )
         if depth > 10:
             return "[nested too deeply]"
         if isinstance(value, Mapping):

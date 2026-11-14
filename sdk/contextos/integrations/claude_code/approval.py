@@ -25,11 +25,15 @@ from . import state
 HOST_PROMPTS = "host_prompts"
 
 
-def remember_host_prompt(correlation_id: str, *, reason: str, approval_id: str | None = None,
-                         policy_decision_id: str | None = None) -> None:
+def remember_host_prompt(
+    correlation_id: str, *, reason: str, approval_id: str | None = None, policy_decision_id: str | None = None
+) -> None:
     """Record that the hook handed this call to Claude Code's own permission prompt."""
-    state.put(HOST_PROMPTS, correlation_id,
-              {"reason": reason, "approval_id": approval_id, "policy_decision_id": policy_decision_id})
+    state.put(
+        HOST_PROMPTS,
+        correlation_id,
+        {"reason": reason, "approval_id": approval_id, "policy_decision_id": policy_decision_id},
+    )
 
 
 def take_host_prompt(correlation_id: str) -> dict[str, Any] | None:

@@ -59,9 +59,13 @@ def record_finding(
 ) -> tuple[SecurityFinding, bool]:
     """Create or bump a finding. Returns ``(finding, created)``. Evidence excerpts must be redacted."""
     fp = finding_fingerprint(
-        org_id, category, rule_id,
-        session_id=session_id, source_id=source_id,
-        tool_invocation_id=tool_invocation_id, destination_id=destination_id,
+        org_id,
+        category,
+        rule_id,
+        session_id=session_id,
+        source_id=source_id,
+        tool_invocation_id=tool_invocation_id,
+        destination_id=destination_id,
     )
     existing = db.scalar(
         select(SecurityFinding).where(
@@ -128,10 +132,14 @@ ACTIVE_STATUSES = frozenset({FindingStatus.OPEN.value, FindingStatus.ACKNOWLEDGE
 
 ALLOWED_TRANSITIONS: dict[str, tuple[str, ...]] = {
     FindingStatus.OPEN.value: (
-        FindingStatus.ACKNOWLEDGED.value, FindingStatus.RESOLVED.value, FindingStatus.FALSE_POSITIVE.value,
+        FindingStatus.ACKNOWLEDGED.value,
+        FindingStatus.RESOLVED.value,
+        FindingStatus.FALSE_POSITIVE.value,
     ),
     FindingStatus.ACKNOWLEDGED.value: (
-        FindingStatus.OPEN.value, FindingStatus.RESOLVED.value, FindingStatus.FALSE_POSITIVE.value,
+        FindingStatus.OPEN.value,
+        FindingStatus.RESOLVED.value,
+        FindingStatus.FALSE_POSITIVE.value,
     ),
     FindingStatus.RESOLVED.value: (FindingStatus.OPEN.value, FindingStatus.FALSE_POSITIVE.value),
     FindingStatus.FALSE_POSITIVE.value: (FindingStatus.OPEN.value,),
@@ -227,13 +235,23 @@ def update_finding_status(
         if note is None:
             raise ConflictError(f"This finding is already {_STATUS_WORDS.get(previous, previous)}")
         if previous not in CLOSED_STATUSES:
-            raise ConflictError("A resolution note can only be recorded on a resolved or false-positive finding")
+            raise ConflictError(
+                "A resolution note can only be recorded on a resolved or false-positive finding"
+            )
         if previous == FindingStatus.FALSE_POSITIVE.value and not text:
             raise ValidationFailedError("Explain why this finding is a false positive")
         finding.resolution_note = text
         db.flush()
-        append_audit(db, org_id, action=NOTE_AUDIT_ACTION, actor_type=actor_type, actor_id=actor_id,
-                     target_type="finding", target_id=finding.id, details={"status": previous, "note": text})
+        append_audit(
+            db,
+            org_id,
+            action=NOTE_AUDIT_ACTION,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            target_type="finding",
+            target_id=finding.id,
+            details={"status": previous, "note": text},
+        )
         notify(db, org_id, "finding.updated", id=finding.id, status=finding.status)
         return finding
 
@@ -258,16 +276,33 @@ def update_finding_status(
         refresh_source_evidence(db, org_id, finding.source_id)
     if finding.incident_id:
         add_activity(
-            db, org_id, finding.incident_id, actor=actor_id or "system", kind="finding_status",
-            body=f"Finding {_STATUS_WORDS.get(status, status)}: {finding.title}" + (f" — {text}" if text else ""),
+            db,
+            org_id,
+            finding.incident_id,
+            actor=actor_id or "system",
+            kind="finding_status",
+            body=f"Finding {_STATUS_WORDS.get(status, status)}: {finding.title}"
+            + (f" — {text}" if text else ""),
             details={"finding_id": finding.id, "from": previous, "to": status},
         )
         notify(db, org_id, "incident.updated", id=finding.incident_id)
     append_audit(
-        db, org_id, action=STATUS_AUDIT_ACTIONS[status], actor_type=actor_type, actor_id=actor_id,
-        target_type="finding", target_id=finding.id,
-        details={"from": previous, "to": status, "note": text, "source_id": finding.source_id,
-                 "incident_id": finding.incident_id, "severity": finding.severity, "category": finding.category},
+        db,
+        org_id,
+        action=STATUS_AUDIT_ACTIONS[status],
+        actor_type=actor_type,
+        actor_id=actor_id,
+        target_type="finding",
+        target_id=finding.id,
+        details={
+            "from": previous,
+            "to": status,
+            "note": text,
+            "source_id": finding.source_id,
+            "incident_id": finding.incident_id,
+            "severity": finding.severity,
+            "category": finding.category,
+        },
     )
     notify(db, org_id, "finding.updated", id=finding.id, status=status)
     return finding
@@ -309,22 +344,34 @@ def link_finding_to_incident(
     if incident_id:
         incident = get_scoped(db, Incident, incident_id, org_id, label="Incident")
         if incident.status in _CLOSED_INCIDENT:
-            raise ConflictError(f"Incident INC-{incident.number} is closed; reopen it before attaching findings")
+            raise ConflictError(
+                f"Incident INC-{incident.number} is closed; reopen it before attaching findings"
+            )
         if bool(incident.is_simulation) != bool(finding.is_simulation):
             raise ConflictError("Simulated findings and real incidents cannot be mixed (or the reverse)")
         finding.incident_id = incident.id
         if SEVERITY_RANK.get(finding.severity, 0) > SEVERITY_RANK.get(incident.severity, 0):
             incident.severity = finding.severity
-        add_activity(db, org_id, incident.id, actor=actor, kind="finding_linked", body=finding.title,
-                     details={"finding_id": finding.id})
+        add_activity(
+            db,
+            org_id,
+            incident.id,
+            actor=actor,
+            kind="finding_linked",
+            body=finding.title,
+            details={"finding_id": finding.id},
+        )
         notify(db, org_id, "incident.updated", id=incident.id)
         created = False
     else:
         category = finding.category.replace("_", " ")
         incident = create_incident(
-            db, org_id,
+            db,
+            org_id,
             title=clean_note(title, 400) or finding.title,
-            summary=f"Opened by an analyst from a {finding.severity} {category} finding. {finding.explanation}"[:4000],
+            summary=f"Opened by an analyst from a {finding.severity} {category} finding. {finding.explanation}"[
+                :4000
+            ],
             severity=finding.severity,
             finding_ids=[finding.id],
             primary_agent_id=finding.agent_id,
@@ -335,8 +382,14 @@ def link_finding_to_incident(
         created = True
     db.flush()
     append_audit(
-        db, org_id, action=INCIDENT_AUDIT_ACTION, actor_type="user" if actor_id else "system", actor_id=actor_id,
-        target_type="finding", target_id=finding.id, details={"incident_id": incident.id, "created": created},
+        db,
+        org_id,
+        action=INCIDENT_AUDIT_ACTION,
+        actor_type="user" if actor_id else "system",
+        actor_id=actor_id,
+        target_type="finding",
+        target_id=finding.id,
+        details={"incident_id": incident.id, "created": created},
     )
     notify(db, org_id, "finding.updated", id=finding.id)
     return incident, created

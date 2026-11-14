@@ -21,8 +21,11 @@ from app.services.incidents import create_incident
 
 
 def _create(client, org, title: str) -> dict:
-    response = client.post("/api/v1/incidents", headers=org.user_headers,
-                           json={"title": title, "summary": "", "severity": "high"})
+    response = client.post(
+        "/api/v1/incidents",
+        headers=org.user_headers,
+        json={"title": title, "summary": "", "severity": "high"},
+    )
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -48,15 +51,22 @@ def test_migration_backfills_the_counter_from_existing_incidents(tmp_path: Path)
         now = utcnow().isoformat()
         with engine.begin() as conn:
             for org_id, numbers in (("org_A", (1, 2, 5)), ("org_B", ()), ("org_C", (3,))):
-                conn.execute(text(
-                    "INSERT INTO organizations (id, name, slug, settings, audit_seq, event_seq, task_seq, "
-                    "created_at, updated_at) VALUES (:id, :id, :id, '{}', 0, 0, 0, :now, :now)"), {"id": org_id, "now": now})
+                conn.execute(
+                    text(
+                        "INSERT INTO organizations (id, name, slug, settings, audit_seq, event_seq, task_seq, "
+                        "created_at, updated_at) VALUES (:id, :id, :id, '{}', 0, 0, 0, :now, :now)"
+                    ),
+                    {"id": org_id, "now": now},
+                )
                 for n in numbers:
-                    conn.execute(text(
-                        "INSERT INTO incidents (id, organization_id, number, title, summary, severity, status, "
-                        "opened_at, created_by, tags, is_simulation, created_at, updated_at) VALUES "
-                        "(:id, :org, :n, 't', '', 'high', 'open', :now, 'system', '[]', 0, :now, :now)"),
-                        {"id": new_id("incident"), "org": org_id, "n": n, "now": now})
+                    conn.execute(
+                        text(
+                            "INSERT INTO incidents (id, organization_id, number, title, summary, severity, status, "
+                            "opened_at, created_by, tags, is_simulation, created_at, updated_at) VALUES "
+                            "(:id, :org, :n, 't', '', 'high', 'open', :now, 'system', '[]', 0, :now, :now)"
+                        ),
+                        {"id": new_id("incident"), "org": org_id, "n": n, "now": now},
+                    )
         command.upgrade(config, "head")
         assert schema_status(engine).current == head_revisions() and schema_differences(engine) == []
         with engine.connect() as conn:

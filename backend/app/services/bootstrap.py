@@ -78,8 +78,14 @@ def update_org_settings(
         # Assign a new dict so SQLAlchemy detects the change to the JSON column.
         org.settings = {**default_org_settings(), **new_settings}
         append_audit(
-            db, org.id, action="organization.settings_updated", actor_type=actor_type, actor_id=actor_id,
-            target_type="organization", target_id=org.id, details={"changes": diff},
+            db,
+            org.id,
+            action="organization.settings_updated",
+            actor_type=actor_type,
+            actor_id=actor_id,
+            target_type="organization",
+            target_id=org.id,
+            details={"changes": diff},
         )
     return diff
 
@@ -141,10 +147,17 @@ def create_organization(
         user = User(id=new_id("user"), email=email, name=display_name, password_hash=hash_password(password))
         db.add(user)
 
-    org = Organization(id=new_id("organization"), name=org_name, slug=unique_slug(db, org_name), settings=default_org_settings())
+    org = Organization(
+        id=new_id("organization"),
+        name=org_name,
+        slug=unique_slug(db, org_name),
+        settings=default_org_settings(),
+    )
     db.add(org)
     db.flush()
-    membership = Membership(id=new_id("membership"), organization_id=org.id, user_id=user.id, role=Role.OWNER.value)
+    membership = Membership(
+        id=new_id("membership"), organization_id=org.id, user_id=user.id, role=Role.OWNER.value
+    )
     db.add(membership)
     db.flush()
 

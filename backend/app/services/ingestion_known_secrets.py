@@ -127,7 +127,9 @@ def find_known(st: PipelineState, value: Any) -> list[KnownSecret]:
         fp = fingerprint_secret(token)
         if fp in known and token not in out:
             secret_type, item_id = known[fp]
-            out[token] = KnownSecret(raw=token, secret_type=secret_type, fingerprint=fp, context_item_id=item_id)
+            out[token] = KnownSecret(
+                raw=token, secret_type=secret_type, fingerprint=fp, context_item_id=item_id
+            )
     found = sorted(out.values(), key=lambda k: -len(k.raw))
     st.remember_raw([k.raw for k in found])
     return found
@@ -143,7 +145,9 @@ def redact_known(value: Any, known: list[KnownSecret], depth: int = 0) -> Any:
                 value = value.replace(secret.raw, secret.placeholder)
         return value
     if isinstance(value, dict):
-        return {redact_known(k, known, depth + 1): redact_known(v, known, depth + 1) for k, v in value.items()}
+        return {
+            redact_known(k, known, depth + 1): redact_known(v, known, depth + 1) for k, v in value.items()
+        }
     if isinstance(value, list):
         return [redact_known(v, known, depth + 1) for v in value]
     if isinstance(value, tuple):
@@ -161,5 +165,12 @@ def redact_session_text(st: PipelineState, text: str | None) -> str | None:
 
 def as_matches(known: list[KnownSecret]) -> list[dict[str, Any]]:
     """Fingerprint entries in the shape used for ``secret_fingerprints``."""
-    return [{"type": k.secret_type, "fingerprint": k.fingerprint, "confidence": KNOWN_CONFIDENCE,
-             "matched_by": "session_fingerprint"} for k in known]
+    return [
+        {
+            "type": k.secret_type,
+            "fingerprint": k.fingerprint,
+            "confidence": KNOWN_CONFIDENCE,
+            "matched_by": "session_fingerprint",
+        }
+        for k in known
+    ]

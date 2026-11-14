@@ -29,11 +29,30 @@ MAX_WALK_FILES = 50_000
 GIT_TIMEOUT_S = 5.0
 _GIT_OUTPUT_CAP = 16_000
 
-SKIP_DIRS = frozenset({
-    ".git", "node_modules", ".venv", "venv", "env", "__pycache__", "dist", "build", ".mypy_cache",
-    ".pytest_cache", ".ruff_cache", ".tox", ".next", ".nuxt", "coverage", ".idea", "target", ".cache",
-    ".turbo", ".gradle",
-})
+SKIP_DIRS = frozenset(
+    {
+        ".git",
+        "node_modules",
+        ".venv",
+        "venv",
+        "env",
+        "__pycache__",
+        "dist",
+        "build",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".tox",
+        ".next",
+        ".nuxt",
+        "coverage",
+        ".idea",
+        "target",
+        ".cache",
+        ".turbo",
+        ".gradle",
+    }
+)
 _GENERIC_STEMS = frozenset({"__init__", "__main__", "index", "conftest", "setup"})
 _WINDOWS_ABS = re.compile(r"^[A-Za-z]:/")
 _JS_TEST = re.compile(r"\.(?:test|spec)\.[cm]?[jt]sx?$")
@@ -94,12 +113,17 @@ def resolve_repo_path(root: Path | None, raw: object) -> ResolvedPath:
 
     if root is None:
         if is_abs:
-            return ResolvedPath("rejected", shown, "Absolute paths are not accepted; use a repository-relative path.")
+            return ResolvedPath(
+                "rejected", shown, "Absolute paths are not accepted; use a repository-relative path."
+            )
         normal = os.path.normpath(text)
         if normal == ".." or normal.startswith("../"):
             return ResolvedPath("rejected", shown, "Path points outside the repository.")
-        return ResolvedPath("unverified", PurePosixPath(normal).as_posix(),
-                            "No repository is available to the server, so this path could not be verified.")
+        return ResolvedPath(
+            "unverified",
+            PurePosixPath(normal).as_posix(),
+            "No repository is available to the server, so this path could not be verified.",
+        )
 
     if _WINDOWS_ABS.match(text):
         return ResolvedPath("rejected", shown, "Path is outside the repository root.")
@@ -107,7 +131,9 @@ def resolve_repo_path(root: Path | None, raw: object) -> ResolvedPath:
     try:
         resolved = candidate.resolve(strict=False)
     except (OSError, RuntimeError):
-        return ResolvedPath("rejected", shown, "Path could not be resolved (for example a symbolic-link loop).")
+        return ResolvedPath(
+            "rejected", shown, "Path could not be resolved (for example a symbolic-link loop)."
+        )
     if resolved != root and not resolved.is_relative_to(root):
         lexical = Path(os.path.normpath(candidate))
         if lexical == root or lexical.is_relative_to(root):
@@ -127,7 +153,9 @@ def resolve_repo_path(root: Path | None, raw: object) -> ResolvedPath:
     if stat.S_ISDIR(st.st_mode):
         return ResolvedPath("directory", rel, "Directory in the repository.", resolved)
     if not stat.S_ISREG(st.st_mode):
-        return ResolvedPath("not_regular", rel, "Not a regular file (device, socket or pipe); not read.", resolved)
+        return ResolvedPath(
+            "not_regular", rel, "Not a regular file (device, socket or pipe); not read.", resolved
+        )
     return ResolvedPath("ok", rel, "", resolved)
 
 
@@ -237,16 +265,43 @@ def git_recent_history(root: Path, rels: list[str], limit: int = 10) -> tuple[bo
     if git is None:
         return False, "Git is not installed on the server."
     cmd = [
-        git, "--no-pager", "-C", str(root),
-        "-c", "core.fsmonitor=false", "-c", "log.showSignature=false", "-c", "core.quotePath=false",
-        "log", "-n", str(limit), "--name-only", "--no-color", "--no-decorate", "--format=commit %h %as %s",
-        "--", *rels,
+        git,
+        "--no-pager",
+        "-C",
+        str(root),
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "log.showSignature=false",
+        "-c",
+        "core.quotePath=false",
+        "log",
+        "-n",
+        str(limit),
+        "--name-only",
+        "--no-color",
+        "--no-decorate",
+        "--format=commit %h %as %s",
+        "--",
+        *rels,
     ]
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0", "GIT_PAGER": "cat", "PAGER": "cat"}
+    env = {
+        **os.environ,
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_OPTIONAL_LOCKS": "0",
+        "GIT_PAGER": "cat",
+        "PAGER": "cat",
+    }
     try:
         proc = subprocess.run(  # noqa: S603 — fixed argv, no shell, paths after "--"
-            cmd, capture_output=True, text=True, timeout=GIT_TIMEOUT_S, check=False, env=env,
-            stdin=subprocess.DEVNULL, errors="replace",
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT_S,
+            check=False,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            errors="replace",
         )
     except subprocess.TimeoutExpired:
         return False, f"git log timed out after {GIT_TIMEOUT_S:g} seconds."

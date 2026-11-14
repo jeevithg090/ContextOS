@@ -19,7 +19,9 @@ def test_formatters_redact_messages_extras_and_tracebacks(formatter):
         import sys
 
         exc_info = sys.exc_info()
-    record = logging.LogRecord("contextos.test", logging.ERROR, __file__, 1, "failed for %s", (TOKEN,), exc_info)
+    record = logging.LogRecord(
+        "contextos.test", logging.ERROR, __file__, 1, "failed for %s", (TOKEN,), exc_info
+    )
     record.detail = f"Authorization: Bearer {TOKEN}"
     line = formatter.format(record)
     assert TOKEN not in line

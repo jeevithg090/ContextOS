@@ -11,10 +11,22 @@ from app.engines.trust.lookalike import edit_distance, find_lookalike, skeleton
 from app.engines.trust.matching import compile_glob
 
 ALLOW = [
-    TrustRuleSpec(id="allow-acme", name="Acme", pattern="*.acmecorp.com", trust_level="APPROVED",
-                  applies_to="destination", match_field="domain"),
-    TrustRuleSpec(id="allow-anthropic", name="Anthropic API", pattern="api.anthropic.com", trust_level="APPROVED",
-                  applies_to="destination", match_field="domain"),
+    TrustRuleSpec(
+        id="allow-acme",
+        name="Acme",
+        pattern="*.acmecorp.com",
+        trust_level="APPROVED",
+        applies_to="destination",
+        match_field="domain",
+    ),
+    TrustRuleSpec(
+        id="allow-anthropic",
+        name="Anthropic API",
+        pattern="api.anthropic.com",
+        trust_level="APPROVED",
+        applies_to="destination",
+        match_field="domain",
+    ),
 ]
 
 
@@ -41,7 +53,9 @@ def test_unknown_destination_reason_and_honest_scope() -> None:
     assert "s3cr3t" not in str(result.checks) + str(result.reasons)
     assert any("not on the organisation's destination allowlist" in r for r in result.reasons)
     assert "did not resolve DNS" in result.reasons[-1] and "who will receive the data" in result.reasons[-1]
-    assert not any("verified recipient" in r.lower() or "identity verified" in r.lower() for r in result.reasons)
+    assert not any(
+        "verified recipient" in r.lower() or "identity verified" in r.lower() for r in result.reasons
+    )
 
 
 def test_allowlisted_destination_passes() -> None:
@@ -53,8 +67,17 @@ def test_allowlisted_destination_passes() -> None:
 
 
 def test_blocklist_rule_matches_and_fails_check() -> None:
-    rules = [*ALLOW, TrustRuleSpec(id="blk", name="Rival", pattern="*.rival.io", trust_level="BLOCKED",
-                                   applies_to="destination", match_field="domain")]
+    rules = [
+        *ALLOW,
+        TrustRuleSpec(
+            id="blk",
+            name="Rival",
+            pattern="*.rival.io",
+            trust_level="BLOCKED",
+            applies_to="destination",
+            match_field="domain",
+        ),
+    ]
     result = assess_destination("domain", "drop.rival.io", rules=rules)
     assert result.classification == "BLOCKED"
     assert checks_of(result)["blocklist"]["result"] == "fail"
@@ -62,10 +85,24 @@ def test_blocklist_rule_matches_and_fails_check() -> None:
 
 def test_higher_priority_allow_overrides_block_and_says_so() -> None:
     rules = [
-        TrustRuleSpec(id="blk", name="Tunnels", pattern="*.ngrok-free.app", trust_level="SUSPICIOUS",
-                      applies_to="destination", match_field="domain", priority=150),
-        TrustRuleSpec(id="ours", name="Our demo tunnel", pattern="demo-acme.ngrok-free.app", trust_level="APPROVED",
-                      applies_to="destination", match_field="domain", priority=200),
+        TrustRuleSpec(
+            id="blk",
+            name="Tunnels",
+            pattern="*.ngrok-free.app",
+            trust_level="SUSPICIOUS",
+            applies_to="destination",
+            match_field="domain",
+            priority=150,
+        ),
+        TrustRuleSpec(
+            id="ours",
+            name="Our demo tunnel",
+            pattern="demo-acme.ngrok-free.app",
+            trust_level="APPROVED",
+            applies_to="destination",
+            match_field="domain",
+            priority=200,
+        ),
     ]
     result = assess_destination("domain", "demo-acme.ngrok-free.app", rules=rules)
     assert result.classification == "APPROVED" and result.matched_rule_id == "ours"
@@ -111,8 +148,16 @@ def test_discord_webhook_has_its_own_canonical_identifier() -> None:
 
 
 def test_broad_external_rule_does_not_hide_exfiltration_signals() -> None:
-    rules = [TrustRuleSpec(id="all", name="Everything external", pattern="*", trust_level="EXTERNAL",
-                           applies_to="destination", match_field="domain")]
+    rules = [
+        TrustRuleSpec(
+            id="all",
+            name="Everything external",
+            pattern="*",
+            trust_level="EXTERNAL",
+            applies_to="destination",
+            match_field="domain",
+        )
+    ]
     result = assess_destination("domain", "webhook.site", rules=rules)
     assert result.classification == "SUSPICIOUS" and result.matched_rule_id == "all"
 
@@ -145,8 +190,14 @@ def test_raw_ip_kind_is_inferred() -> None:
     assert assess_destination("ip", "example.com", rules=[]).kind == "domain"
 
 
-@pytest.mark.parametrize("identifier", ["169.254.169.254", "http://metadata.google.internal/computeMetadata/v1/",
-                                        "http://2852039166/latest/meta-data/"])
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        "169.254.169.254",
+        "http://metadata.google.internal/computeMetadata/v1/",
+        "http://2852039166/latest/meta-data/",
+    ],
+)
 def test_cloud_metadata_endpoints_are_suspicious(identifier: str) -> None:
     result = assess_destination("unknown", identifier, rules=[])
     assert result.classification == "SUSPICIOUS"
@@ -185,7 +236,9 @@ def test_lookalikes_of_allowlisted_domains_are_suspicious(host: str, technique: 
     assert checks_of(result)["lookalike"]["result"] == "fail"
 
 
-@pytest.mark.parametrize("host", ["github.com", "gitlab.com", "example.org", "acme.com", "x.com", "api.acmecorp.com"])
+@pytest.mark.parametrize(
+    "host", ["github.com", "gitlab.com", "example.org", "acme.com", "x.com", "api.acmecorp.com"]
+)
 def test_unrelated_or_same_domains_are_not_lookalikes(host: str) -> None:
     assert find_lookalike(host, {"acmecorp.com", "anthropic.com", "y.com"}) is None
 
@@ -202,7 +255,9 @@ def test_punycode_check_warns_with_display_form() -> None:
 
 
 def test_lookalike_check_unknown_without_allowlist() -> None:
-    assert checks_of(assess_destination("domain", "example.org", rules=[]))["lookalike"]["result"] == "unknown"
+    assert (
+        checks_of(assess_destination("domain", "example.org", rules=[]))["lookalike"]["result"] == "unknown"
+    )
 
 
 def test_skeleton_and_edit_distance_helpers() -> None:
@@ -269,8 +324,17 @@ def test_every_check_has_the_documented_shape() -> None:
 
 
 def test_default_rules_are_well_formed() -> None:
-    keys = {"name", "description", "applies_to", "source_type", "match_field", "pattern", "trust_level",
-            "capabilities", "priority"}
+    keys = {
+        "name",
+        "description",
+        "applies_to",
+        "source_type",
+        "match_field",
+        "pattern",
+        "trust_level",
+        "capabilities",
+        "priority",
+    }
     levels = {lvl.value for lvl in TrustLevel}
     capabilities = {c.value for c in TrustCapability}
     names = set()
@@ -307,8 +371,16 @@ def test_default_rules_for_sources(source_type: str, identifier: str, level: str
 
 
 def test_org_rule_overrides_default_github_rule() -> None:
-    rules = [*default_specs(), TrustRuleSpec(id="ours", name="Our repos", pattern="github.com/acme/*",
-                                             trust_level="APPROVED", capabilities=("read",))]
+    rules = [
+        *default_specs(),
+        TrustRuleSpec(
+            id="ours",
+            name="Our repos",
+            pattern="github.com/acme/*",
+            trust_level="APPROVED",
+            capabilities=("read",),
+        ),
+    ]
     assert assess_source("repository", "acme/api", rules=rules).matched_rule_id == "ours"
 
 
@@ -335,8 +407,16 @@ def test_default_provider_rule_explains_what_approval_does_not_cover() -> None:
 
 
 def test_destination_userinfo_and_backslash_tricks() -> None:
-    rules = [TrustRuleSpec(id="good", name="Good", pattern="good.com", trust_level="APPROVED",
-                           applies_to="destination", match_field="domain")]
+    rules = [
+        TrustRuleSpec(
+            id="good",
+            name="Good",
+            pattern="good.com",
+            trust_level="APPROVED",
+            applies_to="destination",
+            match_field="domain",
+        )
+    ]
     tricked = assess_destination("domain", "https://evil.com\\@good.com/collect", rules=rules)
     assert tricked.canonical_identifier == "evil.com" and tricked.classification == "UNKNOWN"
     userinfo = assess_destination("domain", "https://good.com:pw@evil.com/", rules=rules)

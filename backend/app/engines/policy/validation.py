@@ -58,9 +58,17 @@ def _check_scalar(path: str, spec: dict[str, Any], value: Any, *, item: bool = F
     if ftype == "list":
         ftype = spec.get("item_type", "string")
     if ftype in ("any", "object"):
-        return None if _is_scalar(value) else f"value must be a string, number or boolean, got {_type_name(value)}"
+        return (
+            None
+            if _is_scalar(value)
+            else f"value must be a string, number or boolean, got {_type_name(value)}"
+        )
     if ftype == "number":
-        return None if _is_number(value) else f"{path} is a number; value must be a number, got {_type_name(value)}"
+        return (
+            None
+            if _is_number(value)
+            else f"{path} is a number; value must be a number, got {_type_name(value)}"
+        )
     if ftype == "boolean":
         return None if isinstance(value, bool) else f"{path} is a boolean; value must be true or false"
     if not isinstance(value, str):
@@ -68,8 +76,9 @@ def _check_scalar(path: str, spec: dict[str, Any], value: Any, *, item: bool = F
     allowed = spec.get("values")
     if ftype == "enum" and allowed and value.casefold() not in {a.casefold() for a in allowed}:
         what = "item value" if item else "value"
-        return (f'unknown {what} "{value}" for {path} (allowed: {", ".join(allowed)})'
-                + _suggest(value, list(allowed)))
+        return f'unknown {what} "{value}" for {path} (allowed: {", ".join(allowed)})' + _suggest(
+            value, list(allowed)
+        )
     return None
 
 
@@ -89,8 +98,10 @@ def _validate_leaf(node: dict[str, Any], loc: str, errors: list[str]) -> None:
         if spec is None:
             errors.append(f'{loc}: unknown field "{path}"' + _suggest(path, FIELD_PATHS))
     if not isinstance(op, str) or op not in OPS:
-        errors.append(f"{loc}: unknown operator {op!r} (expected one of {', '.join(sorted(OPS))})"
-                      + (_suggest(op, sorted(OPS)) if isinstance(op, str) else ""))
+        errors.append(
+            f"{loc}: unknown operator {op!r} (expected one of {', '.join(sorted(OPS))})"
+            + (_suggest(op, sorted(OPS)) if isinstance(op, str) else "")
+        )
         return
     has_value = "value" in node and node["value"] is not None
     value = node.get("value")
@@ -121,14 +132,18 @@ def _unsupported(loc: str, op: str, path: str, spec: dict[str, Any]) -> str:
         hint = '; use "contains" / "not_contains" to test list membership'
     elif op == "glob" and kind == "list":
         hint = '; use "any_glob" for list fields'
-    return (f'{loc}: operator "{op}" is not supported for {kind} field {path} '
-            f"(supported: {', '.join(spec['ops'])}){hint}")
+    return (
+        f'{loc}: operator "{op}" is not supported for {kind} field {path} '
+        f"(supported: {', '.join(spec['ops'])}){hint}"
+    )
 
 
 def _value_problems(op: str, path: str, spec: dict[str, Any], value: Any) -> list[str]:
     if op in ("eq", "neq", "contains", "not_contains"):
         if not _is_scalar(value):
-            return [f'operator "{op}" needs a single string, number or boolean value, got {_type_name(value)}']
+            return [
+                f'operator "{op}" needs a single string, number or boolean value, got {_type_name(value)}'
+            ]
         if spec["type"] == "string" and op in ("contains", "not_contains") and not isinstance(value, str):
             return [f"{path} holds text; value must be a string"]
         err = _check_scalar(path, spec, value, item=spec["type"] == "list")
@@ -174,7 +189,9 @@ def _validate_node(node: Any, loc: str, depth: int, errors: list[str], count: li
     combinators = keys & {"all", "any", "not"}
     if combinators:
         if len(keys) > 1:
-            errors.append(f"{loc}: a combinator node must contain only one of all/any/not, got {sorted(keys)}")
+            errors.append(
+                f"{loc}: a combinator node must contain only one of all/any/not, got {sorted(keys)}"
+            )
             return
         key = next(iter(combinators))
         child = node[key]

@@ -62,15 +62,16 @@ PROVENANCE_MODULE = "app.services.provenance_service"
 PROVENANCE_FUNCTIONS = ("risky_paths_for_session", "session_risky_paths")
 # Otherwise the session-scoped graph builder is used: (db, org_id, *, session_id) -> graph with ``risky_paths``.
 PROVENANCE_GRAPH_FUNCTION = "build_provenance_graph"
-PROVENANCE_UNAVAILABLE = ("Provenance risky-path analysis is not available on this server, so no provenance paths "
-                          "are included.")
+PROVENANCE_UNAVAILABLE = (
+    "Provenance risky-path analysis is not available on this server, so no provenance paths are included."
+)
 # Put first so it survives truncation: whether the path's final tool call was actually stopped.
 PATH_OUTCOMES = {
     "prevented": "Outcome: the final tool call was blocked at an enforced boundary.",
     "awaiting_approval": "Outcome: the final tool call was held at an enforced boundary for human approval.",
     "advisory_only": "Outcome: a blocking decision was returned as advice only; the integration may have run the call.",
     "not_prevented": "Outcome: the final tool call was not prevented (allowed, approved, or only observed after it "
-                     "ran).",
+    "ran).",
 }
 
 
@@ -111,19 +112,33 @@ def _rows(db: Session, model: Any, org_id: str, ids: list[str]) -> list[Any]:
 
 def task_fields(db: Session, task: Task) -> dict[str, Any]:
     column = db.get(BoardColumn, task.column_id)
-    labels = list(db.scalars(
-        select(TaskLabel.name).join(TaskLabelLink, TaskLabelLink.label_id == TaskLabel.id).where(
-            TaskLabelLink.organization_id == task.organization_id, TaskLabelLink.task_id == task.id)
-    ))
-    return _redacted({
-        "id": task.id, "key": task_key(task), "number": task.number, "title": task.title,
-        "description": task.description, "task_type": task.task_type, "priority": task.priority,
-        "severity": task.severity, "status": column.status_key if column else None,
-        "reproduction_steps": task.reproduction_steps, "expected_behaviour": task.expected_behaviour,
-        "actual_behaviour": task.actual_behaviour, "acceptance_criteria": list(task.acceptance_criteria or []),
-        "related_files": [p for p in task.related_files or [] if isinstance(p, str)], "labels": labels,
-        "related_finding_id": task.related_finding_id,
-    })
+    labels = list(
+        db.scalars(
+            select(TaskLabel.name)
+            .join(TaskLabelLink, TaskLabelLink.label_id == TaskLabel.id)
+            .where(TaskLabelLink.organization_id == task.organization_id, TaskLabelLink.task_id == task.id)
+        )
+    )
+    return _redacted(
+        {
+            "id": task.id,
+            "key": task_key(task),
+            "number": task.number,
+            "title": task.title,
+            "description": task.description,
+            "task_type": task.task_type,
+            "priority": task.priority,
+            "severity": task.severity,
+            "status": column.status_key if column else None,
+            "reproduction_steps": task.reproduction_steps,
+            "expected_behaviour": task.expected_behaviour,
+            "actual_behaviour": task.actual_behaviour,
+            "acceptance_criteria": list(task.acceptance_criteria or []),
+            "related_files": [p for p in task.related_files or [] if isinstance(p, str)],
+            "labels": labels,
+            "related_finding_id": task.related_finding_id,
+        }
+    )
 
 
 def _linked_ids(db: Session, task: Task) -> tuple[dict[str, list[str]], Task | None]:
@@ -131,16 +146,20 @@ def _linked_ids(db: Session, task: Task) -> tuple[dict[str, list[str]], Task | N
     chain = [task]
     parent = None
     if task.parent_task_id:
-        parent = db.scalar(select(Task).where(Task.organization_id == task.organization_id,
-                                              Task.id == task.parent_task_id))
+        parent = db.scalar(
+            select(Task).where(Task.organization_id == task.organization_id, Task.id == task.parent_task_id)
+        )
         if parent is not None:
             chain.append(parent)
     out: dict[str, list[str]] = {}
     for item in chain:
         for ref in task_refs(db, item):
             out.setdefault(ref.ref_type, []).append(ref.ref_id)
-        for ref_type, value in (("finding", item.related_finding_id), ("incident", item.related_incident_id),
-                                ("agent", item.related_agent_id)):
+        for ref_type, value in (
+            ("finding", item.related_finding_id),
+            ("incident", item.related_incident_id),
+            ("agent", item.related_agent_id),
+        ):
             if value:
                 out.setdefault(ref_type, []).append(value)
     return {k: _ids(v) for k, v in out.items()}, parent
@@ -153,24 +172,60 @@ def _finding(row: SecurityFinding) -> dict[str, Any]:
     evidence = []
     for ev in (row.evidence or [])[:20]:
         if isinstance(ev, dict):
-            evidence.append({k: ev.get(k) for k in ("type", "id", "excerpt", "detail") if ev.get(k) is not None})
-    return _redacted({
-        "id": row.id, "title": row.title, "category": row.category, "severity": row.severity,
-        "status": row.status, "confidence": row.confidence, "explanation": row.explanation,
-        "evidence": evidence, "remediation": row.remediation, "rule_id": row.rule_id,
-        "session_id": row.session_id, "agent_id": row.agent_id, "policy_decision_id": row.policy_decision_id,
-        "is_simulation": row.is_simulation,
-    })
+            evidence.append(
+                {k: ev.get(k) for k in ("type", "id", "excerpt", "detail") if ev.get(k) is not None}
+            )
+    return _redacted(
+        {
+            "id": row.id,
+            "title": row.title,
+            "category": row.category,
+            "severity": row.severity,
+            "status": row.status,
+            "confidence": row.confidence,
+            "explanation": row.explanation,
+            "evidence": evidence,
+            "remediation": row.remediation,
+            "rule_id": row.rule_id,
+            "session_id": row.session_id,
+            "agent_id": row.agent_id,
+            "policy_decision_id": row.policy_decision_id,
+            "is_simulation": row.is_simulation,
+        }
+    )
 
 
 def _incident(db: Session, row: Incident) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    incident = _redacted({"id": row.id, "number": row.number, "title": f"INC-{row.number}: {row.title}",
-                          "summary": row.summary, "severity": row.severity, "status": row.status})
-    activities = list(db.scalars(select(IncidentActivity).where(
-        IncidentActivity.organization_id == row.organization_id, IncidentActivity.incident_id == row.id,
-    ).order_by(IncidentActivity.created_at.desc(), IncidentActivity.id.desc()).limit(MAX_TIMELINE)))
-    timeline = [{"id": a.id, "type": f"incident.{a.kind}", "at": isoformat(a.created_at),
-                 "summary": inline(a.body, 240) or a.kind.replace("_", " ")} for a in reversed(activities)]
+    incident = _redacted(
+        {
+            "id": row.id,
+            "number": row.number,
+            "title": f"INC-{row.number}: {row.title}",
+            "summary": row.summary,
+            "severity": row.severity,
+            "status": row.status,
+        }
+    )
+    activities = list(
+        db.scalars(
+            select(IncidentActivity)
+            .where(
+                IncidentActivity.organization_id == row.organization_id,
+                IncidentActivity.incident_id == row.id,
+            )
+            .order_by(IncidentActivity.created_at.desc(), IncidentActivity.id.desc())
+            .limit(MAX_TIMELINE)
+        )
+    )
+    timeline = [
+        {
+            "id": a.id,
+            "type": f"incident.{a.kind}",
+            "at": isoformat(a.created_at),
+            "summary": inline(a.body, 240) or a.kind.replace("_", " "),
+        }
+        for a in reversed(activities)
+    ]
     return incident, timeline
 
 
@@ -199,9 +254,17 @@ def _event_summary(event: IngestedEvent, decisions: dict[str, PolicyDecision]) -
 def _events(db: Session, org_id: str, session_ids: list[str], event_ids: list[str]) -> list[IngestedEvent]:
     rows: dict[str, IngestedEvent] = {}
     if session_ids:
-        latest = list(db.scalars(select(IngestedEvent).where(
-            IngestedEvent.organization_id == org_id, IngestedEvent.session_id.in_(session_ids),
-        ).order_by(IngestedEvent.sequence.desc()).limit(MAX_EVENTS)))
+        latest = list(
+            db.scalars(
+                select(IngestedEvent)
+                .where(
+                    IngestedEvent.organization_id == org_id,
+                    IngestedEvent.session_id.in_(session_ids),
+                )
+                .order_by(IngestedEvent.sequence.desc())
+                .limit(MAX_EVENTS)
+            )
+        )
         rows.update({e.id: e for e in latest})
     for event in _rows(db, IngestedEvent, org_id, event_ids[:MAX_EVENTS]):
         rows.setdefault(event.id, event)
@@ -222,17 +285,32 @@ def _policies(decisions: list[PolicyDecision]) -> list[dict[str, Any]]:
             if not key or key in out:
                 continue
             mode = f", {match['mode']} mode" if match.get("mode") else ""
-            explanation = (f"{clean(match.get('explanation'), 400)} (matched decision {decision.id}: returned "
-                           f"{decision.decision}, enforcement {decision.enforcement}{mode})")
-            out[key] = {"id": match.get("policy_id"), "name": match.get("name"),
-                        "outcome": match.get("outcome") or decision.decision, "explanation": explanation}
+            explanation = (
+                f"{clean(match.get('explanation'), 400)} (matched decision {decision.id}: returned "
+                f"{decision.decision}, enforcement {decision.enforcement}{mode})"
+            )
+            out[key] = {
+                "id": match.get("policy_id"),
+                "name": match.get("name"),
+                "outcome": match.get("outcome") or decision.decision,
+                "explanation": explanation,
+            }
     return _redacted(list(out.values()))
 
 
 def _agent(row: Agent) -> dict[str, Any]:
-    return _redacted({"id": row.id, "name": row.name, "framework": row.framework, "environment": row.environment,
-                      "owner": row.owner, "status": row.status, "description": row.description,
-                      "risk_score": row.risk_score})
+    return _redacted(
+        {
+            "id": row.id,
+            "name": row.name,
+            "framework": row.framework,
+            "environment": row.environment,
+            "owner": row.owner,
+            "status": row.status,
+            "description": row.description,
+            "risk_score": row.risk_score,
+        }
+    )
 
 
 def _path_dict(path: Any) -> dict[str, Any] | None:
@@ -246,13 +324,23 @@ def _path_dict(path: Any) -> dict[str, Any] | None:
         return None
     outcome = PATH_OUTCOMES.get(str(data.get("outcome") or ""))
     explanation = " ".join(t for t in (outcome, inline(data.get("explanation"), 2000)) if t)
-    return _redacted({"id": data.get("id"), "title": data.get("title"), "explanation": explanation,
-                      "severity": data.get("severity"), "outcome": data.get("outcome")})
+    return _redacted(
+        {
+            "id": data.get("id"),
+            "title": data.get("title"),
+            "explanation": explanation,
+            "severity": data.get("severity"),
+            "outcome": data.get("outcome"),
+        }
+    )
 
 
 def _path_source(module: Any) -> Callable[[Session, str, str], Iterable[Any]] | None:
     """``(db, org_id, session_id) -> risky paths`` from whatever the provenance service exposes."""
-    fn = next((getattr(module, name) for name in PROVENANCE_FUNCTIONS if callable(getattr(module, name, None))), None)
+    fn = next(
+        (getattr(module, name) for name in PROVENANCE_FUNCTIONS if callable(getattr(module, name, None))),
+        None,
+    )
     if fn is not None:
         return fn
     graph = getattr(module, PROVENANCE_GRAPH_FUNCTION, None)
@@ -265,7 +353,9 @@ def _path_source(module: Any) -> Callable[[Session, str, str], Iterable[Any]] | 
     return from_graph
 
 
-def provenance_paths(db: Session, org_id: str, session_ids: list[str]) -> tuple[list[dict[str, Any]], str | None]:
+def provenance_paths(
+    db: Session, org_id: str, session_ids: list[str]
+) -> tuple[list[dict[str, Any]], str | None]:
     """Risky paths for the sessions via the provenance service, imported lazily. ``(paths, note)``.
 
     Each lookup runs in a savepoint so a failing (read-only) analysis can never poison the request's
@@ -292,8 +382,9 @@ def provenance_paths(db: Session, org_id: str, session_ids: list[str]) -> tuple[
             continue  # the session was removed since it was linked; nothing to analyse
         except Exception:  # noqa: BLE001 — degrade to a visible note instead of failing prompt generation
             log.exception("provenance_paths_failed", extra={"session_id": session_id})
-            return list(paths.values())[:MAX_PATHS], ("Provenance risky-path analysis failed for a linked session; "
-                                                      "paths may be incomplete.")
+            return list(paths.values())[:MAX_PATHS], (
+                "Provenance risky-path analysis failed for a linked session; paths may be incomplete."
+            )
         for path in (p for p in (_path_dict(x) for x in found) if p):
             paths.setdefault(str(path.get("id") or f"{path.get('title')}|{path.get('explanation')}"), path)
         if len(paths) >= MAX_PATHS:
@@ -302,13 +393,28 @@ def provenance_paths(db: Session, org_id: str, session_ids: list[str]) -> tuple[
 
 
 def _attempts(db: Session, task: Task) -> list[dict[str, Any]]:
-    return _redacted([{"id": a.id, "status": a.status, "agent_tool": a.agent_tool, "notes": a.notes,
-                       "branch": a.branch, "pr_url": a.pr_url} for a in fix_attempt_rows(db, task)])
+    return _redacted(
+        [
+            {
+                "id": a.id,
+                "status": a.status,
+                "agent_tool": a.agent_tool,
+                "notes": a.notes,
+                "branch": a.branch,
+                "pr_url": a.pr_url,
+            }
+            for a in fix_attempt_rows(db, task)
+        ]
+    )
 
 
 def _runs(db: Session, task: Task) -> list[dict[str, Any]]:
-    return _redacted([{"id": r.id, "kind": r.kind, "status": r.status, "summary": r.summary, "command": r.command}
-                      for r in verification_rows(db, task)])
+    return _redacted(
+        [
+            {"id": r.id, "kind": r.kind, "status": r.status, "summary": r.summary, "command": r.command}
+            for r in verification_rows(db, task)
+        ]
+    )
 
 
 # ----------------------------------------------------------------------------- public
@@ -332,18 +438,40 @@ def collect(db: Session, task: Task, *, with_provenance: bool = True) -> TaskBun
     if incident_row is not None:
         bundle.incident, timeline = _incident(db, incident_row)
 
-    bundle.session_ids = _ids([*linked.get("session", []), *(f.session_id for f in finding_rows),
-                               incident_row.primary_session_id if incident_row else None])[:MAX_SESSIONS]
+    bundle.session_ids = _ids(
+        [
+            *linked.get("session", []),
+            *(f.session_id for f in finding_rows),
+            incident_row.primary_session_id if incident_row else None,
+        ]
+    )[:MAX_SESSIONS]
     decision_ids = _ids([*linked.get("policy_decision", []), *(f.policy_decision_id for f in finding_rows)])
     events = _events(db, org_id, bundle.session_ids, linked.get("event", []))
     event_decision_ids = _ids(str((e.refs or {}).get("policy_decision_id") or "") for e in events)
     decisions = _decisions(db, org_id, _ids([*decision_ids, *event_decision_ids]))
-    bundle.events = _redacted([{"id": e.id, "type": e.event_type, "at": isoformat(e.received_at),
-                                "summary": _event_summary(e, decisions)} for e in events]) + timeline
+    bundle.events = (
+        _redacted(
+            [
+                {
+                    "id": e.id,
+                    "type": e.event_type,
+                    "at": isoformat(e.received_at),
+                    "summary": _event_summary(e, decisions),
+                }
+                for e in events
+            ]
+        )
+        + timeline
+    )
     bundle.policies = _policies([decisions[d] for d in decision_ids[:MAX_DECISIONS] if d in decisions])
 
-    agent_ids = _ids([*linked.get("agent", []), *(f.agent_id for f in finding_rows),
-                      incident_row.primary_agent_id if incident_row else None])
+    agent_ids = _ids(
+        [
+            *linked.get("agent", []),
+            *(f.agent_id for f in finding_rows),
+            incident_row.primary_agent_id if incident_row else None,
+        ]
+    )
     agent_row = next(iter(_rows(db, Agent, org_id, agent_ids[:1])), None)
     bundle.agent = _agent(agent_row) if agent_row is not None else None
 
@@ -358,9 +486,15 @@ def collect(db: Session, task: Task, *, with_provenance: bool = True) -> TaskBun
 
 def to_input(bundle: TaskBundle, pack_items: list[dict[str, Any]]) -> FixContextInput:
     return FixContextInput(
-        task=bundle.task, findings=bundle.findings, incident=bundle.incident, events=bundle.events,
-        agent=bundle.agent, provenance_paths=bundle.provenance_paths, policies=bundle.policies,
-        previous_attempts=bundle.previous_attempts, verification_runs=bundle.verification_runs,
+        task=bundle.task,
+        findings=bundle.findings,
+        incident=bundle.incident,
+        events=bundle.events,
+        agent=bundle.agent,
+        provenance_paths=bundle.provenance_paths,
+        policies=bundle.policies,
+        previous_attempts=bundle.previous_attempts,
+        verification_runs=bundle.verification_runs,
         context_pack_items=[i for i in pack_items if isinstance(i, dict)],
     )
 
@@ -369,32 +503,60 @@ def pack_records(bundle: TaskBundle) -> list[dict[str, Any]]:
     """Context-pack records (persisted ContextOS data) for the task's linked records."""
     records: list[dict[str, Any]] = []
     for f in bundle.findings:
-        body = [f"Severity {f.get('severity')}, category {str(f.get('category') or '').replace('_', ' ')}, "
-                f"status {f.get('status')}.", str(f.get("explanation") or "")]
+        body = [
+            f"Severity {f.get('severity')}, category {str(f.get('category') or '').replace('_', ' ')}, "
+            f"status {f.get('status')}.",
+            str(f.get("explanation") or ""),
+        ]
         if f.get("remediation"):
             body.append(f"Suggested remediation: {f['remediation']}")
-        records.append({"ref": f"finding:{f['id']}", "kind": "record", "category": "evidence",
-                        "title": f"Finding — {f.get('title')}", "summary": "\n\n".join(body),
-                        "reason": "Finding linked to this task."})
+        records.append(
+            {
+                "ref": f"finding:{f['id']}",
+                "kind": "record",
+                "category": "evidence",
+                "title": f"Finding — {f.get('title')}",
+                "summary": "\n\n".join(body),
+                "reason": "Finding linked to this task.",
+            }
+        )
     if bundle.incident:
         inc = bundle.incident
-        records.append({"ref": f"incident:{inc['id']}", "kind": "record", "category": "evidence",
-                        "title": f"Incident — {inc.get('title')}",
-                        "summary": f"Status {inc.get('status')}, severity {inc.get('severity')}.\n\n"
-                                   f"{inc.get('summary') or ''}",
-                        "reason": "Incident linked to this task."})
+        records.append(
+            {
+                "ref": f"incident:{inc['id']}",
+                "kind": "record",
+                "category": "evidence",
+                "title": f"Incident — {inc.get('title')}",
+                "summary": f"Status {inc.get('status')}, severity {inc.get('severity')}.\n\n"
+                f"{inc.get('summary') or ''}",
+                "reason": "Incident linked to this task.",
+            }
+        )
     for p in bundle.policies:
         if p.get("id"):
-            records.append({"ref": f"policy:{p['id']}", "kind": "policy", "category": "fact",
-                            "title": f"Policy — {p.get('name') or p['id']}",
-                            "summary": f"Outcome {p.get('outcome')}. {p.get('explanation') or ''}",
-                            "reason": "Policy matched by a decision linked to this task."})
+            records.append(
+                {
+                    "ref": f"policy:{p['id']}",
+                    "kind": "policy",
+                    "category": "fact",
+                    "title": f"Policy — {p.get('name') or p['id']}",
+                    "summary": f"Outcome {p.get('outcome')}. {p.get('explanation') or ''}",
+                    "reason": "Policy matched by a decision linked to this task.",
+                }
+            )
     if bundle.agent:
         ag = bundle.agent
-        records.append({"ref": f"agent:{ag['id']}", "kind": "record", "category": "fact",
-                        "title": f"Agent — {ag.get('name')}",
-                        "summary": f"Framework {ag.get('framework')}, environment {ag.get('environment')}, "
-                                   f"status {ag.get('status')}, owner {ag.get('owner') or 'not set'}."
-                                   + (f"\n\n{ag['description']}" if ag.get("description") else ""),
-                        "reason": "Agent linked to this task."})
+        records.append(
+            {
+                "ref": f"agent:{ag['id']}",
+                "kind": "record",
+                "category": "fact",
+                "title": f"Agent — {ag.get('name')}",
+                "summary": f"Framework {ag.get('framework')}, environment {ag.get('environment')}, "
+                f"status {ag.get('status')}, owner {ag.get('owner') or 'not set'}."
+                + (f"\n\n{ag['description']}" if ag.get("description") else ""),
+                "reason": "Agent linked to this task.",
+            }
+        )
     return records

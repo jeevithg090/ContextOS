@@ -34,8 +34,11 @@ target_metadata = Base.metadata
 
 
 def _url() -> str:
-    return (config.attributes.get("database_url") or context.get_x_argument(as_dictionary=True).get("url")
-            or get_settings().database_url)
+    return (
+        config.attributes.get("database_url")
+        or context.get_x_argument(as_dictionary=True).get("url")
+        or get_settings().database_url
+    )
 
 
 def _render_item(type_: str, obj: Any, autogen_context: Any) -> str | bool:
@@ -57,8 +60,12 @@ def _configure(connection: Connection) -> None:
 def run_migrations_offline() -> None:
     url = _url()
     context.configure(
-        url=url, target_metadata=target_metadata, literal_binds=True, render_as_batch=url.startswith("sqlite"),
-        render_item=_render_item, dialect_opts={"paramstyle": "named"},
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        render_as_batch=url.startswith("sqlite"),
+        render_item=_render_item,
+        dialect_opts={"paramstyle": "named"},
     )
     with context.begin_transaction():
         context.run_migrations()

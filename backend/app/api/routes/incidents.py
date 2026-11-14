@@ -63,68 +63,109 @@ def list_incidents(
     filters = IncidentFilters(
         statuses=[s.value for s in status] if status else None,
         severities=[s.value for s in severity] if severity else None,
-        include_simulated=include_simulated, q=q, assignee_user_id=assignee_user_id, unassigned=unassigned,
+        include_simulated=include_simulated,
+        q=q,
+        assignee_user_id=assignee_user_id,
+        unassigned=unassigned,
         agent_id=agent_id,
     )
-    items, total = incidents_query.list_incidents(db, principal.org_id, filters, sort=sort, limit=limit, offset=offset)
-    return Page[IncidentSummaryOut].model_validate({"items": items, "total": total, "limit": limit, "offset": offset})
+    items, total = incidents_query.list_incidents(
+        db, principal.org_id, filters, sort=sort, limit=limit, offset=offset
+    )
+    return Page[IncidentSummaryOut].model_validate(
+        {"items": items, "total": total, "limit": limit, "offset": offset}
+    )
 
 
 @router.post("", response_model=IncidentDetailOut, status_code=201)
-def create_incident(body: IncidentCreateIn, principal: Principal = WRITE,
-                    db: Session = Depends(get_db)) -> IncidentDetailOut:
+def create_incident(
+    body: IncidentCreateIn, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> IncidentDetailOut:
     """Open an incident, optionally grouping existing findings (it is at least as severe as the worst one)."""
     incident = workflow.open_incident(
-        db, principal.org_id, title=body.title, summary=body.summary, severity=body.severity.value,
-        finding_ids=body.finding_ids, actor_id=_user_id(principal),
+        db,
+        principal.org_id,
+        title=body.title,
+        summary=body.summary,
+        severity=body.severity.value,
+        finding_ids=body.finding_ids,
+        actor_id=_user_id(principal),
     )
     db.commit()
-    return IncidentDetailOut.model_validate(incidents_query.incident_detail(db, principal.org_id, incident.id))
+    return IncidentDetailOut.model_validate(
+        incidents_query.incident_detail(db, principal.org_id, incident.id)
+    )
 
 
 @router.get("/{incident_id}", response_model=IncidentDetailOut)
-def get_incident(incident_id: str, principal: Principal = READ, db: Session = Depends(get_db)) -> IncidentDetailOut:
+def get_incident(
+    incident_id: str, principal: Principal = READ, db: Session = Depends(get_db)
+) -> IncidentDetailOut:
     """The investigator's view: findings, involved agents/sessions/sources/destinations, activity and tasks."""
-    return IncidentDetailOut.model_validate(incidents_query.incident_detail(db, principal.org_id, incident_id))
+    return IncidentDetailOut.model_validate(
+        incidents_query.incident_detail(db, principal.org_id, incident_id)
+    )
 
 
 @router.patch("/{incident_id}", response_model=IncidentDetailOut)
-def update_incident(incident_id: str, body: IncidentUpdateIn, principal: Principal = WRITE,
-                    db: Session = Depends(get_db)) -> IncidentDetailOut:
+def update_incident(
+    incident_id: str, body: IncidentUpdateIn, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> IncidentDetailOut:
     """Change status (validated transitions; closing needs a resolution), severity, assignee or resolution."""
     fields = body.model_fields_set
     workflow.update_incident(
-        db, principal.org_id, incident_id, actor_id=_user_id(principal),
+        db,
+        principal.org_id,
+        incident_id,
+        actor_id=_user_id(principal),
         status=body.status.value if body.status else None,
         severity=body.severity.value if body.severity else None,
         resolution=body.resolution,
         **({"assignee_user_id": body.assignee_user_id} if "assignee_user_id" in fields else {}),
     )
     db.commit()
-    return IncidentDetailOut.model_validate(incidents_query.incident_detail(db, principal.org_id, incident_id))
+    return IncidentDetailOut.model_validate(
+        incidents_query.incident_detail(db, principal.org_id, incident_id)
+    )
 
 
 @router.post("/{incident_id}/notes", response_model=ActivityOut, status_code=201)
-def add_note(incident_id: str, body: NoteIn, principal: Principal = WRITE, db: Session = Depends(get_db)) -> ActivityOut:
+def add_note(
+    incident_id: str, body: NoteIn, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> ActivityOut:
     """Add an investigation note. Secrets in the text are redacted before it is stored."""
-    activity = workflow.add_note(db, principal.org_id, incident_id, body=body.body, actor_id=_user_id(principal))
+    activity = workflow.add_note(
+        db, principal.org_id, incident_id, body=body.body, actor_id=_user_id(principal)
+    )
     db.commit()
     names = user_names(db, principal.org_id, {activity.actor})
-    return ActivityOut.model_validate({
-        "id": activity.id, "kind": activity.kind, "actor": actor_ref(activity.actor, names), "body": activity.body,
-        "details": activity.details or {}, "created_at": activity.created_at,
-    })
+    return ActivityOut.model_validate(
+        {
+            "id": activity.id,
+            "kind": activity.kind,
+            "actor": actor_ref(activity.actor, names),
+            "body": activity.body,
+            "details": activity.details or {},
+            "created_at": activity.created_at,
+        }
+    )
 
 
 @router.post("/{incident_id}/findings", response_model=LinkFindingsOut)
-def link_findings(incident_id: str, body: LinkFindingsIn, principal: Principal = WRITE,
-                  db: Session = Depends(get_db)) -> LinkFindingsOut:
+def link_findings(
+    incident_id: str, body: LinkFindingsIn, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> LinkFindingsOut:
     """Attach findings to an active incident (all or nothing)."""
-    result = workflow.link_findings(db, principal.org_id, incident_id, body.finding_ids, actor_id=_user_id(principal))
+    result = workflow.link_findings(
+        db, principal.org_id, incident_id, body.finding_ids, actor_id=_user_id(principal)
+    )
     db.commit()
-    return LinkFindingsOut.model_validate({
-        **result, "incident": incidents_query.incident_detail(db, principal.org_id, incident_id),
-    })
+    return LinkFindingsOut.model_validate(
+        {
+            **result,
+            "incident": incidents_query.incident_detail(db, principal.org_id, incident_id),
+        }
+    )
 
 
 @router.get("/{incident_id}/timeline", response_model=IncidentTimelineOut)
@@ -138,16 +179,24 @@ def get_timeline(
     """Merged, chronological entries: involved sessions' events, findings, policy decisions, approvals and
     incident activity. Server-time order; an observed sequence, not causation."""
     return IncidentTimelineOut.model_validate(
-        incident_timeline(db, principal.org_id, incident_id, types=list(type) if type else None, limit=limit))
+        incident_timeline(db, principal.org_id, incident_id, types=list(type) if type else None, limit=limit)
+    )
 
 
 @router.get("/{incident_id}/export", response_class=JSONResponse)
-def export_incident(incident_id: str, principal: Principal = READ, db: Session = Depends(get_db)) -> JSONResponse:
+def export_incident(
+    incident_id: str, principal: Principal = READ, db: Session = Depends(get_db)
+) -> JSONResponse:
     """Evidence bundle (JSON download). The export is recorded in the incident activity and the audit chain,
     including the bundle's SHA-256."""
     bundle, filename = build_evidence_bundle(
-        db, principal.org_id, incident_id, actor_type=principal.actor_type, actor_id=principal.actor_id)
+        db, principal.org_id, incident_id, actor_type=principal.actor_type, actor_id=principal.actor_id
+    )
     db.commit()
-    return JSONResponse(content=bundle, headers={
-        "Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store",
-    })
+    return JSONResponse(
+        content=bundle,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )

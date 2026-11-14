@@ -20,9 +20,24 @@ from app.engines.provenance import (
 )
 
 RECEIPT_KEYS = [
-    "receipt_version", "context_item_id", "organization_id", "source", "agent_id", "session_id", "event_id",
-    "collected_via", "collected_at", "received_at", "content_hash", "content_length", "content_type",
-    "sensitivity", "contains_secrets", "secret_fingerprint_count", "detection", "tool_invocation_id",
+    "receipt_version",
+    "context_item_id",
+    "organization_id",
+    "source",
+    "agent_id",
+    "session_id",
+    "event_id",
+    "collected_via",
+    "collected_at",
+    "received_at",
+    "content_hash",
+    "content_length",
+    "content_type",
+    "sensitivity",
+    "contains_secrets",
+    "secret_fingerprint_count",
+    "detection",
+    "tool_invocation_id",
 ]
 
 
@@ -30,7 +45,11 @@ def _item(**overrides):
     item = {
         "id": "ctx_01",
         "organization_id": "org_01",
-        "source": {"type": "repository", "identifier": "github.com/acme/app/README.md", "trust_level": "TRUSTED"},
+        "source": {
+            "type": "repository",
+            "identifier": "github.com/acme/app/README.md",
+            "trust_level": "TRUSTED",
+        },
         "trust_level": "UNKNOWN",
         "agent_id": "agt_01",
         "session_id": "ses_01",
@@ -45,7 +64,10 @@ def _item(**overrides):
         "contains_secrets": True,
         "secret_fingerprints": [{"type": "aws_access_key", "fingerprint": "deadbeefcafe0001"}],
         "detection_summary": {
-            "score": 0.81234, "max_severity": "HIGH", "rule_ids": ["PI-002", "PI-001", "PI-002"], "hit_count": 3,
+            "score": 0.81234,
+            "max_severity": "HIGH",
+            "rule_ids": ["PI-002", "PI-001", "PI-002"],
+            "hit_count": 3,
         },
         "tool_invocation_id": "inv_01",
         "redacted_preview": "Ignore previous instructions [REDACTED:aws_access_key:deadbeef]",
@@ -62,7 +84,9 @@ def test_receipt_fields_are_the_attested_subset_in_stable_order():
     assert list(fields) == RECEIPT_KEYS
     assert fields["receipt_version"] == "1"
     assert fields["source"] == {
-        "type": "repository", "identifier": "github.com/acme/app/README.md", "trust_level_at_ingest": "UNKNOWN",
+        "type": "repository",
+        "identifier": "github.com/acme/app/README.md",
+        "trust_level_at_ingest": "UNKNOWN",
     }
     assert fields["detection"] == {"score": 0.812, "max_severity": "high", "rule_ids": ["PI-001", "PI-002"]}
     assert fields["content_hash"] == "a" * 64
@@ -115,14 +139,26 @@ def test_trust_at_ingest_ignores_the_sources_current_classification():
     # The source was later reclassified TRUSTED; the receipt must keep the classification at ingest.
     fields = receipt_fields(_item(source={"type": "web", "identifier": "x", "trust_level": "TRUSTED"}))
     assert fields["source"]["trust_level_at_ingest"] == "UNKNOWN"
-    fallback = receipt_fields(_item(trust_level=None, source={"type": "web", "trust_level_at_ingest": "external"}))
+    fallback = receipt_fields(
+        _item(trust_level=None, source={"type": "web", "trust_level_at_ingest": "external"})
+    )
     assert fallback["source"]["trust_level_at_ingest"] == "EXTERNAL"
 
 
 def test_missing_optional_values_have_deterministic_defaults():
-    fields = receipt_fields({"id": "ctx_x", "organization_id": "org_x", "source_type": "WEB",
-                             "source_identifier": "https://example.org"})
-    assert fields["source"] == {"type": "web", "identifier": "https://example.org", "trust_level_at_ingest": "UNKNOWN"}
+    fields = receipt_fields(
+        {
+            "id": "ctx_x",
+            "organization_id": "org_x",
+            "source_type": "WEB",
+            "source_identifier": "https://example.org",
+        }
+    )
+    assert fields["source"] == {
+        "type": "web",
+        "identifier": "https://example.org",
+        "trust_level_at_ingest": "UNKNOWN",
+    }
     assert fields["detection"] == {"score": 0.0, "max_severity": None, "rule_ids": []}
     assert fields["collected_at"] is None and fields["content_length"] == 0
     assert fields["contains_secrets"] is False and fields["secret_fingerprint_count"] == 0
@@ -188,7 +224,9 @@ def test_receipt_signed_under_another_server_secret_does_not_verify(monkeypatch)
 
     fields = receipt_fields(_item())
     signature = sign_receipt(fields)
-    monkeypatch.setattr(security, "get_settings", lambda: SimpleNamespace(secret_key="a-rotated-secret-" + "x" * 32))
+    monkeypatch.setattr(
+        security, "get_settings", lambda: SimpleNamespace(secret_key="a-rotated-secret-" + "x" * 32)
+    )
     assert verify_receipt(fields, signature) is False
 
 
@@ -231,8 +269,14 @@ def test_build_graph_drops_and_counts_edges_with_missing_endpoints():
 def test_build_graph_keeps_relation_and_confidence_and_dedupes_edges():
     nodes = [{"id": "s", "type": "session"}, {"id": "i", "type": "tool_invocation"}]
     edges = [
-        {"id": "e1", "src": "s", "dst": "i", "relation": "session_invoked_tool", "confidence": "Inferred",
-         "observed_at": "2026-03-01T10:00:00Z"},
+        {
+            "id": "e1",
+            "src": "s",
+            "dst": "i",
+            "relation": "session_invoked_tool",
+            "confidence": "Inferred",
+            "observed_at": "2026-03-01T10:00:00Z",
+        },
         {"id": "e1", "src": "s", "dst": "i", "relation": "session_invoked_tool"},
         {"src": "s", "dst": "i"},
     ]
@@ -241,8 +285,13 @@ def test_build_graph_keeps_relation_and_confidence_and_dedupes_edges():
     first, second = graph.edges
     assert first["relation"] == "session_invoked_tool" and first["confidence"] == "inferred"
     assert first["observed_at"] == "2026-03-01T10:00:00Z"
-    assert second == {"src": "s", "dst": "i", "relation": "unspecified", "confidence": "observed",
-                      "id": "s->i:unspecified"}
+    assert second == {
+        "src": "s",
+        "dst": "i",
+        "relation": "unspecified",
+        "confidence": "observed",
+        "id": "s->i:unspecified",
+    }
     assert graph.metadata["duplicate_edge_count"] == 1 and graph.metadata["inferred_edge_count"] == 1
 
 

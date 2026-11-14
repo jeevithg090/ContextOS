@@ -20,8 +20,17 @@ from .mcp_gateway_support import FakeClock  # noqa: E402
 from .sdk_fakes import FakeServer, decision_body  # noqa: E402
 
 TOKEN = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"  # synthetic GitHub-token shape
-DENY_MATCH = [{"policy_id": "pol_1", "name": "Deny deleting notes", "version": 1, "outcome": "DENY", "mode": "enforce",
-               "severity": "high", "explanation": "tool.name equals delete_all_notes"}]
+DENY_MATCH = [
+    {
+        "policy_id": "pol_1",
+        "name": "Deny deleting notes",
+        "version": 1,
+        "outcome": "DENY",
+        "mode": "enforce",
+        "severity": "high",
+        "explanation": "tool.name equals delete_all_notes",
+    }
+]
 
 
 @pytest.fixture(autouse=True)
@@ -41,9 +50,14 @@ def client(server: FakeServer, tmp_path: Path):
 
 
 def _request(tool: str = "delete_all_notes", **arguments: Any):
-    return tool_request_event(agent=AgentRef(name="claude-code", framework="mcp"), session_id="ses_1",
-                              server_name="notes", tool_name=tool, arguments=arguments or {"confirm": True},
-                              correlation_id="cor_1")
+    return tool_request_event(
+        agent=AgentRef(name="claude-code", framework="mcp"),
+        session_id="ses_1",
+        server_name="notes",
+        tool_name=tool,
+        arguments=arguments or {"confirm": True},
+        correlation_id="cor_1",
+    )
 
 
 def _authorize(enforcer: Enforcer, request=None, on_wait=None):
@@ -61,12 +75,17 @@ def test_allow_and_audit_forward_unchanged_arguments(server: FakeServer, client,
 
 
 def test_deny_names_the_policy_and_its_reason(server: FakeServer, client) -> None:
-    server.route("POST", "/api/v1/decide", decision_body("DENY", reason="Deleting notes is not allowed.",
-                                                         matched_policies=DENY_MATCH))
+    server.route(
+        "POST",
+        "/api/v1/decide",
+        decision_body("DENY", reason="Deleting notes is not allowed.", matched_policies=DENY_MATCH),
+    )
     verdict = _authorize(Enforcer(client))
     assert not verdict.allowed and verdict.outcome == "denied"
-    assert verdict.message == ("Blocked by ContextOS policy 'Deny deleting notes': Deleting notes is not allowed "
-                               "(decision pd_1). The tool was not run.")
+    assert verdict.message == (
+        "Blocked by ContextOS policy 'Deny deleting notes': Deleting notes is not allowed "
+        "(decision pd_1). The tool was not run."
+    )
 
 
 def test_unrecognised_decision_fails_closed(server: FakeServer, client) -> None:
@@ -79,10 +98,16 @@ def test_unreachable_fails_closed_by_default_and_spools_the_attempt(server: Fake
     server.down = True
     verdict = _authorize(Enforcer(client))
     assert not verdict.allowed and verdict.outcome == "fail_closed"
-    assert "unreachable" in verdict.message and verdict.message.startswith("Blocked by the ContextOS MCP gateway")
+    assert "unreachable" in verdict.message and verdict.message.startswith(
+        "Blocked by the ContextOS MCP gateway"
+    )
     spooled = [json.loads(line) for line in client.spool.path.read_text().splitlines()]
     assert spooled[0]["event_type"] == "tool.requested"
-    assert spooled[0]["metadata"] == {"decision_unavailable": True, "fail_mode": "closed", "local_outcome": "not_run"}
+    assert spooled[0]["metadata"] == {
+        "decision_unavailable": True,
+        "fail_mode": "closed",
+        "local_outcome": "not_run",
+    }
 
 
 def test_fail_open_forwards_without_a_decision(server: FakeServer, client) -> None:
@@ -94,23 +119,37 @@ def test_fail_open_forwards_without_a_decision(server: FakeServer, client) -> No
 
 
 def test_server_errors_apply_the_fail_mode(server: FakeServer, client) -> None:
-    server.route("POST", "/api/v1/decide", {"error": {"code": "decision_failed", "message": "boom"}}, status=500)
+    server.route(
+        "POST", "/api/v1/decide", {"error": {"code": "decision_failed", "message": "boom"}}, status=500
+    )
     assert not _authorize(Enforcer(client)).allowed
     assert _authorize(Enforcer(client, fail_mode="open")).allowed
 
 
-@pytest.mark.parametrize(("status", "outcome"), [(401, "auth_error"), (403, "auth_error"), (422, "api_error")])
-def test_rejected_keys_and_invalid_requests_always_block(server: FakeServer, client, status: int, outcome: str) -> None:
+@pytest.mark.parametrize(
+    ("status", "outcome"), [(401, "auth_error"), (403, "auth_error"), (422, "api_error")]
+)
+def test_rejected_keys_and_invalid_requests_always_block(
+    server: FakeServer, client, status: int, outcome: str
+) -> None:
     server.route("POST", "/api/v1/decide", {"error": {"code": "x", "message": "nope"}}, status=status)
     verdict = _authorize(Enforcer(client, fail_mode="open"))
     assert not verdict.allowed and verdict.outcome == outcome
 
 
 def _approval(server: FakeServer, *statuses: str, note: str | None = None) -> None:
-    server.route("POST", "/api/v1/decide", decision_body("REQUIRE_APPROVAL", approval_id="apr_1",
-                                                         approval_status="pending", reason="Needs a human."))
-    server.sequence("GET", "/api/v1/decide/approvals/apr_1",
-                    [(200, {"approval_id": "apr_1", "status": s, "decision_note": note}) for s in statuses])
+    server.route(
+        "POST",
+        "/api/v1/decide",
+        decision_body(
+            "REQUIRE_APPROVAL", approval_id="apr_1", approval_status="pending", reason="Needs a human."
+        ),
+    )
+    server.sequence(
+        "GET",
+        "/api/v1/decide/approvals/apr_1",
+        [(200, {"approval_id": "apr_1", "status": s, "decision_note": note}) for s in statuses],
+    )
 
 
 def test_approval_granted_while_waiting_forwards_and_reports_progress(server: FakeServer, client) -> None:
@@ -120,8 +159,10 @@ def test_approval_granted_while_waiting_forwards_and_reports_progress(server: Fa
     async def on_wait(elapsed: float, total: float, message: str) -> None:
         progress.append((elapsed, total, message))
 
-    verdict = _authorize(Enforcer(client, approval_timeout_s=60, poll_s=2, clock=clock.time, sleep=clock.sleep),
-                         on_wait=on_wait)
+    verdict = _authorize(
+        Enforcer(client, approval_timeout_s=60, poll_s=2, clock=clock.time, sleep=clock.sleep),
+        on_wait=on_wait,
+    )
     assert verdict.allowed and verdict.outcome == "approved"
     assert len(server.calls("GET", "/api/v1/decide/approvals/apr_1")) == 3
     assert [p[0] for p in progress] == [0, 2, 4] and progress[0][1] == 60 and "apr_1" in progress[0][2]
@@ -142,7 +183,9 @@ def test_pending_approval_times_out_is_withdrawn_and_blocks(server: FakeServer, 
     _approval(server, "pending")
     server.route("POST", CANCEL, {"approval_id": "apr_1", "status": "cancelled"})
     clock = FakeClock()
-    verdict = _authorize(Enforcer(client, approval_timeout_s=10, poll_s=3, clock=clock.time, sleep=clock.sleep))
+    verdict = _authorize(
+        Enforcer(client, approval_timeout_s=10, poll_s=3, clock=clock.time, sleep=clock.sleep)
+    )
     assert not verdict.allowed and verdict.outcome == "approval_timeout"
     assert "not decided within 10s and was withdrawn from ContextOS" in verdict.message
     assert sum(clock.sleeps) == pytest.approx(10)
@@ -152,16 +195,27 @@ def test_pending_approval_times_out_is_withdrawn_and_blocks(server: FakeServer, 
 def test_a_failed_withdrawal_says_the_request_is_still_pending(server: FakeServer, client) -> None:
     _approval(server, "pending")  # no cancel route: the fake answers 404
     clock = FakeClock()
-    verdict = _authorize(Enforcer(client, approval_timeout_s=4, poll_s=2, clock=clock.time, sleep=clock.sleep))
-    assert not verdict.allowed and "still pending in ContextOS (approving it now will not run this call)" in verdict.message
+    verdict = _authorize(
+        Enforcer(client, approval_timeout_s=4, poll_s=2, clock=clock.time, sleep=clock.sleep)
+    )
+    assert (
+        not verdict.allowed
+        and "still pending in ContextOS (approving it now will not run this call)" in verdict.message
+    )
 
 
 def test_an_approval_granted_just_before_the_withdrawal_forwards(server: FakeServer, client) -> None:
     _approval(server, "pending")
-    server.route("POST", CANCEL, {"error": {"code": "conflict", "message": "already approved",
-                                            "details": {"status": "approved"}}}, status=409)
+    server.route(
+        "POST",
+        CANCEL,
+        {"error": {"code": "conflict", "message": "already approved", "details": {"status": "approved"}}},
+        status=409,
+    )
     clock = FakeClock()
-    verdict = _authorize(Enforcer(client, approval_timeout_s=4, poll_s=2, clock=clock.time, sleep=clock.sleep))
+    verdict = _authorize(
+        Enforcer(client, approval_timeout_s=4, poll_s=2, clock=clock.time, sleep=clock.sleep)
+    )
     assert verdict.allowed and verdict.outcome == "approved"
 
 
@@ -187,26 +241,41 @@ def test_a_host_cancellation_withdraws_the_waiting_approval(server: FakeServer, 
 
     anyio.run(scenario)
     assert server.bodies("POST", CANCEL) == [
-        {"reason": "The MCP host cancelled the tool call while it waited for approval."}]
+        {"reason": "The MCP host cancelled the tool call while it waited for approval."}
+    ]
 
 
 def test_already_approved_needs_no_polling(server: FakeServer, client) -> None:
-    server.route("POST", "/api/v1/decide", decision_body("REQUIRE_APPROVAL", approval_id="apr_1",
-                                                         approval_status="approved"))
-    assert _authorize(Enforcer(client)).allowed and server.calls("GET", "/api/v1/decide/approvals/apr_1") == []
+    server.route(
+        "POST",
+        "/api/v1/decide",
+        decision_body("REQUIRE_APPROVAL", approval_id="apr_1", approval_status="approved"),
+    )
+    assert (
+        _authorize(Enforcer(client)).allowed and server.calls("GET", "/api/v1/decide/approvals/apr_1") == []
+    )
 
 
 def test_approval_poll_with_a_revoked_key_blocks(server: FakeServer, client) -> None:
     _approval(server, "pending")
-    server.route("GET", "/api/v1/decide/approvals/apr_1", {"error": {"code": "x", "message": "revoked"}}, status=401)
+    server.route(
+        "GET", "/api/v1/decide/approvals/apr_1", {"error": {"code": "x", "message": "revoked"}}, status=401
+    )
     clock = FakeClock()
     verdict = _authorize(Enforcer(client, approval_timeout_s=60, clock=clock.time, sleep=clock.sleep))
     assert not verdict.allowed and verdict.outcome == "approval_error"
 
 
 def _restrict(server: FakeServer, restrictions: dict[str, Any]) -> None:
-    server.route("POST", "/api/v1/decide", decision_body("RESTRICT", restrictions=restrictions,
-                                                         matched_policies=[{"name": "Mask secrets", "outcome": "RESTRICT"}]))
+    server.route(
+        "POST",
+        "/api/v1/decide",
+        decision_body(
+            "RESTRICT",
+            restrictions=restrictions,
+            matched_policies=[{"name": "Mask secrets", "outcome": "RESTRICT"}],
+        ),
+    )
 
 
 def test_restrict_redacts_secrets_after_a_server_recheck(server: FakeServer, client) -> None:
@@ -220,18 +289,25 @@ def test_restrict_redacts_secrets_after_a_server_recheck(server: FakeServer, cli
 
 def test_restrict_blocks_when_the_recheck_is_unavailable(server: FakeServer, client) -> None:
     _restrict(server, {"redact_secrets": True})
-    server.route("POST", "/api/v1/scan", {"error": {"code": "forbidden", "message": "no read scope"}}, status=403)
+    server.route(
+        "POST", "/api/v1/scan", {"error": {"code": "forbidden", "message": "no read scope"}}, status=403
+    )
     verdict = _authorize(Enforcer(client), _request("add_note", notes=TOKEN))
     assert not verdict.allowed and "Blocked by ContextOS policy 'Mask secrets'" in verdict.message
     assert "could not re-check" in verdict.message
 
 
-@pytest.mark.parametrize(("arguments", "allowed"), [
-    ({"path": "./docs/readme.md"}, True),
-    ({"path": "/etc/passwd"}, False),
-    ({"command": "cat ~/.ssh/id_rsa"}, False),  # opaque: files touched by a command cannot be checked
-])
-def test_restrict_path_globs(server: FakeServer, client, tmp_path: Path, arguments: dict, allowed: bool) -> None:
+@pytest.mark.parametrize(
+    ("arguments", "allowed"),
+    [
+        ({"path": "./docs/readme.md"}, True),
+        ({"path": "/etc/passwd"}, False),
+        ({"command": "cat ~/.ssh/id_rsa"}, False),  # opaque: files touched by a command cannot be checked
+    ],
+)
+def test_restrict_path_globs(
+    server: FakeServer, client, tmp_path: Path, arguments: dict, allowed: bool
+) -> None:
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "readme.md").write_text("x")
     _restrict(server, {"allowed_path_globs": [str(tmp_path.resolve()) + "/docs/*", "docs/*"]})

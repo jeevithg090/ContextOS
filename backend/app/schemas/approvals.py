@@ -15,8 +15,11 @@ from pydantic import BaseModel, Field
 
 class ApprovalDecideIn(BaseModel):
     approve: bool = Field(description="true = let the paused call run; false = reject it")
-    note: str | None = Field(default=None, max_length=2000,
-                             description="Why you decided this way. Secrets are redacted before storage.")
+    note: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="Why you decided this way. Secrets are redacted before storage.",
+    )
 
 
 class UserRefOut(BaseModel):

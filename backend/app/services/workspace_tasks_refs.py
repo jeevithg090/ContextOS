@@ -55,7 +55,9 @@ def _incident(r: Incident) -> tuple[str, str]:
 
 
 def _event(r: IngestedEvent) -> tuple[str, str]:
-    return f"{r.event_type} (event #{r.sequence})", r.processing_status + (" · simulation" if r.is_simulation else "")
+    return f"{r.event_type} (event #{r.sequence})", r.processing_status + (
+        " · simulation" if r.is_simulation else ""
+    )
 
 
 def _session(r: AgentSession) -> tuple[str, str]:
@@ -67,7 +69,10 @@ def _agent(r: Agent) -> tuple[str, str]:
 
 
 def _decision(r: PolicyDecision) -> tuple[str, str]:
-    return f"{r.decision} decision", f"{r.enforcement} · {r.explanation[:160]}" if r.explanation else r.enforcement
+    return (
+        f"{r.decision} decision",
+        f"{r.enforcement} · {r.explanation[:160]}" if r.explanation else r.enforcement,
+    )
 
 
 def _context_item(r: ContextItem) -> tuple[str, str]:
@@ -109,7 +114,11 @@ def _tool_names(db: Session, org_id: str, invocations: list[ToolInvocation]) -> 
     tool_ids = {i.tool_id for i in invocations}
     if not tool_ids:
         return {}
-    return dict(db.execute(select(Tool.id, Tool.name).where(Tool.organization_id == org_id, Tool.id.in_(tool_ids))).all())
+    return dict(
+        db.execute(
+            select(Tool.id, Tool.name).where(Tool.organization_id == org_id, Tool.id.in_(tool_ids))
+        ).all()
+    )
 
 
 def _labels(db: Session, org_id: str, ref_type: str, rows: list[Any]) -> dict[str, tuple[str, str]]:
@@ -149,30 +158,58 @@ def resolve_refs(db: Session, org_id: str, refs: list[TaskContextReference]) -> 
     out = []
     for ref in refs:
         found = resolved.get((ref.ref_type, ref.ref_id))
-        out.append({
-            "id": ref.id, "task_id": ref.task_id, "ref_type": ref.ref_type, "ref_id": ref.ref_id, "note": ref.note,
-            "label": found[0] if found else f"{ref.ref_type.replace('_', ' ')} {ref.ref_id} (no longer available)",
-            "detail": found[1] if found else None, "exists": found is not None, "created_at": ref.created_at,
-        })
+        out.append(
+            {
+                "id": ref.id,
+                "task_id": ref.task_id,
+                "ref_type": ref.ref_type,
+                "ref_id": ref.ref_id,
+                "note": ref.note,
+                "label": found[0]
+                if found
+                else f"{ref.ref_type.replace('_', ' ')} {ref.ref_id} (no longer available)",
+                "detail": found[1] if found else None,
+                "exists": found is not None,
+                "created_at": ref.created_at,
+            }
+        )
     return out
 
 
 def task_refs(db: Session, task: Task) -> list[TaskContextReference]:
-    return list(db.scalars(select(TaskContextReference).where(
-        TaskContextReference.organization_id == task.organization_id, TaskContextReference.task_id == task.id
-    ).order_by(TaskContextReference.created_at, TaskContextReference.id)))
+    return list(
+        db.scalars(
+            select(TaskContextReference)
+            .where(
+                TaskContextReference.organization_id == task.organization_id,
+                TaskContextReference.task_id == task.id,
+            )
+            .order_by(TaskContextReference.created_at, TaskContextReference.id)
+        )
+    )
 
 
 def _existing(db: Session, task: Task, ref_type: str, ref_id: str) -> TaskContextReference | None:
-    return db.scalar(select(TaskContextReference).where(
-        TaskContextReference.organization_id == task.organization_id, TaskContextReference.task_id == task.id,
-        TaskContextReference.ref_type == ref_type, TaskContextReference.ref_id == ref_id,
-    ))
+    return db.scalar(
+        select(TaskContextReference).where(
+            TaskContextReference.organization_id == task.organization_id,
+            TaskContextReference.task_id == task.id,
+            TaskContextReference.ref_type == ref_type,
+            TaskContextReference.ref_id == ref_id,
+        )
+    )
 
 
 def _insert(db: Session, task: Task, ref_type: str, ref_id: str, note: str | None) -> TaskContextReference:
-    ref = TaskContextReference(id=new_id("task_context_ref"), organization_id=task.organization_id, task_id=task.id,
-                               ref_type=ref_type, ref_id=ref_id, note=clean_optional(note, 2000), created_at=utcnow())
+    ref = TaskContextReference(
+        id=new_id("task_context_ref"),
+        organization_id=task.organization_id,
+        task_id=task.id,
+        ref_type=ref_type,
+        ref_id=ref_id,
+        note=clean_optional(note, 2000),
+        created_at=utcnow(),
+    )
     db.add(ref)
     db.flush()
     return ref
@@ -183,19 +220,30 @@ def ensure_ref(db: Session, task: Task, ref_type: str, ref_id: str | None, note:
     if not ref_id or _existing(db, task, ref_type, ref_id) is not None:
         return False
     model = REF_MODELS[ref_type][0]
-    if db.scalar(select(model.id).where(model.organization_id == task.organization_id, model.id == ref_id)) is None:
+    if (
+        db.scalar(select(model.id).where(model.organization_id == task.organization_id, model.id == ref_id))
+        is None
+    ):
         return False
     _insert(db, task, ref_type, ref_id, note)
     return True
 
 
-def add_ref(db: Session, actor: Actor, task: Task, ref_type: str, ref_id: str, note: str | None) -> TaskContextReference:
+def add_ref(
+    db: Session, actor: Actor, task: Task, ref_type: str, ref_id: str, note: str | None
+) -> TaskContextReference:
     label, _ = resolve_ref(db, task.organization_id, ref_type, ref_id)
     if _existing(db, task, ref_type, ref_id) is not None:
         raise ConflictError(f"This task already references {ref_type.replace('_', ' ')} '{ref_id}'.")
     ref = _insert(db, task, ref_type, ref_id, note)
-    record_activity(db, task, actor.user_id, "reference_added", to_value=label,
-                    details={"ref_type": ref_type, "ref_id": ref_id})
+    record_activity(
+        db,
+        task,
+        actor.user_id,
+        "reference_added",
+        to_value=label,
+        details={"ref_type": ref_type, "ref_id": ref_id},
+    )
     audit_task(db, actor, task, "reference_added", {"ref_type": ref_type, "ref_id": ref_id})
     return ref
 
@@ -204,7 +252,8 @@ def remove_ref(db: Session, actor: Actor, ref_row_id: str) -> None:
     ref = get_scoped(db, TaskContextReference, ref_row_id, actor.org_id, label="Reference")
     task = get_task(db, actor.org_id, ref.task_id)
     db.delete(ref)
-    record_activity(db, task, actor.user_id, "reference_removed",
-                    details={"ref_type": ref.ref_type, "ref_id": ref.ref_id})
+    record_activity(
+        db, task, actor.user_id, "reference_removed", details={"ref_type": ref.ref_type, "ref_id": ref.ref_id}
+    )
     db.flush()
     audit_task(db, actor, task, "reference_removed", {"ref_type": ref.ref_type, "ref_id": ref.ref_id})

@@ -21,16 +21,39 @@ from tests.integration.ingestion_support import event, post_events, tool_request
 API = "/api/v1"
 
 ORG_WIDE_GETS = [
-    "/findings", "/incidents", "/audit", "/audit/verify", "/trust/summary", "/trust/sources", "/trust/destinations",
-    "/trust/rules", "/provenance/graph", "/agents/graph", "/policies/recent-decisions", "/simulations/suites",
-    "/workspace/tasks", "/workspace/boards", "/integrations", "/overview", "/stream",
+    "/findings",
+    "/incidents",
+    "/audit",
+    "/audit/verify",
+    "/trust/summary",
+    "/trust/sources",
+    "/trust/destinations",
+    "/trust/rules",
+    "/provenance/graph",
+    "/agents/graph",
+    "/policies/recent-decisions",
+    "/simulations/suites",
+    "/workspace/tasks",
+    "/workspace/boards",
+    "/integrations",
+    "/overview",
+    "/stream",
 ]
 
 
 def _bound(db: Session, org_id: str, agent_id: str, scopes: list[str] | None = None) -> dict[str, str]:
     raw, prefix, key_hash = generate_api_key()
-    db.add(ApiKey(id=new_id("api_key"), organization_id=org_id, name="bound", prefix=prefix, key_hash=key_hash,
-                  scopes=scopes or ["ingest", "decide", "read"], agent_id=agent_id))
+    db.add(
+        ApiKey(
+            id=new_id("api_key"),
+            organization_id=org_id,
+            name="bound",
+            prefix=prefix,
+            key_hash=key_hash,
+            scopes=scopes or ["ingest", "decide", "read"],
+            agent_id=agent_id,
+        )
+    )
     db.commit()
     return {"Authorization": f"Bearer {raw}"}
 
@@ -39,15 +62,23 @@ def _bound(db: Session, org_id: str, agent_id: str, scopes: list[str] | None = N
 def two_agents(client, seeded_org, db):
     """Agents ``alpha`` and ``beta`` with one session each, and a key bound to ``alpha``."""
     h = seeded_org.api_headers
-    post_events(client, h, event("session.started", agent="alpha", session="s-alpha"),
-                event("session.started", agent="beta", session="s-beta"))
+    post_events(
+        client,
+        h,
+        event("session.started", agent="alpha", session="s-alpha"),
+        event("session.started", agent="beta", session="s-beta"),
+    )
     db.rollback()
     agents = {a.name: a for a in db.scalars(select(Agent).where(Agent.organization_id == seeded_org.org_id))}
-    sessions = {s.agent_id: s for s in db.scalars(select(AgentSession).where(
-        AgentSession.organization_id == seeded_org.org_id))}
+    sessions = {
+        s.agent_id: s
+        for s in db.scalars(select(AgentSession).where(AgentSession.organization_id == seeded_org.org_id))
+    }
     return {
-        "alpha": agents["alpha"].id, "beta": agents["beta"].id,
-        "alpha_session": sessions[agents["alpha"].id].id, "beta_session": sessions[agents["beta"].id].id,
+        "alpha": agents["alpha"].id,
+        "beta": agents["beta"].id,
+        "alpha_session": sessions[agents["alpha"].id].id,
+        "beta_session": sessions[agents["beta"].id].id,
         "headers": _bound(db, seeded_org.org_id, agents["alpha"].id),
     }
 
@@ -77,20 +108,30 @@ def test_bound_key_sees_only_its_agents_sessions(client, two_agents):
     h = two_agents["headers"]
     listed = client.get(f"{API}/sessions", headers=h).json()
     assert [s["id"] for s in listed["items"]] == [two_agents["alpha_session"]]
-    assert client.get(f"{API}/sessions", headers=h, params={"agent_id": two_agents["beta"]}).json()["total"] == 0
+    assert (
+        client.get(f"{API}/sessions", headers=h, params={"agent_id": two_agents["beta"]}).json()["total"] == 0
+    )
     assert client.get(f"{API}/sessions/{two_agents['alpha_session']}", headers=h).status_code == 200
     assert client.get(f"{API}/sessions/{two_agents['alpha_session']}/timeline", headers=h).status_code == 200
     for suffix in ("", "/timeline"):
-        assert client.get(f"{API}/sessions/{two_agents['beta_session']}{suffix}", headers=h).status_code == 404
+        assert (
+            client.get(f"{API}/sessions/{two_agents['beta_session']}{suffix}", headers=h).status_code == 404
+        )
 
 
 def test_bound_key_sees_only_its_agents_simulation_runs(client, seeded_org, two_agents, db):
     h = two_agents["headers"]
-    mine = client.post(f"{API}/simulations/runs", headers=h,
-                       json={"scenario_id": "benign-baseline", "agent_id": two_agents["alpha"]})
+    mine = client.post(
+        f"{API}/simulations/runs",
+        headers=h,
+        json={"scenario_id": "benign-baseline", "agent_id": two_agents["alpha"]},
+    )
     assert mine.status_code == 201, mine.text
-    theirs = client.post(f"{API}/simulations/runs", headers=seeded_org.user_headers,
-                         json={"scenario_id": "benign-baseline", "agent_id": two_agents["beta"]}).json()
+    theirs = client.post(
+        f"{API}/simulations/runs",
+        headers=seeded_org.user_headers,
+        json={"scenario_id": "benign-baseline", "agent_id": two_agents["beta"]},
+    ).json()
     listed = client.get(f"{API}/simulations/runs", headers=h).json()
     assert [r["id"] for r in listed["items"]] == [mine.json()["id"]]
     assert client.get(f"{API}/simulations/runs/{mine.json()['id']}", headers=h).status_code == 200
@@ -111,8 +152,15 @@ def test_reusing_another_agents_event_id_reveals_nothing(client, seeded_org, two
     assert response.status_code == 403 and response.json()["error"]["code"] == "attribution_rejected"
     assert beta_decision["policy_decision_id"] not in response.text
     db.rollback()
-    reasons = [a.details.get("reason") for a in db.scalars(select(AuditEvent).where(
-        AuditEvent.organization_id == seeded_org.org_id, AuditEvent.action == "ingest.attribution_rejected"))]
+    reasons = [
+        a.details.get("reason")
+        for a in db.scalars(
+            select(AuditEvent).where(
+                AuditEvent.organization_id == seeded_org.org_id,
+                AuditEvent.action == "ingest.attribution_rejected",
+            )
+        )
+    ]
     assert reasons.count("event_id_of_another_agent") == 2
 
     # The bound key's own retries are still idempotent.

@@ -93,7 +93,11 @@ def truncate_result(value: Any, max_chars: int) -> str | dict[str, Any] | list[A
         return None
     data = to_jsonable(value)
     if isinstance(data, str):
-        return data if len(data) <= max_chars else data[:max_chars] + f"\n[TRUNCATED: {len(data) - max_chars} more characters]"
+        return (
+            data
+            if len(data) <= max_chars
+            else data[:max_chars] + f"\n[TRUNCATED: {len(data) - max_chars} more characters]"
+        )
     if not isinstance(data, (dict, list)):
         return str(data)
     text = json.dumps(data, ensure_ascii=False, default=str)

@@ -26,8 +26,12 @@ def test_unreachable_server_spools_events_with_private_permissions_and_masked_se
     server = FakeServer()
     server.down = True
     client = server.client(tmp_path)
-    event = client.new_event("context.ingested", "ses_1", source=SourceRef(type="file", identifier=".env"),
-                             content=f"GITHUB_TOKEN={SECRET}\nother text")
+    event = client.new_event(
+        "context.ingested",
+        "ses_1",
+        source=SourceRef(type="file", identifier=".env"),
+        content=f"GITHUB_TOKEN={SECRET}\nother text",
+    )
     outcome = client.send_event(event)
     assert outcome.spooled == [event.event_id] and outcome.results == []
     path = client.spool.path
@@ -61,7 +65,9 @@ def test_decisions_are_never_spooled(tmp_path: Path) -> None:
     server.down = True
     client = server.client(tmp_path)
     with pytest.raises(Unreachable):
-        client.decide(client.new_event("tool.requested", "ses_1", tool=ToolRef(name="shell"), arguments={"c": "ls"}))
+        client.decide(
+            client.new_event("tool.requested", "ses_1", tool=ToolRef(name="shell"), arguments={"c": "ls"})
+        )
     assert client.spool.stats().events == 0
 
 
@@ -75,7 +81,9 @@ def test_spool_disabled_raises(tmp_path: Path) -> None:
 
 def test_spool_is_size_capped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     spool = Spool(tmp_path / "s" / "a.jsonl", max_bytes=2048)
-    events = [{"event_id": f"evt_{i}", "event_type": "prompt.submitted", "content": "x" * 300} for i in range(20)]
+    events = [
+        {"event_id": f"evt_{i}", "event_type": "prompt.submitted", "content": "x" * 300} for i in range(20)
+    ]
     stored = spool.append(events)
     assert 0 < stored < 20
     assert spool.path.stat().st_size <= 2048

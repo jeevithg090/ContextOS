@@ -170,10 +170,20 @@ def derive_hypotheses(
     for category, g in order:
         statement, test = _CATEGORY_HYPOTHESES[category]
         named = "; ".join(g["titles"][:3])
-        basis = (f"{g['count']} recorded finding(s) in category '{category.replace('_', ' ')}'"
-                 + (f": {named}" if named else "") + ("" if g["evidence"] else " (no evidence excerpts attached)"))
-        out.append(Hypothesis(statement, _confidence(g["count"], g["rank"], g["evidence"]), basis + ".", test,
-                              tuple(g["ids"])))
+        basis = (
+            f"{g['count']} recorded finding(s) in category '{category.replace('_', ' ')}'"
+            + (f": {named}" if named else "")
+            + ("" if g["evidence"] else " (no evidence excerpts attached)")
+        )
+        out.append(
+            Hypothesis(
+                statement,
+                _confidence(g["count"], g["rank"], g["evidence"]),
+                basis + ".",
+                test,
+                tuple(g["ids"]),
+            )
+        )
 
     out.extend(_policy_gap(findings, policies))
     out.extend(_failed_attempts(previous_attempts, verification_runs))
@@ -183,19 +193,23 @@ def derive_hypotheses(
     return out
 
 
-def _policy_gap(findings: Sequence[Mapping[str, Any]], policies: Sequence[Mapping[str, Any]]) -> list[Hypothesis]:
+def _policy_gap(
+    findings: Sequence[Mapping[str, Any]], policies: Sequence[Mapping[str, Any]]
+) -> list[Hypothesis]:
     allowed = [p for p in policies if str(p.get("outcome", "")).upper() == "ALLOW"]
     if not allowed or not findings:
         return []
     names = ", ".join(inline(p.get("name") or p.get("id") or "policy", 80) for p in allowed[:3])
-    return [Hypothesis(
-        "Existing policies do not cover the behaviour behind the linked findings: the recorded decisions allowed it.",
-        "possible",
-        f"Recorded policy outcome ALLOW from: {names}, alongside {len(findings)} linked finding(s).",
-        "Re-run the recorded decision input through the policy test endpoint with a candidate rule and confirm it "
-        "changes the outcome without blocking legitimate calls.",
-        tuple(f"policy:{p['id']}" for p in allowed if p.get("id")),
-    )]
+    return [
+        Hypothesis(
+            "Existing policies do not cover the behaviour behind the linked findings: the recorded decisions allowed it.",
+            "possible",
+            f"Recorded policy outcome ALLOW from: {names}, alongside {len(findings)} linked finding(s).",
+            "Re-run the recorded decision input through the policy test endpoint with a candidate rule and confirm it "
+            "changes the outcome without blocking legitimate calls.",
+            tuple(f"policy:{p['id']}" for p in allowed if p.get("id")),
+        )
+    ]
 
 
 def _failed_attempts(
@@ -210,17 +224,21 @@ def _failed_attempts(
         + [f"fix_attempt:{a['id']}" for a in failed_attempts if a.get("id")]
     )
     detail = inline(failed_runs[0].get("summary") or "", 200) if failed_runs else ""
-    basis = (f"{len(failed_attempts)} failed or abandoned fix attempt(s) and {len(failed_runs)} failed verification "
-             f"run(s) are recorded" + (f"; latest failure: {detail}" if detail else "") + ".")
-    return [Hypothesis(
-        "An earlier fix addressed a symptom rather than the root cause, or the change does not cover every path "
-        "that triggers the issue.",
-        "possible" if len(refs) == 1 else "likely",
-        basis,
-        "Compare what the earlier attempt changed with the paths in the reproduction; run the failed verification "
-        "again before changing code.",
-        refs,
-    )]
+    basis = (
+        f"{len(failed_attempts)} failed or abandoned fix attempt(s) and {len(failed_runs)} failed verification "
+        f"run(s) are recorded" + (f"; latest failure: {detail}" if detail else "") + "."
+    )
+    return [
+        Hypothesis(
+            "An earlier fix addressed a symptom rather than the root cause, or the change does not cover every path "
+            "that triggers the issue.",
+            "possible" if len(refs) == 1 else "likely",
+            basis,
+            "Compare what the earlier attempt changed with the paths in the reproduction; run the failed verification "
+            "again before changing code.",
+            refs,
+        )
+    ]
 
 
 def _from_task_type(task_type: str) -> list[Hypothesis]:

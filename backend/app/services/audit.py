@@ -104,10 +104,14 @@ def verify_chain(db: Session, org_id: str) -> dict[str, Any]:
     prev: str | None = None
     expected_seq = 1
     checked = 0
-    for entry in db.scalars(select(AuditEvent).where(AuditEvent.organization_id == org_id).order_by(AuditEvent.seq)):
+    for entry in db.scalars(
+        select(AuditEvent).where(AuditEvent.organization_id == org_id).order_by(AuditEvent.seq)
+    ):
         checked += 1
         if entry.seq != expected_seq:
-            return _invalid(checked, entry.seq, f"sequence gap: expected {expected_seq}, found {entry.seq}", org)
+            return _invalid(
+                checked, entry.seq, f"sequence gap: expected {expected_seq}, found {entry.seq}", org
+            )
         if entry.prev_hash != prev:
             return _invalid(checked, entry.seq, "prev_hash does not match previous entry", org)
         if _compute_hash(entry) != entry.hash:
@@ -116,7 +120,9 @@ def verify_chain(db: Session, org_id: str) -> dict[str, Any]:
         expected_seq += 1
     head = org.audit_head_hash if org else None
     if head != prev:
-        return _invalid(checked, expected_seq, "chain tail does not match organisation head (truncation?)", org)
+        return _invalid(
+            checked, expected_seq, "chain tail does not match organisation head (truncation?)", org
+        )
     return {"valid": True, "checked": checked, "first_invalid_seq": None, "reason": None, "head_hash": head}
 
 

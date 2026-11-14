@@ -149,7 +149,9 @@ def _detection_clause(det: Detection) -> str:
 
 
 def _sink_sentence(sink: InvocationAnalysis) -> str:
-    access, send = ("accessed", "sent data to") if _ran(sink) else ("requested access to", "tried to send data to")
+    access, send = (
+        ("accessed", "sent data to") if _ran(sink) else ("requested access to", "tried to send data to")
+    )
     actions = []
     if sink.sensitive_resources:
         actions.append(f"{access} {_sensitive_target(sink)}")
@@ -186,10 +188,14 @@ def outcome_sentence(sink: InvocationAnalysis) -> str:
     if sink.outcome == AWAITING_APPROVAL:
         return "Policy required human approval at an enforced execution boundary; the call is held until someone decides."
     if sink.outcome == ADVISORY_ONLY:
-        return (f"Policy returned {decision or 'a block'} in advisory mode; ContextOS cannot confirm the "
-                "integration honoured it.")
+        return (
+            f"Policy returned {decision or 'a block'} in advisory mode; ContextOS cannot confirm the "
+            "integration honoured it."
+        )
     if decision == Decision.DENY.value or sink.status in ("denied", "rejected"):
-        return ("Policy flagged the call, but it was reported after it ran (observed), so nothing was prevented.")
+        return (
+            "Policy flagged the call, but it was reported after it ran (observed), so nothing was prevented."
+        )
     if decision == Decision.REQUIRE_APPROVAL.value:
         return "A human approved the call, so it was not prevented."
     if decision == Decision.RESTRICT.value:
@@ -211,8 +217,11 @@ def explanation(story: Story) -> str:
         first, rest = story.sessions[0], story.sessions[1:]
         sentence = f"That content entered session {quote(first['label'])}"
         if rest:
-            sentence += (", which handed work to " + _join([quote(s["label"]) for s in rest])
-                         + " (a delegation or agent message), so the later session is downstream of the same content")
+            sentence += (
+                ", which handed work to "
+                + _join([quote(s["label"]) for s in rest])
+                + " (a delegation or agent message), so the later session is downstream of the same content"
+            )
         parts.append(sentence + ".")
     for sibling in story.siblings:
         parts.append(f"In the same session, {_sibling_action(sibling)}.")
@@ -222,10 +231,14 @@ def explanation(story: Story) -> str:
         parts.append(secret)
     parts.append(outcome_sentence(story.sink))
     if not story.order_verified:
-        parts.append("Timestamps were missing for at least one step, so the order of these events is not confirmed.")
+        parts.append(
+            "Timestamps were missing for at least one step, so the order of these events is not confirmed."
+        )
     if story.inferred_count:
-        parts.append(f"{_plural(story.inferred_count, 'relationship')} on this path "
-                     f"{'was' if story.inferred_count == 1 else 'were'} inferred by ContextOS rather than directly reported.")
+        parts.append(
+            f"{_plural(story.inferred_count, 'relationship')} on this path "
+            f"{'was' if story.inferred_count == 1 else 'were'} inferred by ContextOS rather than directly reported."
+        )
     parts.append(OBSERVED_RELATIONSHIP_NOTE)
     return " ".join(parts)
 
@@ -243,7 +256,9 @@ def reasons(story: Story) -> list[str]:
         lines.append(f"Crossed {len(story.sessions)} sessions via delegation or agent messages")
     for sibling in story.siblings:
         lines.append(_sibling_action(sibling))
-    access, send = ("accessed", "sent data to") if _ran(sink) else ("requested access to", "tried to send data to")
+    access, send = (
+        ("accessed", "sent data to") if _ran(sink) else ("requested access to", "tried to send data to")
+    )
     if sink.sensitive_resources:
         lines.append(f"{sink.tool_label} {access} {_sensitive_target(sink)}")
     elif sink.sensitive_flag:

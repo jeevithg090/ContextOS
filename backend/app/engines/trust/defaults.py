@@ -32,9 +32,17 @@ _PROVIDER_DESCRIPTION = (
 )
 
 
-def _source(name: str, pattern: str, level: str, description: str, *, match_field: str = "domain",
-            source_type: str | None = None, capabilities: tuple[str, ...] = ("read",),
-            priority: int = 50) -> dict[str, Any]:
+def _source(
+    name: str,
+    pattern: str,
+    level: str,
+    description: str,
+    *,
+    match_field: str = "domain",
+    source_type: str | None = None,
+    capabilities: tuple[str, ...] = ("read",),
+    priority: int = 50,
+) -> dict[str, Any]:
     return {
         "name": name,
         "description": description,
@@ -48,8 +56,15 @@ def _source(name: str, pattern: str, level: str, description: str, *, match_fiel
     }
 
 
-def _destination(name: str, pattern: str, level: str, description: str, *,
-                 capabilities: tuple[str, ...] = (), priority: int = 50) -> dict[str, Any]:
+def _destination(
+    name: str,
+    pattern: str,
+    level: str,
+    description: str,
+    *,
+    capabilities: tuple[str, ...] = (),
+    priority: int = 50,
+) -> dict[str, Any]:
     return {
         "name": name,
         "description": description,
@@ -108,20 +123,57 @@ DEFAULT_TRUST_RULES: list[dict[str, Any]] = [
         "The IPv4 loopback address stays on the machine running the agent.",
         capabilities=("send",),
     ),
-    _destination("Anthropic API", "api.anthropic.com", "APPROVED", _PROVIDER_DESCRIPTION, capabilities=("send",)),
+    _destination(
+        "Anthropic API", "api.anthropic.com", "APPROVED", _PROVIDER_DESCRIPTION, capabilities=("send",)
+    ),
     _destination("OpenAI API", "api.openai.com", "APPROVED", _PROVIDER_DESCRIPTION, capabilities=("send",)),
-    _destination("Webhook.site", "*.webhook.site", "SUSPICIOUS",
-                 _EXFIL_DESCRIPTION.format(service="Webhook.site"), priority=150),
-    _destination("Pipedream request bins", "*.pipedream.net", "SUSPICIOUS",
-                 _EXFIL_DESCRIPTION.format(service="Pipedream"), priority=150),
-    _destination("ngrok tunnels", "*.ngrok-free.app", "SUSPICIOUS",
-                 _EXFIL_DESCRIPTION.format(service="ngrok"), priority=150),
-    _destination("ngrok tunnels (legacy)", "*.ngrok.io", "SUSPICIOUS",
-                 _EXFIL_DESCRIPTION.format(service="ngrok"), priority=150),
-    _destination("Cloudflare quick tunnels", "*.trycloudflare.com", "SUSPICIOUS",
-                 _EXFIL_DESCRIPTION.format(service="Cloudflare's quick-tunnel service"), priority=150),
-    _destination("Pastebin", "*.pastebin.com", "SUSPICIOUS",
-                 _EXFIL_DESCRIPTION.format(service="Pastebin"), priority=150),
-    _destination("transfer.sh", "*.transfer.sh", "SUSPICIOUS",
-                 _EXFIL_DESCRIPTION.format(service="transfer.sh"), priority=150),
+    _destination(
+        "Webhook.site",
+        "*.webhook.site",
+        "SUSPICIOUS",
+        _EXFIL_DESCRIPTION.format(service="Webhook.site"),
+        priority=150,
+    ),
+    _destination(
+        "Pipedream request bins",
+        "*.pipedream.net",
+        "SUSPICIOUS",
+        _EXFIL_DESCRIPTION.format(service="Pipedream"),
+        priority=150,
+    ),
+    _destination(
+        "ngrok tunnels",
+        "*.ngrok-free.app",
+        "SUSPICIOUS",
+        _EXFIL_DESCRIPTION.format(service="ngrok"),
+        priority=150,
+    ),
+    _destination(
+        "ngrok tunnels (legacy)",
+        "*.ngrok.io",
+        "SUSPICIOUS",
+        _EXFIL_DESCRIPTION.format(service="ngrok"),
+        priority=150,
+    ),
+    _destination(
+        "Cloudflare quick tunnels",
+        "*.trycloudflare.com",
+        "SUSPICIOUS",
+        _EXFIL_DESCRIPTION.format(service="Cloudflare's quick-tunnel service"),
+        priority=150,
+    ),
+    _destination(
+        "Pastebin",
+        "*.pastebin.com",
+        "SUSPICIOUS",
+        _EXFIL_DESCRIPTION.format(service="Pastebin"),
+        priority=150,
+    ),
+    _destination(
+        "transfer.sh",
+        "*.transfer.sh",
+        "SUSPICIOUS",
+        _EXFIL_DESCRIPTION.format(service="transfer.sh"),
+        priority=150,
+    ),
 ]

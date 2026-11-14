@@ -25,22 +25,32 @@ pytestmark = pytest.mark.live
 STEP = re.compile(r"\[(ran|denied|approval)\]\s+(.+?): (.*)")
 
 
-def _next_pending(live: LiveServer, agent_id: str | None, agent: str, proc: subprocess.Popen[bytes],
-                  seen: set[str]) -> tuple[str, dict]:
+def _next_pending(
+    live: LiveServer, agent_id: str | None, agent: str, proc: subprocess.Popen[bytes], seen: set[str]
+) -> tuple[str, dict]:
     deadline = time.monotonic() + 120
     while True:
         if proc.poll() is not None or time.monotonic() > deadline:
             proc.kill()
             out, err = proc.communicate(timeout=30)
-            approvals = live.get("/approvals", agent_id=agent_id, include_simulated=False)["items"] if agent_id else []
-            raise AssertionError(f"no new approval request appeared (exit {proc.returncode}); approvals: "
-                                 f"{[(a['id'], a['status']) for a in approvals]}\n{out.decode()}{err.decode()}")
+            approvals = (
+                live.get("/approvals", agent_id=agent_id, include_simulated=False)["items"]
+                if agent_id
+                else []
+            )
+            raise AssertionError(
+                f"no new approval request appeared (exit {proc.returncode}); approvals: "
+                f"{[(a['id'], a['status']) for a in approvals]}\n{out.decode()}{err.decode()}"
+            )
         if agent_id is None:
             found = [a for a in live.get("/agents", q=agent)["items"] if a["name"] == agent]
             agent_id = found[0]["id"] if found else None
         if agent_id:
-            pending = [a for a in live.get("/approvals", status="pending", agent_id=agent_id)["items"]
-                       if a["id"] not in seen]
+            pending = [
+                a
+                for a in live.get("/approvals", status="pending", agent_id=agent_id)["items"]
+                if a["id"] not in seen
+            ]
             if pending:
                 seen.add(pending[0]["id"])
                 return agent_id, pending[0]
@@ -49,18 +59,31 @@ def _next_pending(live: LiveServer, agent_id: str | None, agent: str, proc: subp
 
 def test_guard_runs_only_what_contextos_allowed(live: LiveServer, tmp_path: Path) -> None:
     agent = f"support-triage-{uuid.uuid4().hex[:8]}"
-    env = client_env(live, tmp_path / "home", CONTEXTOS_AGENT_NAME=agent, CONTEXTOS_APPROVAL_TIMEOUT_S="90",
-                     TMPDIR=str(tmp_path))
-    proc = subprocess.Popen([sys.executable, str(EXAMPLES / "python_sdk" / "guarded_agent.py")],  # noqa: S603
-                            env=env, cwd=tmp_path,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    env = client_env(
+        live,
+        tmp_path / "home",
+        CONTEXTOS_AGENT_NAME=agent,
+        CONTEXTOS_APPROVAL_TIMEOUT_S="90",
+        TMPDIR=str(tmp_path),
+    )
+    proc = subprocess.Popen(  # noqa: S603
+        [sys.executable, str(EXAMPLES / "python_sdk" / "guarded_agent.py")],
+        env=env,
+        cwd=tmp_path,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
     seen: set[str] = set()
     try:
         agent_id, reply = _next_pending(live, None, agent, proc, seen)
         assert live.post(f"/approvals/{reply['id']}/decide", {"approve": True})["status"] == "approved"
         _, leak = _next_pending(live, agent_id, agent, proc, seen)
-        assert live.post(f"/approvals/{leak['id']}/decide",
-                         {"approve": False, "note": "Never mail .env files"})["status"] == "rejected"
+        assert (
+            live.post(f"/approvals/{leak['id']}/decide", {"approve": False, "note": "Never mail .env files"})[
+                "status"
+            ]
+            == "rejected"
+        )
         stdout_b, stderr_b = proc.communicate(timeout=180)
     finally:
         if proc.poll() is None:
@@ -83,7 +106,12 @@ def test_guard_runs_only_what_contextos_allowed(live: LiveServer, tmp_path: Path
     assert session is not None
     decisions = live.get("/policies/recent-decisions", session_id=session["id"], limit=50)["items"]
     assert len(decisions) == 4 and all(d["enforcement"] == "enforced" for d in decisions), decisions
-    assert sorted(d["decision"] for d in decisions) == ["ALLOW", "DENY", "REQUIRE_APPROVAL", "REQUIRE_APPROVAL"]
+    assert sorted(d["decision"] for d in decisions) == [
+        "ALLOW",
+        "DENY",
+        "REQUIRE_APPROVAL",
+        "REQUIRE_APPROVAL",
+    ]
     findings = {f["category"] for f in live.get("/findings", session_id=session["id"], limit=100)["items"]}
     assert findings & {"prompt_injection", "instruction_override"}, findings
     assert live.get(f"/approvals/{reply['id']}")["status"] == "approved"

@@ -24,17 +24,26 @@ def test_destination_list_filters_and_blocked_counts(client, seeded_org, db):
     webhook = by_id["abc123.webhook.site"]
     assert webhook["classification"] == "SUSPICIOUS" and webhook["verification"]["failed"] >= 1
 
-    suspicious = client.get(f"{BASE}/destinations", params={"classification": ["SUSPICIOUS"]}, headers=h).json()
+    suspicious = client.get(
+        f"{BASE}/destinations", params={"classification": ["SUSPICIOUS"]}, headers=h
+    ).json()
     assert [d["identifier"] for d in suspicious["items"]] == ["abc123.webhook.site"]
     searched = client.get(f"{BASE}/destinations", params={"q": "COLLECTOR"}, headers=h).json()
     assert [d["identifier"] for d in searched["items"]] == ["upload.unknown-collector.net"]
-    assert client.get(f"{BASE}/destinations", params={"q": "%"}, headers=h).json()["total"] == 0  # LIKE is escaped
-    assert client.get(f"{BASE}/destinations", params={"classification": ["NOPE"]}, headers=h).status_code == 422
+    assert (
+        client.get(f"{BASE}/destinations", params={"q": "%"}, headers=h).json()["total"] == 0
+    )  # LIKE is escaped
+    assert (
+        client.get(f"{BASE}/destinations", params={"classification": ["NOPE"]}, headers=h).status_code == 422
+    )
 
     # Pin the collector as BLOCKED: the next call to it is denied at the enforcing integration and counted.
     collector = by_id["upload.unknown-collector.net"]
-    pinned = client.patch(f"{BASE}/destinations/{collector['id']}", headers=h,
-                          json={"classification": "BLOCKED", "note": "Collector seen in an incident"})
+    pinned = client.patch(
+        f"{BASE}/destinations/{collector['id']}",
+        headers=h,
+        json={"classification": "BLOCKED", "note": "Collector seen in an incident"},
+    )
     assert pinned.status_code == 200, pinned.text
     denied = decide(client, api, tool_requested("WebFetch", {"url": EXFIL_URL}))
     assert denied["decision"] == "DENY"
@@ -63,8 +72,14 @@ def test_bulk_reassessment_is_bounded_to_the_most_recently_seen(client, seeded_o
     created = create_rule(client, h)
     assert created.status_code == 201, created.text
     summary = created.json()["reassessment"]
-    assert summary == {"sources_checked": 1, "sources_changed": 1, "destinations_checked": 0,
-                       "destinations_changed": 0, "truncated": True, "limit": 1}
+    assert summary == {
+        "sources_checked": 1,
+        "sources_changed": 1,
+        "destinations_checked": 0,
+        "destinations_changed": 0,
+        "truncated": True,
+        "limit": 1,
+    }
     assert source_row(db, seeded_org.org_id, "https://wiki.acme.dev/new").trust_level == "TRUSTED"
     # The older source is re-assessed when the pipeline next observes it.
     assert source_row(db, seeded_org.org_id, "https://wiki.acme.dev/old").trust_level == "UNKNOWN"
@@ -88,7 +103,9 @@ def test_rule_toggle_noop_patch_and_unknown_ids(client, seeded_org, db):
     audits_before = _fresh(db).scalar(select(func.count()).select_from(AuditEvent)) or 0
     same = client.patch(f"{BASE}/rules/{rule['id']}", json={"trust_level": "TRUSTED"}, headers=h)
     assert same.status_code == 200 and same.json()["reassessment"] is None
-    assert (_fresh(db).scalar(select(func.count()).select_from(AuditEvent)) or 0) == audits_before  # nothing written
+    assert (
+        _fresh(db).scalar(select(func.count()).select_from(AuditEvent)) or 0
+    ) == audits_before  # nothing written
 
     assert client.patch(f"{BASE}/rules/{rule['id']}", json={"pattern": None}, headers=h).status_code == 422
     assert client.patch(f"{BASE}/rules/{rule['id']}", json={"trust": "TRUSTED"}, headers=h).status_code == 422
@@ -111,7 +128,12 @@ def test_trust_changes_publish_id_only_live_notifications(client, seeded_org, db
     rule = create_rule(client, h).json()
     trust_messages = [m for org_id, m in published if m["type"] == "trust.updated"]
     assert all(org_id == seeded_org.org_id for org_id, _m in published)
-    assert {"id": rule["id"], "kind": "trust_rule", "change": "created", "type": "trust.updated"} in trust_messages
+    assert {
+        "id": rule["id"],
+        "kind": "trust_rule",
+        "change": "created",
+        "type": "trust.updated",
+    } in trust_messages
     assert any(m.get("kind") == "reassessment" for m in trust_messages)
     for message in trust_messages:  # ids and small labels only: never patterns, identifiers or notes
         assert set(message) <= {"type", "id", "kind", "change"}

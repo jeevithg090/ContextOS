@@ -120,7 +120,11 @@ def allowlisted_domains(rules: Sequence[TrustRuleSpec]) -> set[str]:
 
     domains: set[str] = set()
     for rule in rules:
-        if not rule.enabled or rule.applies_to not in ("destination", "both") or rule.trust_level not in ALLOW_LEVELS:
+        if (
+            not rule.enabled
+            or rule.applies_to not in ("destination", "both")
+            or rule.trust_level not in ALLOW_LEVELS
+        ):
             continue
         pattern = normalise_pattern(rule.pattern)
         if rule.match_field == "identifier":
@@ -146,37 +150,56 @@ def _address_checks(host: HostInfo, checks: list[dict[str, str]], signals: list[
     loopback = False
     if ip is not None:
         if host.ip_nonstandard:
-            checks.append(_check(
-                "ip_literal", "fail",
-                f"Written as '{host.original}', a non-standard form of the IP address {ip}; this notation is "
-                "commonly used to slip past address filters.",
-            ))
+            checks.append(
+                _check(
+                    "ip_literal",
+                    "fail",
+                    f"Written as '{host.original}', a non-standard form of the IP address {ip}; this notation is "
+                    "commonly used to slip past address filters.",
+                )
+            )
             signals.append(
                 f"The address '{host.original}' is a disguised form of {ip}, a common way to evade address filters."
             )
         elif ip.is_loopback:
             checks.append(_check("ip_literal", "pass", f"Raw loopback address ({ip})."))
         else:
-            checks.append(_check(
-                "ip_literal", "warn",
-                f"The destination is a raw IP address ({ip}), so domain-based allowlists and reputation do not apply.",
-            ))
+            checks.append(
+                _check(
+                    "ip_literal",
+                    "warn",
+                    f"The destination is a raw IP address ({ip}), so domain-based allowlists and reputation do not apply.",
+                )
+            )
         if ip.is_loopback:
             loopback = True
-            checks.append(_check("internal_address", "pass", "Loopback address: the data stays on this machine."))
+            checks.append(
+                _check("internal_address", "pass", "Loopback address: the data stays on this machine.")
+            )
         elif ip.is_unspecified:
-            checks.append(_check(
-                "internal_address", "warn", f"Unspecified address ({ip}); most systems route it to the local machine.",
-            ))
+            checks.append(
+                _check(
+                    "internal_address",
+                    "warn",
+                    f"Unspecified address ({ip}); most systems route it to the local machine.",
+                )
+            )
         elif ip.is_link_local:
-            checks.append(_check(
-                "internal_address", "warn", "Link-local address: reachable only from the local network segment.",
-            ))
+            checks.append(
+                _check(
+                    "internal_address",
+                    "warn",
+                    "Link-local address: reachable only from the local network segment.",
+                )
+            )
         elif ip.is_private:
-            checks.append(_check(
-                "internal_address", "warn",
-                "Private network address: internal to your network and not reachable from the internet.",
-            ))
+            checks.append(
+                _check(
+                    "internal_address",
+                    "warn",
+                    "Private network address: internal to your network and not reachable from the internet.",
+                )
+            )
         elif ip.is_multicast or ip.is_reserved:
             checks.append(_check("internal_address", "warn", "Reserved or multicast address range."))
         else:
@@ -185,17 +208,26 @@ def _address_checks(host: HostInfo, checks: list[dict[str, str]], signals: list[
         checks.append(_check("ip_literal", "pass", "Uses a host name, not a raw IP address."))
         if host_within(name, "localhost"):
             loopback = True
-            checks.append(_check("internal_address", "pass", "'localhost' name: the data stays on this machine."))
+            checks.append(
+                _check("internal_address", "pass", "'localhost' name: the data stays on this machine.")
+            )
         elif name.endswith(_INTERNAL_SUFFIXES) or "." not in name:
-            checks.append(_check(
-                "internal_address", "warn", f"'{name}' is an internal-only host name, not a public internet domain.",
-            ))
+            checks.append(
+                _check(
+                    "internal_address",
+                    "warn",
+                    f"'{name}' is an internal-only host name, not a public internet domain.",
+                )
+            )
     if ip is not None or "." not in name or name.endswith(_INTERNAL_SUFFIXES):
         if is_metadata_endpoint(name, ip):
-            checks.append(_check(
-                "cloud_metadata", "fail",
-                "Cloud instance metadata endpoint: it hands out cloud credentials to anything that can reach it.",
-            ))
+            checks.append(
+                _check(
+                    "cloud_metadata",
+                    "fail",
+                    "Cloud instance metadata endpoint: it hands out cloud credentials to anything that can reach it.",
+                )
+            )
             signals.append(
                 f"{name} is a cloud instance metadata endpoint, which hands out cloud credentials to anything "
                 "that can reach it."
@@ -213,36 +245,49 @@ def _name_checks(
         return
     service = match_service(host.host, target.path)
     if service is not None:
-        checks.append(_check(
-            "exfiltration_service", "fail",
-            f"{service.name} is a {service.category}: {service.risk}.",
-        ))
+        checks.append(
+            _check(
+                "exfiltration_service",
+                "fail",
+                f"{service.name} is a {service.category}: {service.risk}.",
+            )
+        )
         signals.append(
             f"{target.canonical} belongs to {service.name}, a {service.category}: {service.risk}, which makes it "
             "a common exfiltration target."
         )
     else:
-        checks.append(_check(
-            "exfiltration_service", "pass", "Not a known request-capture, tunnel, paste or webhook service.",
-        ))
+        checks.append(
+            _check(
+                "exfiltration_service",
+                "pass",
+                "Not a known request-capture, tunnel, paste or webhook service.",
+            )
+        )
     if host.ip is not None:
         return
     display = punycode_to_unicode(host.host)
     if display is not None:
-        checks.append(_check(
-            "punycode", "warn",
-            f"Internationalised domain name, displayed as '{display}'. Such names can imitate other domains.",
-        ))
+        checks.append(
+            _check(
+                "punycode",
+                "warn",
+                f"Internationalised domain name, displayed as '{display}'. Such names can imitate other domains.",
+            )
+        )
     else:
         checks.append(_check("punycode", "pass", "Plain ASCII domain name (no punycode)."))
     if "." not in host.host:
         return
     reg = registrable_domain(host.host)
     if not allowlisted:
-        checks.append(_check(
-            "lookalike", "unknown",
-            "No allowlisted destination domains are configured, so there was nothing to compare against.",
-        ))
+        checks.append(
+            _check(
+                "lookalike",
+                "unknown",
+                "No allowlisted destination domains are configured, so there was nothing to compare against.",
+            )
+        )
     elif reg in allowlisted:
         checks.append(_check("lookalike", "pass", f"'{reg}' is itself an allowlisted domain."))
     else:
@@ -253,13 +298,16 @@ def _name_checks(
         else:
             count = len(allowlisted)
             noun = "domain" if count == 1 else "domains"
-            checks.append(_check("lookalike", "pass", f"Does not resemble any of the {count} allowlisted {noun}."))
+            checks.append(
+                _check("lookalike", "pass", f"Does not resemble any of the {count} allowlisted {noun}.")
+            )
 
 
 def _history_check(history: DestinationHistory | None) -> dict[str, str]:
     if history is None:
         return _check(
-            "first_seen", "unknown",
+            "first_seen",
+            "unknown",
             "No destination history was supplied, so whether data has been sent here before was not checked.",
         )
     if not history.previously_seen:
@@ -314,14 +362,21 @@ def assess_destination(
     if allow is None:
         checks.append(_check("allowlist", "warn", "Not on the organisation's destination allowlist."))
     elif allow is top:
-        checks.append(_check("allowlist", "pass", f"Matches allowlist rule '{allow.name}' ({allow.trust_level})."))
+        checks.append(
+            _check("allowlist", "pass", f"Matches allowlist rule '{allow.name}' ({allow.trust_level}).")
+        )
     else:
-        checks.append(_check(
-            "allowlist", "warn",
-            f"Matches allowlist rule '{allow.name}', but the higher-priority rule '{top_name}' takes precedence.",
-        ))
+        checks.append(
+            _check(
+                "allowlist",
+                "warn",
+                f"Matches allowlist rule '{allow.name}', but the higher-priority rule '{top_name}' takes precedence.",
+            )
+        )
     if block is None:
-        checks.append(_check("blocklist", "pass", "Does not match any blocking or suspicious-destination rule."))
+        checks.append(
+            _check("blocklist", "pass", "Does not match any blocking or suspicious-destination rule.")
+        )
     else:
         detail = f"Matches rule '{block.name}', which classifies it as {block.trust_level}."
         if block is not top:
@@ -356,10 +411,14 @@ def assess_destination(
         reasons.extend(signals)
     elif loopback:
         classification = TrustLevel.APPROVED.value
-        reasons.append("It is a loopback destination: the data stays on this machine, so it is approved by default.")
+        reasons.append(
+            "It is a loopback destination: the data stays on this machine, so it is approved by default."
+        )
     else:
         classification = TrustLevel.UNKNOWN.value
-        reasons.append("It is not on the organisation's destination allowlist, so it is classified as UNKNOWN.")
+        reasons.append(
+            "It is not on the organisation's destination allowlist, so it is classified as UNKNOWN."
+        )
     reasons.append(_scope_reason(target))
     return DestinationAssessment(
         classification=str(classification),

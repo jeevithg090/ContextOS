@@ -32,14 +32,29 @@ def event(
     }
 
 
-def tool_requested(name: str, arguments: dict[str, Any], *, correlation_id: str | None = None, **kw: Any) -> dict[str, Any]:
-    return event("tool.requested", tool={"name": name, "provider": "claude_code"}, arguments=arguments,
-                 correlation_id=correlation_id or f"tu-{uuid.uuid4().hex[:12]}", **kw)
+def tool_requested(
+    name: str, arguments: dict[str, Any], *, correlation_id: str | None = None, **kw: Any
+) -> dict[str, Any]:
+    return event(
+        "tool.requested",
+        tool={"name": name, "provider": "claude_code"},
+        arguments=arguments,
+        correlation_id=correlation_id or f"tu-{uuid.uuid4().hex[:12]}",
+        **kw,
+    )
 
 
-def tool_completed(name: str, arguments: dict[str, Any], result: Any, *, correlation_id: str, **kw: Any) -> dict[str, Any]:
-    return event("tool.completed", tool={"name": name, "provider": "claude_code"}, arguments=arguments,
-                 result=result, correlation_id=correlation_id, **kw)
+def tool_completed(
+    name: str, arguments: dict[str, Any], result: Any, *, correlation_id: str, **kw: Any
+) -> dict[str, Any]:
+    return event(
+        "tool.completed",
+        tool={"name": name, "provider": "claude_code"},
+        arguments=arguments,
+        result=result,
+        correlation_id=correlation_id,
+        **kw,
+    )
 
 
 def post_events(client: TestClient, headers: dict[str, str], *events: dict[str, Any]) -> list[dict[str, Any]]:
@@ -48,17 +63,23 @@ def post_events(client: TestClient, headers: dict[str, str], *events: dict[str, 
     return response.json()["results"]
 
 
-def decide(client: TestClient, headers: dict[str, str], envelope: dict[str, Any], *, expect: int = 200) -> dict[str, Any]:
+def decide(
+    client: TestClient, headers: dict[str, str], envelope: dict[str, Any], *, expect: int = 200
+) -> dict[str, Any]:
     response = client.post("/api/v1/decide", json=envelope, headers=headers)
     assert response.status_code == expect, response.text
     return response.json()
 
 
-def run_tool(client: TestClient, headers: dict[str, str], name: str, arguments: dict[str, Any], result: Any,
-             **kw: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def run_tool(
+    client: TestClient, headers: dict[str, str], name: str, arguments: dict[str, Any], result: Any, **kw: Any
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """PreToolUse decision + PostToolUse result, as the Claude Code hooks send them."""
     request = tool_requested(name, arguments, **kw)
     decision = decide(client, headers, request)
-    done = post_events(client, headers, tool_completed(name, arguments, result,
-                                                       correlation_id=request["correlation_id"], **kw))
+    done = post_events(
+        client,
+        headers,
+        tool_completed(name, arguments, result, correlation_id=request["correlation_id"], **kw),
+    )
     return decision, done

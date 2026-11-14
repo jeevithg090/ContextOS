@@ -87,7 +87,9 @@ class Task(TimestampMixin, OrgScopedMixin, Base):
     related_incident_id: Mapped[str | None] = mapped_column(String(40), default=None, index=True)
     related_finding_id: Mapped[str | None] = mapped_column(String(40), default=None, index=True)
     related_files: Mapped[list[Any]] = mapped_column(default=list)  # repo-relative paths
-    links: Mapped[dict[str, Any]] = mapped_column(default=dict)  # {"branches": [], "commits": [], "pull_requests": [{"url","title","state"}], "deployments": []}
+    links: Mapped[dict[str, Any]] = mapped_column(
+        default=dict
+    )  # {"branches": [], "commits": [], "pull_requests": [{"url","title","state"}], "deployments": []}
     reproduction_steps: Mapped[str] = mapped_column(Text, default="")
     expected_behaviour: Mapped[str] = mapped_column(Text, default="")
     actual_behaviour: Mapped[str] = mapped_column(Text, default="")
@@ -137,7 +139,9 @@ class TaskDependency(OrgScopedMixin, Base):
 
     id: Mapped[str] = id_column()
     task_id: Mapped[str] = mapped_column(String(40), ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
-    depends_on_task_id: Mapped[str] = mapped_column(String(40), ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
+    depends_on_task_id: Mapped[str] = mapped_column(
+        String(40), ForeignKey("tasks.id", ondelete="CASCADE"), index=True
+    )
     kind: Mapped[str] = mapped_column(String(16), default="blocks")  # blocks|relates_to
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
@@ -191,7 +195,9 @@ class PromptTemplate(TimestampMixin, OrgScopedMixin, Base):
     mode: Mapped[str] = mapped_column(String(48))  # see workspace.fix_context.PromptMode
     preset: Mapped[str] = mapped_column(String(32), default="generic")  # claude_code|codex|cursor|generic
     options: Mapped[dict[str, Any]] = mapped_column(default=dict)
-    section_overrides: Mapped[dict[str, Any]] = mapped_column(default=dict)  # {section_key: extra instructions}
+    section_overrides: Mapped[dict[str, Any]] = mapped_column(
+        default=dict
+    )  # {section_key: extra instructions}
     is_builtin: Mapped[bool] = mapped_column(Boolean, default=False)
     created_by: Mapped[str | None] = mapped_column(String(40), default=None)
 
@@ -260,7 +266,9 @@ class VerificationRun(OrgScopedMixin, Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     command: Mapped[str | None] = mapped_column(Text, default=None)
     evidence_url: Mapped[str | None] = mapped_column(String(2048), default=None)
-    evidence: Mapped[dict[str, Any]] = mapped_column(default=dict)  # e.g. {"tests_passed": 120, "tests_failed": 0}
+    evidence: Mapped[dict[str, Any]] = mapped_column(
+        default=dict
+    )  # e.g. {"tests_passed": 120, "tests_failed": 0}
     simulation_run_id: Mapped[str | None] = mapped_column(String(40), default=None)
     created_by: Mapped[str | None] = mapped_column(String(40), default=None)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)

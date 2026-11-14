@@ -56,8 +56,10 @@ _CATEGORY_EXPLANATIONS = {
     "secret_exposure": "Content that contains a credential or other secret.",
     "untrusted_source": "Instructions in content from a source that is not allowed to direct the agent.",
 }
-_OPERATOR_NOTE = ("Hits in the operator's own prompts (user or system prompts) are recorded on the item but do "
-                  "not raise findings: the operator is allowed to instruct the agent.")
+_OPERATOR_NOTE = (
+    "Hits in the operator's own prompts (user or system prompts) are recorded on the item but do "
+    "not raise findings: the operator is allowed to instruct the agent."
+)
 
 
 def facets(db: Session, org_id: str, f: ItemFilters, *, bound_agent_id: str | None = None) -> dict[str, Any]:
@@ -66,13 +68,25 @@ def facets(db: Session, org_id: str, f: ItemFilters, *, bound_agent_id: str | No
 
     def count(skip: frozenset[str] = frozenset(), *extra: Any) -> int:
         conds = conditions(org_id, f, bound_agent_id, skip=skip)
-        return int(db.scalar(select(func.count(ContextItem.id)).select_from(ContextItem)
-                             .join(ContextSource, source_join(org_id)).where(*conds, *extra)) or 0)
+        return int(
+            db.scalar(
+                select(func.count(ContextItem.id))
+                .select_from(ContextItem)
+                .join(ContextSource, source_join(org_id))
+                .where(*conds, *extra)
+            )
+            or 0
+        )
 
     def grouped(column: Any, key: str) -> list[dict[str, Any]]:
         conds = conditions(org_id, f, bound_agent_id, skip=frozenset({key}))
-        rows = db.execute(select(column, func.count(ContextItem.id)).select_from(ContextItem)
-                          .join(ContextSource, source_join(org_id)).where(*conds).group_by(column)).all()
+        rows = db.execute(
+            select(column, func.count(ContextItem.id))
+            .select_from(ContextItem)
+            .join(ContextSource, source_join(org_id))
+            .where(*conds)
+            .group_by(column)
+        ).all()
         return sorted(({"value": v, "count": int(c)} for v, c in rows if v), key=lambda r: -r["count"])
 
     return {
@@ -88,7 +102,12 @@ def facets(db: Session, org_id: str, f: ItemFilters, *, bound_agent_id: str | No
 
 def _excerpt_for(finding: SecurityFinding, item_id: str) -> str | None:
     for ev in finding.evidence or []:
-        if isinstance(ev, dict) and ev.get("type") == "context_item" and ev.get("id") == item_id and ev.get("excerpt"):
+        if (
+            isinstance(ev, dict)
+            and ev.get("type") == "context_item"
+            and ev.get("id") == item_id
+            and ev.get("excerpt")
+        ):
             return clean(str(ev["excerpt"]), 400)
     return None
 
@@ -103,27 +122,51 @@ def _hits(item: ContextItem, findings: list[SecurityFinding]) -> list[dict[str, 
             continue
         finding = by_rule.get(hit["rule_id"])
         category = str(hit.get("category") or "")
-        explanation = clean(finding.explanation) if finding else _CATEGORY_EXPLANATIONS.get(
-            category, "Content matched a ContextOS detection rule.")
-        out.append({
-            "rule_id": hit["rule_id"], "category": category, "title": clean(str(hit.get("title") or hit["rule_id"])),
-            "severity": hit.get("severity") or "info", "confidence": float(hit.get("confidence") or 0.0),
-            "technique": hit.get("technique") or "plain", "explanation": explanation,
-            "explanation_source": "finding" if finding else "category",
-            "excerpt": _excerpt_for(finding, item.id) if finding else None, "finding_id": finding.id if finding else None,
-        })
+        explanation = (
+            clean(finding.explanation)
+            if finding
+            else _CATEGORY_EXPLANATIONS.get(category, "Content matched a ContextOS detection rule.")
+        )
+        out.append(
+            {
+                "rule_id": hit["rule_id"],
+                "category": category,
+                "title": clean(str(hit.get("title") or hit["rule_id"])),
+                "severity": hit.get("severity") or "info",
+                "confidence": float(hit.get("confidence") or 0.0),
+                "technique": hit.get("technique") or "plain",
+                "explanation": explanation,
+                "explanation_source": "finding" if finding else "category",
+                "excerpt": _excerpt_for(finding, item.id) if finding else None,
+                "finding_id": finding.id if finding else None,
+            }
+        )
     return out
 
 
 def _edges(db: Session, org_id: str, item_id: str) -> list[dict[str, Any]]:
-    rows = db.scalars(select(ProvenanceEdge).where(
-        ProvenanceEdge.organization_id == org_id,
-        or_(and_(ProvenanceEdge.src_type == CTX, ProvenanceEdge.src_id == item_id),
-            and_(ProvenanceEdge.dst_type == CTX, ProvenanceEdge.dst_id == item_id)),
-    ).order_by(ProvenanceEdge.observed_at, ProvenanceEdge.id))
-    return [{"id": e.id, "relation": e.relation, "src": {"type": e.src_type, "id": e.src_id},
-             "dst": {"type": e.dst_type, "id": e.dst_id}, "confidence": e.confidence, "observed_at": e.observed_at}
-            for e in rows]
+    rows = db.scalars(
+        select(ProvenanceEdge)
+        .where(
+            ProvenanceEdge.organization_id == org_id,
+            or_(
+                and_(ProvenanceEdge.src_type == CTX, ProvenanceEdge.src_id == item_id),
+                and_(ProvenanceEdge.dst_type == CTX, ProvenanceEdge.dst_id == item_id),
+            ),
+        )
+        .order_by(ProvenanceEdge.observed_at, ProvenanceEdge.id)
+    )
+    return [
+        {
+            "id": e.id,
+            "relation": e.relation,
+            "src": {"type": e.src_type, "id": e.src_id},
+            "dst": {"type": e.dst_type, "id": e.dst_id},
+            "confidence": e.confidence,
+            "observed_at": e.observed_at,
+        }
+        for e in rows
+    ]
 
 
 def get_item(db: Session, org_id: str, item_id: str, *, bound_agent_id: str | None = None) -> dict[str, Any]:
@@ -133,28 +176,43 @@ def get_item(db: Session, org_id: str, item_id: str, *, bound_agent_id: str | No
     linked = finding_ids_by_item(db, org_id, [item.id])
     findings = load_findings(db, org_id, linked.get(item.id, set()))
     preview = clean(item.redacted_preview)
-    secret_types = Counter(str(fp.get("type") or "secret") for fp in item.secret_fingerprints or [] if isinstance(fp, dict))
+    secret_types = Counter(
+        str(fp.get("type") or "secret") for fp in item.secret_fingerprints or [] if isinstance(fp, dict)
+    )
     summary = item.detection_summary or {}
     hits = _hits(item, findings)
     origin = None
     if item.origin_agent_id:
-        name = db.scalar(select(Agent.name).where(Agent.organization_id == org_id, Agent.id == item.origin_agent_id))
+        name = db.scalar(
+            select(Agent.name).where(Agent.organization_id == org_id, Agent.id == item.origin_agent_id)
+        )
         origin = {"id": item.origin_agent_id, "name": name}
     metadata, _ = redact_value(item.item_metadata or {})
     return {
         **item_summary(row, linked),
-        "event_id": item.event_id, "content_hash": item.content_hash, "redacted_preview": preview,
+        "event_id": item.event_id,
+        "content_hash": item.content_hash,
+        "redacted_preview": preview,
         "preview_stored": preview is not None,
-        "preview_truncated": bool(preview and preview.endswith("…") and len(preview) >= get_settings().preview_chars),
+        "preview_truncated": bool(
+            preview and preview.endswith("…") and len(preview) >= get_settings().preview_chars
+        ),
         "secret_fingerprint_count": len(item.secret_fingerprints or []),
         "secret_types": [{"type": t, "count": c} for t, c in sorted(secret_types.items())],
-        "detection": {**detection_counts(summary), "classifier_score": summary.get("classifier_score"), "hits": hits,
-                      "findings_suppressed_reason": _OPERATOR_NOTE if hits and source.source_type in OPERATOR_SOURCE_TYPES
-                      else None},
+        "detection": {
+            **detection_counts(summary),
+            "classifier_score": summary.get("classifier_score"),
+            "hits": hits,
+            "findings_suppressed_reason": _OPERATOR_NOTE
+            if hits and source.source_type in OPERATOR_SOURCE_TYPES
+            else None,
+        },
         "findings": [finding_ref(f) for f in findings],
         "tool_invocation": invocation_ref(db, org_id, item.tool_invocation_id),
-        "origin_agent": origin, "origin_session_id": item.origin_session_id,
+        "origin_agent": origin,
+        "origin_session_id": item.origin_session_id,
         "item_metadata": metadata if isinstance(metadata, dict) else {},
-        "provenance": _edges(db, org_id, item.id), "provenance_note": OBSERVED_RELATIONSHIP_NOTE,
+        "provenance": _edges(db, org_id, item.id),
+        "provenance_note": OBSERVED_RELATIONSHIP_NOTE,
         "has_receipt_signature": bool(item.receipt_signature),
     }

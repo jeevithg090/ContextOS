@@ -28,10 +28,28 @@ TAG_COVER = "Thanks for reading! Feedback is welcome."
 
 # Common Cyrillic confusables for Latin letters (Unicode TR39 confusables subset).
 _HOMOGLYPHS = {
-    "a": "а", "c": "с", "e": "е", "i": "і", "j": "ј", "o": "о",
-    "p": "р", "s": "ѕ", "x": "х", "y": "у", "h": "һ",
-    "A": "А", "B": "В", "C": "С", "E": "Е", "H": "Н", "K": "К",
-    "M": "М", "O": "О", "P": "Р", "T": "Т", "X": "Х",
+    "a": "а",
+    "c": "с",
+    "e": "е",
+    "i": "і",
+    "j": "ј",
+    "o": "о",
+    "p": "р",
+    "s": "ѕ",
+    "x": "х",
+    "y": "у",
+    "h": "һ",
+    "A": "А",
+    "B": "В",
+    "C": "С",
+    "E": "Е",
+    "H": "Н",
+    "K": "К",
+    "M": "М",
+    "O": "О",
+    "P": "Р",
+    "T": "Т",
+    "X": "Х",
 }
 _LEET = {"a": "4", "e": "3", "i": "1", "o": "0", "s": "5", "t": "7"}
 
@@ -60,7 +78,9 @@ def unicode_tags(text: str, lang: str) -> str | None:
     """Smuggle the whole instruction in invisible Unicode tag characters after a visible cover line."""
     if not text.isascii():
         return None
-    hidden = "".join(chr(_TAG_OFFSET + ord(c)) if 0x20 <= ord(c) <= 0x7E else chr(_TAG_OFFSET + 0x20) for c in text)
+    hidden = "".join(
+        chr(_TAG_OFFSET + ord(c)) if 0x20 <= ord(c) <= 0x7E else chr(_TAG_OFFSET + 0x20) for c in text
+    )
     return f"{TAG_COVER} {hidden}"
 
 

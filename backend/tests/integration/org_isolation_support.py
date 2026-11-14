@@ -37,7 +37,9 @@ _ID = re.compile(r"\b[a-z]{2,4}_[0-9A-HJKMNP-TV-Z]{26}\b")
 
 def ok(response: Any, status: int | tuple[int, ...] = (200, 201)) -> Any:
     expected = status if isinstance(status, tuple) else (status,)
-    assert response.status_code in expected, f"{response.request.method} {response.request.url}: {response.text}"
+    assert response.status_code in expected, (
+        f"{response.request.method} {response.request.url}: {response.text}"
+    )
     return response.json() if response.content else None
 
 
@@ -48,14 +50,26 @@ def fake_like(real: str) -> str:
 
 
 def _event(event_type: str, session: str, agent: str, **fields: Any) -> dict[str, Any]:
-    return {"event_id": f"evt-{uuid.uuid4().hex}", "event_type": event_type, "timestamp": "2026-11-11T10:00:00+00:00",
-            "agent": {"name": agent, "framework": "claude_code"}, "session_id": session,
-            "integration": "claude_code", **fields}
+    return {
+        "event_id": f"evt-{uuid.uuid4().hex}",
+        "event_type": event_type,
+        "timestamp": "2026-11-11T10:00:00+00:00",
+        "agent": {"name": agent, "framework": "claude_code"},
+        "session_id": session,
+        "integration": "claude_code",
+        **fields,
+    }
 
 
 def _tool(session: str, agent: str, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-    return _event("tool.requested", session, agent, tool={"name": name, "provider": "claude_code"},
-                  arguments=arguments, correlation_id=f"tu-{uuid.uuid4().hex[:12]}")
+    return _event(
+        "tool.requested",
+        session,
+        agent,
+        tool={"name": name, "provider": "claude_code"},
+        arguments=arguments,
+        correlation_id=f"tu-{uuid.uuid4().hex[:12]}",
+    )
 
 
 @dataclass
@@ -75,7 +89,9 @@ def build_org_a(client: TestClient, a: OrgCtx, db: Session) -> World:
     """One of every org-owned record, created as A through the API."""
     from tests.integration.workspace_support import add_member
 
-    w = World(agent_name=f"isolation-agent-{uuid.uuid4().hex[:6]}", external_session=f"iso-{uuid.uuid4().hex[:8]}")
+    w = World(
+        agent_name=f"isolation-agent-{uuid.uuid4().hex[:6]}", external_session=f"iso-{uuid.uuid4().hex[:8]}"
+    )
     u, k, ids = a.user_headers, a.api_headers, w.ids
     sid, name = w.external_session, w.agent_name
 
@@ -93,12 +109,23 @@ def build_org_a(client: TestClient, a: OrgCtx, db: Session) -> World:
     ids["agent"] = post("/agents", {"name": name, "framework": "claude_code"})["id"]
     token = synthetic_github_token()
     events(_event("session.started", sid, name))
-    for path, content in (("/work/app/.env", env_file_content(token, synthetic_aws_secret())),
-                          ("/work/app/README.md", MALICIOUS_README)):
+    for path, content in (
+        ("/work/app/.env", env_file_content(token, synthetic_aws_secret())),
+        ("/work/app/README.md", MALICIOUS_README),
+    ):
         request = _tool(sid, name, "Read", {"file_path": path})
         decide(request)
-        done = events(_event("tool.completed", sid, name, tool=request["tool"], arguments=request["arguments"],
-                             correlation_id=request["correlation_id"], result=content))[0]
+        done = events(
+            _event(
+                "tool.completed",
+                sid,
+                name,
+                tool=request["tool"],
+                arguments=request["arguments"],
+                correlation_id=request["correlation_id"],
+                result=content,
+            )
+        )[0]
         ids["item"] = done["refs"]["context_item_id"]
     held = decide(_tool(sid, name, "WebFetch", {"url": "https://status.partner-api.example/health"}))
     assert held["decision"] == "REQUIRE_APPROVAL", held
@@ -107,7 +134,9 @@ def build_org_a(client: TestClient, a: OrgCtx, db: Session) -> World:
     assert denied["decision"] == "DENY", denied
     ids["decision"], ids["invocation"] = denied["policy_decision_id"], denied["tool_invocation_id"]
 
-    session = next(s for s in ok(client.get(f"{API}/sessions", headers=u))["items"] if s["external_session_id"] == sid)
+    session = next(
+        s for s in ok(client.get(f"{API}/sessions", headers=u))["items"] if s["external_session_id"] == sid
+    )
     ids["session"] = session["id"]
     item = ok(client.get(f"{API}/context/items/{ids['item']}", headers=u))
     ids["source"] = item["source"]["id"]
@@ -117,18 +146,27 @@ def build_org_a(client: TestClient, a: OrgCtx, db: Session) -> World:
     exfil = next(f for f in findings if f["incident"])
     ids["finding"], ids["incident"] = exfil["id"], exfil["incident"]["id"]
 
-    ids["policy"] = post("/policies", {"name": "A: deny deploys", "outcome": "DENY",
-                                       "conditions": {"field": "tool.name", "op": "eq", "value": "deploy"}})["id"]
-    ids["trust_rule"] = post("/trust/rules", {"name": "A: vendor docs", "pattern": "docs.vendor.example",
-                                              "trust_level": "TRUSTED"})["id"]
+    ids["policy"] = post(
+        "/policies",
+        {
+            "name": "A: deny deploys",
+            "outcome": "DENY",
+            "conditions": {"field": "tool.name", "op": "eq", "value": "deploy"},
+        },
+    )["id"]
+    ids["trust_rule"] = post(
+        "/trust/rules", {"name": "A: vendor docs", "pattern": "docs.vendor.example", "trust_level": "TRUSTED"}
+    )["id"]
     ids["user"], _ = add_member(db, a.org_id, "developer", "A Developer")
     ids["membership"] = _membership_id(client, a, ids["user"])
     ids["api_key"] = post("/org/api-keys", {"name": "A extra key", "scopes": ["read"]})["id"]
 
     board = post("/workspace/boards", {"name": "A board"})
     ids["board"], ids["column"] = board["id"], board["columns"][0]["id"]
-    ids["task"] = post("/workspace/tasks", {"title": "A task", "board_id": ids["board"],
-                                            "related_finding_id": ids["finding"]})["id"]
+    ids["task"] = post(
+        "/workspace/tasks",
+        {"title": "A task", "board_id": ids["board"], "related_finding_id": ids["finding"]},
+    )["id"]
     ids["task2"] = post("/workspace/tasks", {"title": "A blocker", "board_id": ids["board"]})["id"]
     t = f"/workspace/tasks/{ids['task']}"
     ids["label"] = post("/workspace/tasks/labels", {"name": "a-label"})["id"]
@@ -157,15 +195,22 @@ def build_org_b_parents(client: TestClient, b: OrgCtx, w: World) -> None:
     u = b.user_headers
     board = ok(client.post(f"{API}/workspace/boards", json={"name": "B board"}, headers=u))
     w.own.update(board=board["id"], column=board["columns"][0]["id"])
-    w.own["task"] = ok(client.post(f"{API}/workspace/tasks", json={"title": "B task", "board_id": board["id"]},
-                                   headers=u))["id"]
-    ok(client.post(f"{API}/events", json={"events": [_event("session.started", w.external_session, w.agent_name)]},
-                   headers=b.api_headers))
+    w.own["task"] = ok(
+        client.post(f"{API}/workspace/tasks", json={"title": "B task", "board_id": board["id"]}, headers=u)
+    )["id"]
+    ok(
+        client.post(
+            f"{API}/events",
+            json={"events": [_event("session.started", w.external_session, w.agent_name)]},
+            headers=b.api_headers,
+        )
+    )
     sessions = ok(client.get(f"{API}/sessions", headers=u))["items"]
     w.own["session"] = sessions[0]["id"]
     assert w.own["session"] != w.ids["session"]
-    w.own["incident"] = ok(client.post(f"{API}/incidents", json={"title": "B incident", "severity": "low"},
-                                       headers=u))["id"]
+    w.own["incident"] = ok(
+        client.post(f"{API}/incidents", json={"title": "B incident", "severity": "low"}, headers=u)
+    )["id"]
     w.own.update(agent_name=w.agent_name, external_session=w.external_session)
 
 
@@ -269,10 +314,29 @@ def error_code(response: Any) -> str | None:
         body = response.json()
     except ValueError:
         return None
-    return body.get("error", {}).get("code") if isinstance(body, dict) and isinstance(body.get("error"), dict) else None
+    return (
+        body.get("error", {}).get("code")
+        if isinstance(body, dict) and isinstance(body.get("error"), dict)
+        else None
+    )
 
 
 Body = Callable[[dict[str, str], dict[str, str]], Any] | None
 
-__all__ = ["API", "Body", "Probe", "World", "build_org_a", "build_org_b_parents", "error_code", "fake_like", "ids_in",
-           "iter_routes", "ok", "org_ids", "query_id_params", "snapshot_org", "strings_in"]
+__all__ = [
+    "API",
+    "Body",
+    "Probe",
+    "World",
+    "build_org_a",
+    "build_org_b_parents",
+    "error_code",
+    "fake_like",
+    "ids_in",
+    "iter_routes",
+    "ok",
+    "org_ids",
+    "query_id_params",
+    "snapshot_org",
+    "strings_in",
+]

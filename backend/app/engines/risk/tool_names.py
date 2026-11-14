@@ -17,8 +17,11 @@ C = ToolCategory
 # name -> (category, what it does, risk override or None)
 BUILTINS: dict[str, tuple[str, str, str | None]] = {
     "Bash": (C.SHELL, "runs shell commands", None),
-    "BashOutput": (C.SHELL, "reads the output of a background shell (the command itself was classified when "
-                   "it started)", RiskLevel.MEDIUM),
+    "BashOutput": (
+        C.SHELL,
+        "reads the output of a background shell (the command itself was classified when it started)",
+        RiskLevel.MEDIUM,
+    ),
     "KillShell": (C.OTHER, "stops a background shell and runs nothing new", None),
     "KillBash": (C.OTHER, "stops a background shell and runs nothing new", None),
     "Read": (C.FILE_READ, "reads local files", None),
@@ -39,7 +42,11 @@ BUILTINS: dict[str, tuple[str, str, str | None]] = {
     "TodoWrite": (C.OTHER, "updates the agent's own task list", None),
     "ExitPlanMode": (C.OTHER, "leaves planning mode", None),
     "SlashCommand": (C.OTHER, "runs a user-defined slash command prompt", None),
-    "ToolSearch": (C.OTHER, "loads the definitions of the agent's own deferred tools (no outside access)", None),
+    "ToolSearch": (
+        C.OTHER,
+        "loads the definitions of the agent's own deferred tools (no outside access)",
+        None,
+    ),
 }
 
 # OpenAI Codex built-ins, as Codex names them in its hook payloads (provider ``openai_codex``).
@@ -62,16 +69,23 @@ CODEX_BUILTINS: dict[str, tuple[str, str, str | None]] = {
     "update_plan": (C.OTHER, "updates the agent's own plan", None),
     "request_user_input": (C.OTHER, "asks the user a question", None),
     "list_mcp_resources": (C.FILE_READ, "lists resources exposed by connected MCP servers", None),
-    "list_mcp_resource_templates": (C.FILE_READ, "lists resource templates exposed by connected MCP servers", None),
+    "list_mcp_resource_templates": (
+        C.FILE_READ,
+        "lists resource templates exposed by connected MCP servers",
+        None,
+    ),
     "read_mcp_resource": (C.FILE_READ, "reads a resource exposed by a connected MCP server", None),
 }
 # Codex names a namespaced tool "<namespace><name>" in hook payloads (``flat_tool_name``), so the
 # multi-agent v1 tools arrive as e.g. "multi_agent_v1wait_agent" (spawn_agent alone is special-cased).
 CODEX_MULTI_AGENT_NAMESPACE = "multi_agent_v1"
-CODEX_BUILTINS.update({
-    CODEX_MULTI_AGENT_NAMESPACE + name: entry for name, entry in list(CODEX_BUILTINS.items())
-    if entry[0] == C.AGENT_DELEGATION or name.endswith("_agent") or name == "list_agents"
-})
+CODEX_BUILTINS.update(
+    {
+        CODEX_MULTI_AGENT_NAMESPACE + name: entry
+        for name, entry in list(CODEX_BUILTINS.items())
+        if entry[0] == C.AGENT_DELEGATION or name.endswith("_agent") or name == "list_agents"
+    }
+)
 _HOST_LABELS = {CODEX_PROVIDER: "Codex"}
 
 
@@ -82,47 +96,266 @@ def builtin_for(tool: str, provider: str | None) -> tuple[tuple[str, str, str | 
     return BUILTINS.get(tool), "Claude Code"
 
 
-FILE_OBJECTS = {"file", "files", "directory", "directories", "dir", "folder", "path", "paths", "contents",
-                "content", "notebook", "document", "documents", "tree"}
-SEND_VERBS = {"send", "post", "reply", "forward", "draft", "compose", "publish", "share", "upload", "notify",
-              "broadcast", "dm", "sendmessage", "postmessage", "sendemail", "write", "create", "update"}
-READ_VERBS = {"read", "get", "list", "search", "fetch", "find", "view", "history", "unread", "query", "lookup",
-              "retrieve", "download", "show", "inbox"}
-WEB_SEARCH_TOKENS = {"web", "google", "bing", "brave", "tavily", "exa", "serp", "serpapi", "duckduckgo",
-                     "perplexity", "internet", "websearch", "kagi", "searxng"}
+FILE_OBJECTS = {
+    "file",
+    "files",
+    "directory",
+    "directories",
+    "dir",
+    "folder",
+    "path",
+    "paths",
+    "contents",
+    "content",
+    "notebook",
+    "document",
+    "documents",
+    "tree",
+}
+SEND_VERBS = {
+    "send",
+    "post",
+    "reply",
+    "forward",
+    "draft",
+    "compose",
+    "publish",
+    "share",
+    "upload",
+    "notify",
+    "broadcast",
+    "dm",
+    "sendmessage",
+    "postmessage",
+    "sendemail",
+    "write",
+    "create",
+    "update",
+}
+READ_VERBS = {
+    "read",
+    "get",
+    "list",
+    "search",
+    "fetch",
+    "find",
+    "view",
+    "history",
+    "unread",
+    "query",
+    "lookup",
+    "retrieve",
+    "download",
+    "show",
+    "inbox",
+}
+WEB_SEARCH_TOKENS = {
+    "web",
+    "google",
+    "bing",
+    "brave",
+    "tavily",
+    "exa",
+    "serp",
+    "serpapi",
+    "duckduckgo",
+    "perplexity",
+    "internet",
+    "websearch",
+    "kagi",
+    "searxng",
+}
 
 # (category, exact tokens, substrings, [(verb set, object set) pairs that must both appear])
 _Rule = tuple[str, set[str], tuple[str, ...], list[tuple[set[str], set[str]]]]
 RULES: list[_Rule] = [
-    (C.AGENT_DELEGATION, {"delegate", "delegation", "subagent", "handoff"}, (),
-     [({"spawn", "invoke", "call", "run", "launch", "start", "create"}, {"agent", "agents", "subagent", "assistant"})]),
-    (C.EMAIL, {"email", "emails", "mail", "mails", "gmail", "smtp", "outlook", "inbox", "sendgrid", "mailgun",
-               "postmark", "imap"}, ("gmail", "email", "smtp"), []),
-    (C.MESSAGING, {"slack", "discord", "teams", "telegram", "whatsapp", "sms", "twilio", "mattermost", "chat", "dm",
-                   "postmessage", "sendmessage"}, ("slack", "discord", "telegram", "whatsapp", "twilio"),
-     [({"post", "send"}, {"message", "messages", "msg"})]),
-    (C.INFRASTRUCTURE, {"terraform", "kubectl", "kubernetes", "k8s", "aws", "gcloud", "gcp", "azure", "deploy",
-                        "deployment", "deployments", "helm", "pulumi", "cloudformation", "ec2", "ecs", "eks", "gke",
-                        "aks", "s3", "docker", "container", "containers", "vercel", "netlify", "heroku",
-                        "ansible"}, ("terraform", "kubectl", "kubernetes", "gcloud", "cloudformation", "pulumi",
-                                     "deploy"), []),
-    (C.SHELL, {"shell", "bash", "zsh", "sh", "ssh", "terminal", "powershell", "cmd", "command", "commands"},
-     ("shell", "bash", "powershell"), []),
-    (C.DATABASE, {"sql", "database", "databases", "db", "postgres", "postgresql", "mysql", "sqlite", "mongo",
-                  "mongodb", "redis", "bigquery", "snowflake", "dynamodb", "supabase", "firestore", "cassandra",
-                  "clickhouse", "duckdb", "table", "tables"}, ("sql", "postgres", "mongo"),
-     [({"execute", "exec", "run"}, {"query", "queries", "statement"})]),
-    (C.BROWSER, {"browser", "browse", "navigate", "click", "screenshot", "playwright", "puppeteer", "selenium",
-                 "webdriver"}, ("playwright", "puppeteer", "selenium", "browser"), []),
-    (C.CODE_EXECUTION, {"exec", "execute", "eval", "python", "jupyter", "interpreter", "sandbox", "repl",
-                        "javascript", "ipython", "executecode"}, (),
-     [({"run"}, {"code", "script", "python", "notebook", "cell", "js"})]),
-    (C.HTTP, {"http", "https", "fetch", "request", "requests", "url", "urls", "webhook", "webhooks", "curl", "wget",
-              "download", "upload", "publish", "push", "graphql", "webfetch"}, ("webhook",), []),
-    (C.FILE_WRITE, {"write", "edit", "edits", "save", "append", "overwrite", "mkdir", "rmdir", "touch"}, (),
-     [({"create", "delete", "remove", "move", "rename", "copy", "update", "replace"}, FILE_OBJECTS)]),
-    (C.FILE_READ, {"read", "cat", "open", "ls", "glob", "grep", "head", "tail", "stat"}, (),
-     [({"get", "list", "find", "tree", "show", "load", "view"}, FILE_OBJECTS)]),
+    (
+        C.AGENT_DELEGATION,
+        {"delegate", "delegation", "subagent", "handoff"},
+        (),
+        [
+            (
+                {"spawn", "invoke", "call", "run", "launch", "start", "create"},
+                {"agent", "agents", "subagent", "assistant"},
+            )
+        ],
+    ),
+    (
+        C.EMAIL,
+        {
+            "email",
+            "emails",
+            "mail",
+            "mails",
+            "gmail",
+            "smtp",
+            "outlook",
+            "inbox",
+            "sendgrid",
+            "mailgun",
+            "postmark",
+            "imap",
+        },
+        ("gmail", "email", "smtp"),
+        [],
+    ),
+    (
+        C.MESSAGING,
+        {
+            "slack",
+            "discord",
+            "teams",
+            "telegram",
+            "whatsapp",
+            "sms",
+            "twilio",
+            "mattermost",
+            "chat",
+            "dm",
+            "postmessage",
+            "sendmessage",
+        },
+        ("slack", "discord", "telegram", "whatsapp", "twilio"),
+        [({"post", "send"}, {"message", "messages", "msg"})],
+    ),
+    (
+        C.INFRASTRUCTURE,
+        {
+            "terraform",
+            "kubectl",
+            "kubernetes",
+            "k8s",
+            "aws",
+            "gcloud",
+            "gcp",
+            "azure",
+            "deploy",
+            "deployment",
+            "deployments",
+            "helm",
+            "pulumi",
+            "cloudformation",
+            "ec2",
+            "ecs",
+            "eks",
+            "gke",
+            "aks",
+            "s3",
+            "docker",
+            "container",
+            "containers",
+            "vercel",
+            "netlify",
+            "heroku",
+            "ansible",
+        },
+        ("terraform", "kubectl", "kubernetes", "gcloud", "cloudformation", "pulumi", "deploy"),
+        [],
+    ),
+    (
+        C.SHELL,
+        {"shell", "bash", "zsh", "sh", "ssh", "terminal", "powershell", "cmd", "command", "commands"},
+        ("shell", "bash", "powershell"),
+        [],
+    ),
+    (
+        C.DATABASE,
+        {
+            "sql",
+            "database",
+            "databases",
+            "db",
+            "postgres",
+            "postgresql",
+            "mysql",
+            "sqlite",
+            "mongo",
+            "mongodb",
+            "redis",
+            "bigquery",
+            "snowflake",
+            "dynamodb",
+            "supabase",
+            "firestore",
+            "cassandra",
+            "clickhouse",
+            "duckdb",
+            "table",
+            "tables",
+        },
+        ("sql", "postgres", "mongo"),
+        [({"execute", "exec", "run"}, {"query", "queries", "statement"})],
+    ),
+    (
+        C.BROWSER,
+        {
+            "browser",
+            "browse",
+            "navigate",
+            "click",
+            "screenshot",
+            "playwright",
+            "puppeteer",
+            "selenium",
+            "webdriver",
+        },
+        ("playwright", "puppeteer", "selenium", "browser"),
+        [],
+    ),
+    (
+        C.CODE_EXECUTION,
+        {
+            "exec",
+            "execute",
+            "eval",
+            "python",
+            "jupyter",
+            "interpreter",
+            "sandbox",
+            "repl",
+            "javascript",
+            "ipython",
+            "executecode",
+        },
+        (),
+        [({"run"}, {"code", "script", "python", "notebook", "cell", "js"})],
+    ),
+    (
+        C.HTTP,
+        {
+            "http",
+            "https",
+            "fetch",
+            "request",
+            "requests",
+            "url",
+            "urls",
+            "webhook",
+            "webhooks",
+            "curl",
+            "wget",
+            "download",
+            "upload",
+            "publish",
+            "push",
+            "graphql",
+            "webfetch",
+        },
+        ("webhook",),
+        [],
+    ),
+    (
+        C.FILE_WRITE,
+        {"write", "edit", "edits", "save", "append", "overwrite", "mkdir", "rmdir", "touch"},
+        (),
+        [({"create", "delete", "remove", "move", "rename", "copy", "update", "replace"}, FILE_OBJECTS)],
+    ),
+    (
+        C.FILE_READ,
+        {"read", "cat", "open", "ls", "glob", "grep", "head", "tail", "stat"},
+        (),
+        [({"get", "list", "find", "tree", "show", "load", "view"}, FILE_OBJECTS)],
+    ),
     (C.SEARCH, {"search", "lookup", "find", "retrieve", "retrieval", "websearch"}, ("search",), []),
     (C.DATABASE, {"query", "queries"}, (), []),
 ]

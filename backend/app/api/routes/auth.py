@@ -45,7 +45,11 @@ def _set_session_cookie(response: Response, token: str) -> None:
 def _clear_session_cookie(response: Response) -> None:
     settings = get_settings()
     response.delete_cookie(
-        key=settings.session_cookie_name, path="/", httponly=True, secure=settings.cookie_secure, samesite="lax"
+        key=settings.session_cookie_name,
+        path="/",
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
     )
 
 
@@ -65,8 +69,14 @@ def setup(body: SetupIn, request: Request, response: Response, db: Session = Dep
     token = auth_service.create_session(db, user, user_agent=request.headers.get("user-agent"))
     user.last_login_at = utcnow()
     append_audit(
-        db, org.id, action="auth.setup_completed", actor_type="user", actor_id=user.id,
-        target_type="user", target_id=user.id, details={"ip": _client_ip(request)},
+        db,
+        org.id,
+        action="auth.setup_completed",
+        actor_type="user",
+        actor_id=user.id,
+        target_type="user",
+        target_id=user.id,
+        details={"ip": _client_ip(request)},
     )
     _set_session_cookie(response, token)
     return auth_service.build_me(db, user, org.id, "owner")
@@ -106,8 +116,13 @@ def logout(request: Request, db: Session = Depends(get_db)) -> Response:
         if revoked is not None:
             for membership, _org in auth_service.user_memberships(db, revoked.user_id):
                 append_audit(
-                    db, membership.organization_id, action="auth.logout", actor_type="user",
-                    actor_id=revoked.user_id, target_type="auth_session", target_id=revoked.id,
+                    db,
+                    membership.organization_id,
+                    action="auth.logout",
+                    actor_type="user",
+                    actor_id=revoked.user_id,
+                    target_type="auth_session",
+                    target_id=revoked.id,
                 )
     response = Response(status_code=204)
     _clear_session_cookie(response)

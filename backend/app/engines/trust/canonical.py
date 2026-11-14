@@ -19,13 +19,50 @@ DEFAULT_PORTS = {"http": 80, "https": 443, "ws": 80, "wss": 443, "ftp": 21}
 WEB_SCHEMES = frozenset({"http", "https", "ws", "wss"})
 
 _TRACKING_PARAMS = frozenset(
-    {"fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "yclid", "mc_cid", "mc_eid", "_ga", "_gl", "igshid"}
+    {
+        "fbclid",
+        "gclid",
+        "dclid",
+        "gbraid",
+        "wbraid",
+        "msclkid",
+        "yclid",
+        "mc_cid",
+        "mc_eid",
+        "_ga",
+        "_gl",
+        "igshid",
+    }
 )
 _CREDENTIAL_PARAMS = frozenset(
     {
-        "token", "access_token", "id_token", "refresh_token", "auth", "authorization", "api_key", "apikey",
-        "api-key", "key", "secret", "client_secret", "password", "passwd", "pwd", "sig", "signature",
-        "code", "session", "sessionid", "session_id", "jwt", "private_token", "sas", "sv", "se", "sp",
+        "token",
+        "access_token",
+        "id_token",
+        "refresh_token",
+        "auth",
+        "authorization",
+        "api_key",
+        "apikey",
+        "api-key",
+        "key",
+        "secret",
+        "client_secret",
+        "password",
+        "passwd",
+        "pwd",
+        "sig",
+        "signature",
+        "code",
+        "session",
+        "sessionid",
+        "session_id",
+        "jwt",
+        "private_token",
+        "sas",
+        "sv",
+        "se",
+        "sp",
     }
 )
 _CREDENTIAL_PREFIXES = ("x-amz-", "x-goog-")
@@ -288,7 +325,9 @@ def canonical_repository(raw: str) -> Canonical:
         owner, repo = text.rstrip("/").split("/")
         if repo.lower().endswith(".git"):
             repo = repo[:-4]
-        return Canonical(identifier=f"github.com/{owner.lower()}/{repo.lower()}", host=HostInfo(host="github.com"))
+        return Canonical(
+            identifier=f"github.com/{owner.lower()}/{repo.lower()}", host=HostInfo(host="github.com")
+        )
     bare = canonical_bare_host(text, repository=True)
     if bare is not None:
         return bare

@@ -36,7 +36,9 @@ def _version(value: bool) -> None:
 
 @app.callback()
 def _root(
-    version: bool = typer.Option(False, "--version", callback=_version, is_eager=True, help="Show the version and exit."),
+    version: bool = typer.Option(
+        False, "--version", callback=_version, is_eager=True, help="Show the version and exit."
+    ),
 ) -> None:
     """ContextOS CLI."""
 

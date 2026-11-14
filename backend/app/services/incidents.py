@@ -26,7 +26,14 @@ ESCALATE_AT_HIGH = {"exfiltration", "lethal_trifecta", "secret_exposure", "cross
 
 
 def add_activity(
-    db: Session, org_id: str, incident_id: str, *, actor: str, kind: str, body: str = "", details: dict[str, Any] | None = None
+    db: Session,
+    org_id: str,
+    incident_id: str,
+    *,
+    actor: str,
+    kind: str,
+    body: str = "",
+    details: dict[str, Any] | None = None,
 ) -> IncidentActivity:
     activity = IncidentActivity(
         id=new_id("incident_activity"),
@@ -74,14 +81,31 @@ def create_incident(
     db.flush()
     add_activity(db, org_id, incident.id, actor=created_by, kind="created", body=summary)
     for fid in finding_ids or []:
-        finding = db.scalar(select(SecurityFinding).where(SecurityFinding.organization_id == org_id, SecurityFinding.id == fid))
+        finding = db.scalar(
+            select(SecurityFinding).where(
+                SecurityFinding.organization_id == org_id, SecurityFinding.id == fid
+            )
+        )
         if finding is not None:
             finding.incident_id = incident.id
-            add_activity(db, org_id, incident.id, actor=created_by, kind="finding_linked", body=finding.title, details={"finding_id": fid})
+            add_activity(
+                db,
+                org_id,
+                incident.id,
+                actor=created_by,
+                kind="finding_linked",
+                body=finding.title,
+                details={"finding_id": fid},
+            )
     append_audit(
-        db, org_id, action="incident.created",
-        actor_type="system" if created_by == "system" else "user", actor_id=None if created_by == "system" else created_by,
-        target_type="incident", target_id=incident.id, details={"severity": severity, "auto": created_by == "system"},
+        db,
+        org_id,
+        action="incident.created",
+        actor_type="system" if created_by == "system" else "user",
+        actor_id=None if created_by == "system" else created_by,
+        target_type="incident",
+        target_id=incident.id,
+        details={"severity": severity, "auto": created_by == "system"},
     )
     notify(db, org_id, "incident.created", id=incident.id)
     return incident
@@ -105,12 +129,15 @@ def escalate_finding(db: Session, finding: SecurityFinding) -> Incident | None:
             select(Incident).where(
                 Incident.organization_id == org_id,
                 Incident.primary_session_id == finding.session_id,
-                Incident.status.in_([IncidentStatus.OPEN, IncidentStatus.INVESTIGATING, IncidentStatus.CONTAINED]),
+                Incident.status.in_(
+                    [IncidentStatus.OPEN, IncidentStatus.INVESTIGATING, IncidentStatus.CONTAINED]
+                ),
             )
         )
     if incident is None:
         return create_incident(
-            db, org_id,
+            db,
+            org_id,
             title=finding.title,
             summary=f"Opened automatically from a {finding.severity} {finding.category.replace('_', ' ')} finding. {finding.explanation}",
             severity=finding.severity,
@@ -122,7 +149,15 @@ def escalate_finding(db: Session, finding: SecurityFinding) -> Incident | None:
     finding.incident_id = incident.id
     if SEVERITY_RANK.get(finding.severity, 0) > SEVERITY_RANK.get(incident.severity, 0):
         incident.severity = finding.severity
-    add_activity(db, org_id, incident.id, actor="system", kind="finding_linked", body=finding.title, details={"finding_id": finding.id})
+    add_activity(
+        db,
+        org_id,
+        incident.id,
+        actor="system",
+        kind="finding_linked",
+        body=finding.title,
+        details={"finding_id": finding.id},
+    )
     notify(db, org_id, "incident.updated", id=incident.id)
     return incident
 
@@ -134,20 +169,30 @@ def escalate_finding(db: Session, finding: SecurityFinding) -> Incident | None:
 # before it is stored. Read models live in ``incidents_query`` / ``incidents_timeline`` /
 # ``incidents_export``.
 
-ACTIVE_STATUSES = (IncidentStatus.OPEN.value, IncidentStatus.INVESTIGATING.value, IncidentStatus.CONTAINED.value)
+ACTIVE_STATUSES = (
+    IncidentStatus.OPEN.value,
+    IncidentStatus.INVESTIGATING.value,
+    IncidentStatus.CONTAINED.value,
+)
 CLOSED_STATUSES = (IncidentStatus.RESOLVED.value, IncidentStatus.FALSE_POSITIVE.value)
 
 ALLOWED_TRANSITIONS: dict[str, tuple[str, ...]] = {
     IncidentStatus.OPEN.value: (
-        IncidentStatus.INVESTIGATING.value, IncidentStatus.CONTAINED.value,
-        IncidentStatus.RESOLVED.value, IncidentStatus.FALSE_POSITIVE.value,
+        IncidentStatus.INVESTIGATING.value,
+        IncidentStatus.CONTAINED.value,
+        IncidentStatus.RESOLVED.value,
+        IncidentStatus.FALSE_POSITIVE.value,
     ),
     IncidentStatus.INVESTIGATING.value: (
-        IncidentStatus.OPEN.value, IncidentStatus.CONTAINED.value,
-        IncidentStatus.RESOLVED.value, IncidentStatus.FALSE_POSITIVE.value,
+        IncidentStatus.OPEN.value,
+        IncidentStatus.CONTAINED.value,
+        IncidentStatus.RESOLVED.value,
+        IncidentStatus.FALSE_POSITIVE.value,
     ),
     IncidentStatus.CONTAINED.value: (
-        IncidentStatus.INVESTIGATING.value, IncidentStatus.RESOLVED.value, IncidentStatus.FALSE_POSITIVE.value,
+        IncidentStatus.INVESTIGATING.value,
+        IncidentStatus.RESOLVED.value,
+        IncidentStatus.FALSE_POSITIVE.value,
     ),
     # Reopening sends the incident back to investigation; a resolved incident can also be reclassified.
     IncidentStatus.RESOLVED.value: (IncidentStatus.INVESTIGATING.value, IncidentStatus.FALSE_POSITIVE.value),
@@ -191,8 +236,9 @@ def _member_name(db: Session, org_id: str, user_id: str) -> str | None:
     from app.models import Membership, User
 
     return db.scalar(
-        select(User.name).join(Membership, Membership.user_id == User.id).where(
-            Membership.organization_id == org_id, User.id == user_id, User.is_active.is_(True))
+        select(User.name)
+        .join(Membership, Membership.user_id == User.id)
+        .where(Membership.organization_id == org_id, User.id == user_id, User.is_active.is_(True))
     )
 
 
@@ -202,8 +248,14 @@ def _findings_for_link(db: Session, org_id: str, finding_ids: list[str]) -> list
     wanted = list(dict.fromkeys(finding_ids))
     if not wanted:
         return []
-    rows = {f.id: f for f in db.scalars(select(SecurityFinding).where(
-        SecurityFinding.organization_id == org_id, SecurityFinding.id.in_(wanted)))}
+    rows = {
+        f.id: f
+        for f in db.scalars(
+            select(SecurityFinding).where(
+                SecurityFinding.organization_id == org_id, SecurityFinding.id.in_(wanted)
+            )
+        )
+    }
     missing = [fid for fid in wanted if fid not in rows]
     if missing:
         raise NotFoundError(f"Finding '{missing[0]}' not found", details={"missing": missing})
@@ -235,18 +287,26 @@ def open_incident(
     findings = _findings_for_link(db, org_id, finding_ids)
     taken = [f for f in findings if f.incident_id]
     if taken:
-        owner = db.scalar(select(Incident).where(Incident.organization_id == org_id, Incident.id == taken[0].incident_id))
+        owner = db.scalar(
+            select(Incident).where(Incident.organization_id == org_id, Incident.id == taken[0].incident_id)
+        )
         where = f"incident {incident_key(owner)}" if owner else "another incident"
-        raise ConflictError(f"Finding '{taken[0].title}' is already part of {where}",
-                            details={"finding_ids": [f.id for f in taken]})
+        raise ConflictError(
+            f"Finding '{taken[0].title}' is already part of {where}",
+            details={"finding_ids": [f.id for f in taken]},
+        )
     simulated = {bool(f.is_simulation) for f in findings}
     if len(simulated) > 1:
         raise ConflictError("Simulated and real findings cannot be grouped into one incident")
-    lead = max(findings, key=lambda f: (SEVERITY_RANK.get(f.severity, 0), -f.first_seen_at.timestamp())) \
-        if findings else None
+    lead = (
+        max(findings, key=lambda f: (SEVERITY_RANK.get(f.severity, 0), -f.first_seen_at.timestamp()))
+        if findings
+        else None
+    )
     final = _max_severity(severity, *(f.severity for f in findings))
     incident = create_incident(
-        db, org_id,
+        db,
+        org_id,
         title=clean_title,
         summary=_clean(summary, TEXT_LIMIT) or "",
         severity=final,
@@ -257,19 +317,34 @@ def open_incident(
         is_simulation=simulated.pop() if simulated else False,
     )
     if final != severity:
-        add_activity(db, org_id, incident.id, actor="system", kind="severity_change",
-                     body=f"Severity set to {final} to match the most severe linked finding",
-                     details={"from": severity, "to": final})
+        add_activity(
+            db,
+            org_id,
+            incident.id,
+            actor="system",
+            kind="severity_change",
+            body=f"Severity set to {final} to match the most severe linked finding",
+            details={"from": severity, "to": final},
+        )
     for finding in findings:
-        append_audit(db, org_id, action=INCIDENT_AUDIT_ACTION, actor_type="user", actor_id=actor_id,
-                     target_type="finding", target_id=finding.id,
-                     details={"incident_id": incident.id, "created": True})
+        append_audit(
+            db,
+            org_id,
+            action=INCIDENT_AUDIT_ACTION,
+            actor_type="user",
+            actor_id=actor_id,
+            target_type="finding",
+            target_id=finding.id,
+            details={"incident_id": incident.id, "created": True},
+        )
         notify(db, org_id, "finding.updated", id=finding.id)
     db.flush()
     return incident
 
 
-def link_findings(db: Session, org_id: str, incident_id: str, finding_ids: list[str], *, actor_id: str) -> dict[str, list[str]]:
+def link_findings(
+    db: Session, org_id: str, incident_id: str, finding_ids: list[str], *, actor_id: str
+) -> dict[str, list[str]]:
     """Attach findings to an incident (all or nothing). Returns ``{"linked": [...], "already_linked": [...]}``.
 
     Uses the same rules as linking from Security Intelligence: the incident must be active, a finding
@@ -285,11 +360,16 @@ def link_findings(db: Session, org_id: str, incident_id: str, finding_ids: list[
     for finding in findings:
         if finding.incident_id == incident.id:
             continue
-        link_finding_to_incident(db, org_id, finding.id, incident_id=incident.id, title=None, actor_id=actor_id)
+        link_finding_to_incident(
+            db, org_id, finding.id, incident_id=incident.id, title=None, actor_id=actor_id
+        )
         linked.append(finding.id)
     if linked and incident.primary_session_id is None:
-        lead = max((f for f in findings if f.id in linked and f.session_id),
-                   key=lambda f: SEVERITY_RANK.get(f.severity, 0), default=None)
+        lead = max(
+            (f for f in findings if f.id in linked and f.session_id),
+            key=lambda f: SEVERITY_RANK.get(f.severity, 0),
+            default=None,
+        )
         if lead is not None:
             incident.primary_session_id = lead.session_id
             incident.primary_agent_id = incident.primary_agent_id or lead.agent_id
@@ -327,8 +407,11 @@ def update_incident(
                 details={"from": previous, "to": status, "allowed": allowed_transitions(previous)},
             )
         if status in CLOSED_STATUSES and not text:
-            word = "why this is a false positive" if status == IncidentStatus.FALSE_POSITIVE.value \
+            word = (
+                "why this is a false positive"
+                if status == IncidentStatus.FALSE_POSITIVE.value
                 else "how the incident was resolved"
+            )
             raise ValidationFailedError(f"Explain {word} in the resolution")
         incident.status = status
         if status in CLOSED_STATUSES:
@@ -339,11 +422,20 @@ def update_incident(
             incident.resolution = None
         changes["status"] = {"from": previous, "to": status}
         reason = f" — {text}" if text and status in CLOSED_STATUSES else ""
-        add_activity(db, org_id, incident.id, actor=actor_id, kind="status_change",
-                     body=f"Marked {STATUS_WORDS.get(status, status)}{reason}", details={"from": previous, "to": status})
+        add_activity(
+            db,
+            org_id,
+            incident.id,
+            actor=actor_id,
+            kind="status_change",
+            body=f"Marked {STATUS_WORDS.get(status, status)}{reason}",
+            details={"from": previous, "to": status},
+        )
     elif resolution is not None:
         if incident.status not in CLOSED_STATUSES:
-            raise ConflictError("A resolution can only be recorded when resolving the incident or after it is closed")
+            raise ConflictError(
+                "A resolution can only be recorded when resolving the incident or after it is closed"
+            )
         if not text:
             raise ValidationFailedError("The resolution of a closed incident cannot be empty")
         if text != incident.resolution:
@@ -353,9 +445,15 @@ def update_incident(
 
     if severity is not None and severity != incident.severity:
         changes["severity"] = {"from": incident.severity, "to": severity}
-        add_activity(db, org_id, incident.id, actor=actor_id, kind="severity_change",
-                     body=f"Severity changed from {incident.severity} to {severity}",
-                     details={"from": incident.severity, "to": severity})
+        add_activity(
+            db,
+            org_id,
+            incident.id,
+            actor=actor_id,
+            kind="severity_change",
+            body=f"Severity changed from {incident.severity} to {severity}",
+            details={"from": incident.severity, "to": severity},
+        )
         incident.severity = severity
 
     if assignee_user_id is not _UNSET and assignee_user_id != incident.assignee_user_id:
@@ -363,21 +461,40 @@ def update_incident(
         if assignee_user_id is not None:
             name = _member_name(db, org_id, assignee_user_id)
             if name is None:
-                raise ValidationFailedError("The assignee must be an active member of this organisation",
-                                            details={"assignee_user_id": assignee_user_id})
+                raise ValidationFailedError(
+                    "The assignee must be an active member of this organisation",
+                    details={"assignee_user_id": assignee_user_id},
+                )
         changes["assignee_user_id"] = {"from": incident.assignee_user_id, "to": assignee_user_id}
-        add_activity(db, org_id, incident.id, actor=actor_id, kind="assigned",
-                     body=f"Assigned to {name}" if name else "Unassigned",
-                     details={"from": incident.assignee_user_id, "to": assignee_user_id})
+        add_activity(
+            db,
+            org_id,
+            incident.id,
+            actor=actor_id,
+            kind="assigned",
+            body=f"Assigned to {name}" if name else "Unassigned",
+            details={"from": incident.assignee_user_id, "to": assignee_user_id},
+        )
         incident.assignee_user_id = assignee_user_id
 
     if not changes:
         return incident
     db.flush()
-    action = "incident.status_changed" if "status" in changes else (
-        "incident.assigned" if set(changes) == {"assignee_user_id"} else "incident.updated")
-    append_audit(db, org_id, action=action, actor_type="user", actor_id=actor_id,
-                 target_type="incident", target_id=incident.id, details={"changes": changes})
+    action = (
+        "incident.status_changed"
+        if "status" in changes
+        else ("incident.assigned" if set(changes) == {"assignee_user_id"} else "incident.updated")
+    )
+    append_audit(
+        db,
+        org_id,
+        action=action,
+        actor_type="user",
+        actor_id=actor_id,
+        target_type="incident",
+        target_id=incident.id,
+        details={"changes": changes},
+    )
     notify(db, org_id, "incident.updated", id=incident.id)
     return incident
 
@@ -394,8 +511,15 @@ def add_note(db: Session, org_id: str, incident_id: str, *, body: str, actor_id:
     activity = add_activity(db, org_id, incident.id, actor=actor_id, kind="note", body=text)
     incident.updated_at = utcnow()
     db.flush()
-    append_audit(db, org_id, action="incident.note_added", actor_type="user", actor_id=actor_id,
-                 target_type="incident", target_id=incident.id,
-                 details={"activity_id": activity.id, "length": len(text)})
+    append_audit(
+        db,
+        org_id,
+        action="incident.note_added",
+        actor_type="user",
+        actor_id=actor_id,
+        target_type="incident",
+        target_id=incident.id,
+        details={"activity_id": activity.id, "length": len(text)},
+    )
     notify(db, org_id, "incident.updated", id=incident.id)
     return activity

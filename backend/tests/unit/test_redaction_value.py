@@ -27,10 +27,29 @@ def is_field_placeholder(value: object) -> bool:
 @pytest.mark.parametrize(
     "key",
     [
-        "password", "PASSWD", "db_password", "secret", "client_secret", "token", "access_token",
-        "refresh_token", "api_key", "apiKey", "X-Api-Key", "authorization", "Proxy-Authorization",
-        "cookie", "Set-Cookie", "private_key", "credentials", "session", "sessionid", "githubToken",
-        "AWS_SECRET_ACCESS_KEY", "x-auth-token", "passphrase",
+        "password",
+        "PASSWD",
+        "db_password",
+        "secret",
+        "client_secret",
+        "token",
+        "access_token",
+        "refresh_token",
+        "api_key",
+        "apiKey",
+        "X-Api-Key",
+        "authorization",
+        "Proxy-Authorization",
+        "cookie",
+        "Set-Cookie",
+        "private_key",
+        "credentials",
+        "session",
+        "sessionid",
+        "githubToken",
+        "AWS_SECRET_ACCESS_KEY",
+        "x-auth-token",
+        "passphrase",
     ],
 )
 def test_sensitive_keys_are_fully_redacted(key):
@@ -42,9 +61,24 @@ def test_sensitive_keys_are_fully_redacted(key):
 @pytest.mark.parametrize(
     "key",
     [
-        "session_id", "sessionId", "secret_type", "token_count", "max_tokens", "api_key_id",
-        "aws_access_key_id", "token_type", "password_hint_label", "secret_name", "is_secret", "tokens",
-        "tokenizer", "secretary", "key", "cookie_name", "token_expires_at", "private_key_id",
+        "session_id",
+        "sessionId",
+        "secret_type",
+        "token_count",
+        "max_tokens",
+        "api_key_id",
+        "aws_access_key_id",
+        "token_type",
+        "password_hint_label",
+        "secret_name",
+        "is_secret",
+        "tokens",
+        "tokenizer",
+        "secretary",
+        "key",
+        "cookie_name",
+        "token_expires_at",
+        "private_key_id",
     ],
 )
 def test_metadata_keys_that_mention_secrets_are_preserved(key):
@@ -79,11 +113,17 @@ def test_nested_structures_are_redacted_without_mutating_input():
 
 def test_lists_and_nested_objects_under_credential_keys_inherit_sensitivity():
     redacted, _ = redact_value(
-        {"credentials": {"username": "svc", "value": "abc123def"}, "tokens_list": None, "api_keys": ["k1x", "k2y"]}
+        {
+            "credentials": {"username": "svc", "value": "abc123def"},
+            "tokens_list": None,
+            "api_keys": ["k1x", "k2y"],
+        }
     )
     assert all(is_field_placeholder(v) for v in redacted["credentials"].values())
     assert all(is_field_placeholder(v) for v in redacted["api_keys"])
-    described, _ = redact_value({"api_key": {"id": "key_01", "name": "CI deploy", "scopes": ["ingest"], "raw": "abc"}})
+    described, _ = redact_value(
+        {"api_key": {"id": "key_01", "name": "CI deploy", "scopes": ["ingest"], "raw": "abc"}}
+    )
     assert described["api_key"]["id"] == "key_01" and described["api_key"]["name"] == "CI deploy"
     assert described["api_key"]["scopes"] == ["ingest"] and is_field_placeholder(described["api_key"]["raw"])
     session, _ = redact_value({"session": {"id": "ses_1", "agent": "claude-code"}})

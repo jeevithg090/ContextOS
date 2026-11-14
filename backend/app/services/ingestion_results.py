@@ -38,7 +38,9 @@ def find_invocation(st: PipelineState, tool: Tool | None) -> ToolInvocation | No
     cid = st.env.correlation_id
     if cid:
         found = st.db.scalars(
-            base.where(ToolInvocation.correlation_id == cid).order_by(ToolInvocation.requested_at.desc()).limit(1)
+            base.where(ToolInvocation.correlation_id == cid)
+            .order_by(ToolInvocation.requested_at.desc())
+            .limit(1)
         ).first()
         if found is not None:
             return found
@@ -49,12 +51,17 @@ def find_invocation(st: PipelineState, tool: Tool | None) -> ToolInvocation | No
             ToolInvocation.tool_id == tool.id,
             ToolInvocation.completed_at.is_(None),
             ToolInvocation.correlation_id.is_(None),
-        ).order_by(ToolInvocation.requested_at.desc()).limit(1)
+        )
+        .order_by(ToolInvocation.requested_at.desc())
+        .limit(1)
     ).first()
 
 
 def _first(resources: list[dict[str, Any]], kind: str) -> str | None:
-    return next((str(r["id"]) for r in resources if isinstance(r, dict) and r.get("kind") == kind and r.get("id")), None)
+    return next(
+        (str(r["id"]) for r in resources if isinstance(r, dict) and r.get("kind") == kind and r.get("id")),
+        None,
+    )
 
 
 def result_source(tool: Tool, inv: ToolInvocation) -> tuple[str, str, str]:
@@ -73,7 +80,9 @@ def result_source(tool: Tool, inv: ToolInvocation) -> tuple[str, str, str]:
         return SourceType.MCP_TOOL.value, ident, f"MCP tool {ident}"
     if category == ToolCategory.SEARCH.value:
         args = inv.arguments_redacted or {}
-        query = next((str(args[k]) for k in _QUERY_KEYS if isinstance(args.get(k), str) and args[k].strip()), None)
+        query = next(
+            (str(args[k]) for k in _QUERY_KEYS if isinstance(args.get(k), str) and args[k].strip()), None
+        )
         if query:
             return SourceType.WEB.value, f"search:{query[:300]}", f"Web search: {query[:200]}"
     ident = f"{tool.provider}/{tool.name}"
@@ -108,20 +117,39 @@ def handle_tool_result(st: PipelineState, started: float) -> None:
             error = redact_session_text(st, text) or ""
             inv.error = (error[:1999] + "…" if len(error) > 2000 else error) or "Tool reported a failure"
         else:  # the organisation stores no content text: keep only the fact and the size
-            inv.error = (f"Tool reported a failure ({len(text):,} characters of error output; content previews "
-                         "are disabled)") if text else "Tool reported a failure"
+            inv.error = (
+                (
+                    f"Tool reported a failure ({len(text):,} characters of error output; content previews "
+                    "are disabled)"
+                )
+                if text
+                else "Tool reported a failure"
+            )
     if text:
         source_type, identifier, display = result_source(tool, inv)
-        outcome = record_context(st, ContextInput(
-            source_type=source_type, identifier=identifier, display_name=display, raw_text=text,
-            content_type=content_type if env.content_type == "text/plain" else env.content_type,
-            tool_invocation_id=inv.id,
-            item_metadata={"tool": f"{tool.provider}/{tool.name}", **({"tool_failed": True} if failed else {})},
-            trust_ceiling=mcp_server_ceiling(st, tool.server) if source_type == SourceType.MCP_TOOL.value else None,
-        ))
+        outcome = record_context(
+            st,
+            ContextInput(
+                source_type=source_type,
+                identifier=identifier,
+                display_name=display,
+                raw_text=text,
+                content_type=content_type if env.content_type == "text/plain" else env.content_type,
+                tool_invocation_id=inv.id,
+                item_metadata={
+                    "tool": f"{tool.provider}/{tool.name}",
+                    **({"tool_failed": True} if failed else {}),
+                },
+                trust_ceiling=mcp_server_ceiling(st, tool.server)
+                if source_type == SourceType.MCP_TOOL.value
+                else None,
+            ),
+        )
         inv.result_context_item_id = outcome.item.id
         if not failed:
-            inv.result_summary = preview_of(redact_session_text(st, text) or "") if st.store_previews else None
+            inv.result_summary = (
+                preview_of(redact_session_text(st, text) or "") if st.store_previews else None
+            )
     if not first_seen and not failed and prior_status not in FINISHED:
         _count_late_transfer(st, inv)
     if not first_seen and prior_status in NOT_ALLOWED:
@@ -144,13 +172,19 @@ def _count_late_transfer(st: PipelineState, inv: ToolInvocation) -> None:
     blocked = inv.decision == Decision.DENY and inv.enforcement == "enforced"
     if not (held or blocked):
         return
-    dest = st.db.scalar(select(Destination).where(
-        Destination.organization_id == st.ctx.org_id, Destination.id == inv.destination_id))
+    dest = st.db.scalar(
+        select(Destination).where(
+            Destination.organization_id == st.ctx.org_id, Destination.id == inv.destination_id
+        )
+    )
     if dest is None:
         return
     dest.transfer_count = (dest.transfer_count or 0) + 1
-    sensitive = (inv.sensitive_data_detected or bool(inv.matched_session_fingerprints)
-                 or any(isinstance(r, dict) and r.get("sensitive") for r in inv.resources or []))
+    sensitive = (
+        inv.sensitive_data_detected
+        or bool(inv.matched_session_fingerprints)
+        or any(isinstance(r, dict) and r.get("sensitive") for r in inv.resources or [])
+    )
     if sensitive:
         dest.sensitive_transfer_count = (dest.sensitive_transfer_count or 0) + 1
     st.refs["destination_id"] = dest.id
@@ -167,10 +201,15 @@ def _approved_at_host_prompt(st: PipelineState, inv: ToolInvocation, prior_statu
     the report must name the same approval; anything else is treated as a decision not honoured."""
     meta = st.env.metadata or {}
     prompt = meta.get("host_prompt")
-    return (meta.get("approved_at_host_prompt") is True and isinstance(prompt, dict)
-            and st.integration_kind in HOST_PROMPT_INTEGRATIONS and inv.decision == Decision.REQUIRE_APPROVAL
-            and prior_status in ("pending_approval", "cancelled") and bool(inv.approval_id)
-            and prompt.get("approval_id") == inv.approval_id)
+    return (
+        meta.get("approved_at_host_prompt") is True
+        and isinstance(prompt, dict)
+        and st.integration_kind in HOST_PROMPT_INTEGRATIONS
+        and inv.decision == Decision.REQUIRE_APPROVAL
+        and prior_status in ("pending_approval", "cancelled")
+        and bool(inv.approval_id)
+        and prompt.get("approval_id") == inv.approval_id
+    )
 
 
 def _ran_after_host_prompt(st: PipelineState, inv: ToolInvocation, tool: Tool, prior_status: str) -> None:
@@ -191,8 +230,14 @@ def _ran_after_host_prompt(st: PipelineState, inv: ToolInvocation, tool: Tool, p
         ),
         severity=Severity.LOW.value,
         confidence=0.6,
-        evidence=[{"type": "tool_invocation", "id": inv.id, "excerpt": None,
-                   "detail": f"status before the result: {prior_status}; approval {inv.approval_id}"}],
+        evidence=[
+            {
+                "type": "tool_invocation",
+                "id": inv.id,
+                "excerpt": None,
+                "detail": f"status before the result: {prior_status}; approval {inv.approval_id}",
+            }
+        ],
         tool_invocation_id=inv.id,
         policy_decision_id=inv.policy_decision_id,
         destination_id=inv.destination_id,
@@ -207,17 +252,29 @@ def _decision_not_honoured(st: PipelineState, inv: ToolInvocation, tool: Tool, p
         st,
         category=FindingCategory.POLICY_VIOLATION.value,
         rule_id="CTX-DECISION-NOT-HONOURED",
-        title=f"{tool.name} ran although ContextOS returned {inv.decision} ({prior_status.replace('_', ' ')})"[:400],
+        title=f"{tool.name} ran although ContextOS returned {inv.decision} ({prior_status.replace('_', ' ')})"[
+            :400
+        ],
         explanation=(
             f"ContextOS returned {inv.decision} for this call ({inv.enforcement}), yet the integration reported "
             f"that the tool {'completed' if inv.status == 'completed' else 'ran and failed'}. "
-            + ("The integration is expected to enforce decisions, so this indicates a misconfigured or bypassed "
-               "hook." if enforced else "This integration does not enforce decisions, so the call ran anyway.")
+            + (
+                "The integration is expected to enforce decisions, so this indicates a misconfigured or bypassed "
+                "hook."
+                if enforced
+                else "This integration does not enforce decisions, so the call ran anyway."
+            )
         ),
         severity=Severity.HIGH.value if enforced else Severity.MEDIUM.value,
         confidence=0.9,
-        evidence=[{"type": "tool_invocation", "id": inv.id, "excerpt": None,
-                   "detail": f"status before the result: {prior_status}; decision {inv.decision}"}],
+        evidence=[
+            {
+                "type": "tool_invocation",
+                "id": inv.id,
+                "excerpt": None,
+                "detail": f"status before the result: {prior_status}; decision {inv.decision}",
+            }
+        ],
         tool_invocation_id=inv.id,
         policy_decision_id=inv.policy_decision_id,
         destination_id=inv.destination_id,

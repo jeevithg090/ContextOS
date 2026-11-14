@@ -260,7 +260,9 @@ def redacted_payload(env: EventEnvelope, *, store_previews: bool) -> dict[str, A
     if env.event_type == EventType.MCP_SERVER_CONNECTED and isinstance(data.get("metadata"), dict):
         tools = data["metadata"].get("tools")
         if isinstance(tools, list):
-            data["metadata"]["tools"] = [_tool_listing_digest(t, store_previews) for t in tools[:_MAX_PAYLOAD_ITEMS]]
+            data["metadata"]["tools"] = [
+                _tool_listing_digest(t, store_previews) for t in tools[:_MAX_PAYLOAD_ITEMS]
+            ]
     redacted, _ = redact_value(data)
     return bounded(redacted)
 

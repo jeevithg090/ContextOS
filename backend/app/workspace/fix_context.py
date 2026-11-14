@@ -75,16 +75,22 @@ BUILDERS: dict[str, Builder] = {
 assert tuple(BUILDERS) == SECTION_KEYS
 
 
-def _context(data: FixContextInput, mode: Any, preset: Any, options: Any,
-             section_overrides: Mapping[str, str] | None) -> BuildContext:
+def _context(
+    data: FixContextInput, mode: Any, preset: Any, options: Any, section_overrides: Mapping[str, str] | None
+) -> BuildContext:
     if not isinstance(data, FixContextInput):
         raise ValueError("input must be a FixContextInput")
     overrides = dict(section_overrides or {})
     unknown = sorted(set(overrides) - set(SECTION_KEYS))
     if unknown:
         raise ValueError(f"Unknown section key(s) in overrides: {', '.join(unknown)}")
-    return BuildContext(data=data, mode=get_mode(mode), preset=get_preset(preset), options=coerce_options(options),
-                        section_overrides=overrides)
+    return BuildContext(
+        data=data,
+        mode=get_mode(mode),
+        preset=get_preset(preset),
+        options=coerce_options(options),
+        section_overrides=overrides,
+    )
 
 
 def _build(ctx: BuildContext, key: str) -> Section:
@@ -92,7 +98,9 @@ def _build(ctx: BuildContext, key: str) -> Section:
     BUILDERS[key](ctx, parts)
     extra = ctx.section_overrides.get(key)
     if isinstance(extra, str) and extra.strip():
-        parts.add("instruction", quote(clean(extra, limit=2000)), title="Additional instructions from the template")
+        parts.add(
+            "instruction", quote(clean(extra, limit=2000)), title="Additional instructions from the template"
+        )
     section = parts.build(key, required=key in ctx.mode.required_sections)
     section.content = clean(section.content, limit=len(section.content) + 1)  # defence in depth
     return section

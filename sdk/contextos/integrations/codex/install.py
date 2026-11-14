@@ -109,8 +109,11 @@ def _timeout_for(event: str, pre_tool_timeout: int) -> int:
 
 
 def _desired(event: str, matcher: str | None, base: str, timeout: int) -> dict[str, Any]:
-    handler: dict[str, Any] = {"type": "command", "command": hook_command(base, event),
-                               "timeout": _timeout_for(event, timeout)}
+    handler: dict[str, Any] = {
+        "type": "command",
+        "command": hook_command(base, event),
+        "timeout": _timeout_for(event, timeout),
+    }
     if event == "PreToolUse":
         handler["statusMessage"] = PRE_TOOL_STATUS
     group: dict[str, Any] = {"hooks": [handler]}
@@ -131,7 +134,9 @@ def _load(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"{path} is not valid JSON (line {exc.lineno}); fix it before installing hooks") from None
+        raise ValueError(
+            f"{path} is not valid JSON (line {exc.lineno}); fix it before installing hooks"
+        ) from None
     if not isinstance(data, dict):
         raise ValueError(f"{path} must contain a JSON object")  # noqa: TRY004 - a file-content error, like bad JSON
     return data
@@ -148,8 +153,11 @@ def _hooks_section(data: dict[str, Any], path: Path) -> dict[str, Any]:
 
 
 def _ours(group: Any) -> bool:
-    return isinstance(group, dict) and isinstance(group.get("hooks"), list) and any(
-        is_contextos_hook(h) for h in group["hooks"])
+    return (
+        isinstance(group, dict)
+        and isinstance(group.get("hooks"), list)
+        and any(is_contextos_hook(h) for h in group["hooks"])
+    )
 
 
 def _without_ours(groups: list[Any]) -> list[Any]:
@@ -202,13 +210,21 @@ def _hooks_feature_off(*config_files: Path) -> list[str]:
     off = []
     for path in config_files:
         features = _toml(path).get("features")
-        if isinstance(features, dict) and (features.get("hooks") is False or features.get("codex_hooks") is False):
+        if isinstance(features, dict) and (
+            features.get("hooks") is False or features.get("codex_hooks") is False
+        ):
             off.append(str(path))
     return off
 
 
-def apply_hooks(project_dir: Path, scope: str = "project", command: str | None = None, timeout: int = 60, *,
-                home: Path | None = None) -> InstallReport:
+def apply_hooks(
+    project_dir: Path,
+    scope: str = "project",
+    command: str | None = None,
+    timeout: int = 60,
+    *,
+    home: Path | None = None,
+) -> InstallReport:
     """Merge the ContextOS hooks into the ``hooks.json`` for ``scope``; see the module docstring."""
     if not isinstance(timeout, int) or isinstance(timeout, bool) or not 10 <= timeout <= 600:
         raise ValueError("timeout must be an integer number of seconds between 10 and 600")
@@ -225,10 +241,14 @@ def apply_hooks(project_dir: Path, scope: str = "project", command: str | None =
         ours = [i for i, g in enumerate(groups) if _ours(g)]
         if len(ours) == 1 and groups[ours[0]] == desired:
             continue  # already exactly as wanted: leave the file untouched
-        if ours and groups[ours[0]].get("hooks") and all(is_contextos_hook(h) for h in groups[ours[0]]["hooks"]):
+        if (
+            ours
+            and groups[ours[0]].get("hooks")
+            and all(is_contextos_hook(h) for h in groups[ours[0]]["hooks"])
+        ):
             # Update our group where it is, so the groups after it keep their index (and their trust).
             first = ours[0]
-            hooks[event] = [*_without_ours(groups[:first]), desired, *_without_ours(groups[first + 1:])]
+            hooks[event] = [*_without_ours(groups[:first]), desired, *_without_ours(groups[first + 1 :])]
         else:
             hooks[event] = [*_without_ours(groups), desired]
     new_data = {**data, "hooks": hooks}
@@ -236,19 +256,31 @@ def apply_hooks(project_dir: Path, scope: str = "project", command: str | None =
         report.backup = _backup(path)
         _write(path, new_data)
         report.changed = True
-    report.warnings.append("Codex runs these hooks only after you review and trust them: start Codex in the project "
-                           "and open /hooks (trust is pinned to each hook's hash; review again after any change).")
+    report.warnings.append(
+        "Codex runs these hooks only after you review and trust them: start Codex in the project "
+        "and open /hooks (trust is pinned to each hook's hash; review again after any change)."
+    )
     if scope == "project":
-        report.warnings.append("Project hooks load only when Codex trusts the project (it asks the first time you "
-                               "start it there).")
-    off = _hooks_feature_off(codex_home(home) / "config.toml", Path(project_dir).resolve() / ".codex" / "config.toml")
+        report.warnings.append(
+            "Project hooks load only when Codex trusts the project (it asks the first time you "
+            "start it there)."
+        )
+    off = _hooks_feature_off(
+        codex_home(home) / "config.toml", Path(project_dir).resolve() / ".codex" / "config.toml"
+    )
     if off:
         report.warnings.append(f"[features] hooks = false in {', '.join(off)}: Codex runs no hooks at all")
     return report
 
 
-def install_hooks(project_dir: Path, scope: str = "project", command: str | None = None, timeout: int = 60, *,
-                  home: Path | None = None) -> InstallReport:
+def install_hooks(
+    project_dir: Path,
+    scope: str = "project",
+    command: str | None = None,
+    timeout: int = 60,
+    *,
+    home: Path | None = None,
+) -> InstallReport:
     """Install (or update) the hooks. Idempotent; returns the report (path, backup, warnings)."""
     return apply_hooks(project_dir, scope, command, timeout, home=home)
 
@@ -303,8 +335,14 @@ def login_shell_prints_to_stdout(env: dict[str, str] | None = None, timeout_s: f
     if os.name == "nt" or not Path(shell).is_file():
         return None
     try:
-        done = subprocess.run([shell, "-lc", "true"], capture_output=True, timeout=timeout_s, env=environ,  # noqa: S603 (the user's own login shell, fixed arguments)
-                              stdin=subprocess.DEVNULL, check=False)
+        done = subprocess.run(  # noqa: S603 (the user's own login shell, fixed arguments)
+            [shell, "-lc", "true"],
+            capture_output=True,
+            timeout=timeout_s,
+            env=environ,
+            stdin=subprocess.DEVNULL,
+            check=False,
+        )
     except (OSError, subprocess.TimeoutExpired):
         return None
     return bool(done.stdout.strip())
@@ -372,7 +410,9 @@ def hooks_status(project_dir: Path, *, home: Path | None = None, check_shell: bo
                         else:
                             untrusted.append(scope)
         entry["events"] = sorted(set(entry["events"]))
-        entry["missing"] = [e for e, _, _ in HOOK_EVENTS if e not in entry["events"]] if entry["events"] else []
+        entry["missing"] = (
+            [e for e, _, _ in HOOK_EVENTS if e not in entry["events"]] if entry["events"] else []
+        )
         scopes[scope] = entry
     disabled = _hooks_feature_off(user_config_file, project / ".codex" / "config.toml")
     project_trust = _project_trust(user_config, project)
@@ -382,8 +422,10 @@ def hooks_status(project_dir: Path, *, home: Path | None = None, check_shell: bo
     if disabled:
         detail = f"[features] hooks = false in {', '.join(disabled)}: Codex runs no hooks"
     elif broken and not enforcing:
-        detail = (f"the PreToolUse command in the {', '.join(broken)} hooks.json cannot be started; Codex would run "
-                  "tools unchecked. Re-run `contextos init --codex`")
+        detail = (
+            f"the PreToolUse command in the {', '.join(broken)} hooks.json cannot be started; Codex would run "
+            "tools unchecked. Re-run `contextos init --codex`"
+        )
     elif enforcing:
         missing = sorted({m for s in enforcing for m in scopes[s]["missing"]})
         not_trusted = sorted({e for s in enforcing for e, t in scopes[s]["trust"].items() if t != "trusted"})
@@ -393,8 +435,10 @@ def hooks_status(project_dir: Path, *, home: Path | None = None, check_shell: bo
         if not_trusted:
             detail += f"; not yet trusted in /hooks: {', '.join(not_trusted)}"
     elif untrusted:
-        detail = (f"installed ({', '.join(untrusted)} scope) but Codex has not recorded trust for the PreToolUse hook: "
-                  "Codex skips untrusted hooks. Review and trust them in Codex with /hooks")
+        detail = (
+            f"installed ({', '.join(untrusted)} scope) but Codex has not recorded trust for the PreToolUse hook: "
+            "Codex skips untrusted hooks. Review and trust them in Codex with /hooks"
+        )
     elif any(scopes[s]["events"] for s in SCOPES):
         detail = "observation hooks only: PreToolUse (enforcement) is not installed"
     else:
@@ -402,16 +446,31 @@ def hooks_status(project_dir: Path, *, home: Path | None = None, check_shell: bo
     if "project" in (enforcing + untrusted) and project_trust not in (None, "trusted"):
         notes.append(f"Codex marks {project} as '{project_trust}': project hooks do not load")
     if shell_noise:
-        notes.append("your login shell prints to stdout ($SHELL -lc true): Codex would ignore JSON hook answers, so "
-                     "RESTRICT rewrites would not apply (blocking answers still work)")
+        notes.append(
+            "your login shell prints to stdout ($SHELL -lc true): Codex would ignore JSON hook answers, so "
+            "RESTRICT rewrites would not apply (blocking answers still work)"
+        )
     if notes:
         detail += "; " + "; ".join(notes)
-    error = bool(disabled) or bool(broken and not enforcing) or (
-        "project" in (enforcing + untrusted) and project_trust == "untrusted" and "user" not in enforcing)
-    warning = not error and (bool(notes) or bool(untrusted and not enforcing) or bool(enforcing and (
-        "not yet trusted" in detail or "not installed:" in detail)))
-    return {"installed": installed, "ok": not error, "warning": warning, "detail": detail, "scopes": scopes,
-            "project_trust": project_trust, "login_shell_stdout": shell_noise}
+    error = (
+        bool(disabled)
+        or bool(broken and not enforcing)
+        or ("project" in (enforcing + untrusted) and project_trust == "untrusted" and "user" not in enforcing)
+    )
+    warning = not error and (
+        bool(notes)
+        or bool(untrusted and not enforcing)
+        or bool(enforcing and ("not yet trusted" in detail or "not installed:" in detail))
+    )
+    return {
+        "installed": installed,
+        "ok": not error,
+        "warning": warning,
+        "detail": detail,
+        "scopes": scopes,
+        "project_trust": project_trust,
+        "login_shell_stdout": shell_noise,
+    }
 
 
 __all__ = [

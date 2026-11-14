@@ -39,19 +39,57 @@ def _leaks(engine, canaries: dict[str, str]) -> dict[str, set[str]]:
 
 
 def test_event_identifiers_are_redacted_and_still_match(client, seeded_org, db: Session, engine):
-    c = {t: _canary(t) for t in ("agent", "framewk", "version", "tool", "session", "eventid", "corr", "integr",
-                                 "child", "childs", "fromag")}
-    base = {"agent": {"name": c["agent"], "framework": c["framewk"], "version": c["version"]},
-            "session_id": c["session"], "integration": c["integr"]}
-    request = {**event("tool.requested", tool={"name": c["tool"], "provider": "custom"}, arguments={"q": 1},
-                       correlation_id=c["corr"]), **base, "event_id": c["eventid"]}
+    c = {
+        t: _canary(t)
+        for t in (
+            "agent",
+            "framewk",
+            "version",
+            "tool",
+            "session",
+            "eventid",
+            "corr",
+            "integr",
+            "child",
+            "childs",
+            "fromag",
+        )
+    }
+    base = {
+        "agent": {"name": c["agent"], "framework": c["framewk"], "version": c["version"]},
+        "session_id": c["session"],
+        "integration": c["integr"],
+    }
+    request = {
+        **event(
+            "tool.requested",
+            tool={"name": c["tool"], "provider": "custom"},
+            arguments={"q": 1},
+            correlation_id=c["corr"],
+        ),
+        **base,
+        "event_id": c["eventid"],
+    }
     events = [
         {**event("session.started"), **base},
         request,
-        {**event("tool.completed", tool={"name": c["tool"], "provider": "custom"}, arguments={"q": 1},
-                 result="done", correlation_id=c["corr"]), **base},
-        {**event("agent.delegated", delegation={"child_agent": {"name": c["child"]}, "child_session_id": c["childs"]}),
-         **base},
+        {
+            **event(
+                "tool.completed",
+                tool={"name": c["tool"], "provider": "custom"},
+                arguments={"q": 1},
+                result="done",
+                correlation_id=c["corr"],
+            ),
+            **base,
+        },
+        {
+            **event(
+                "agent.delegated",
+                delegation={"child_agent": {"name": c["child"]}, "child_session_id": c["childs"]},
+            ),
+            **base,
+        },
         {**event("agent.message", message={"from_agent": c["fromag"], "content": "hi"}), **base},
     ]
     results = post_events(client, seeded_org.api_headers, *events)
@@ -65,12 +103,16 @@ def test_event_identifiers_are_redacted_and_still_match(client, seeded_org, db: 
     assert len(sessions) == 2  # every event of the parent landed in ONE session (plus the delegated child)
     parent = next(s for s in sessions if s.parent_session_id is None)
     assert parent.external_session_id.startswith("[REDACTED:github_token:")
-    calls = list(db.scalars(select(ToolInvocation).where(ToolInvocation.organization_id == seeded_org.org_id)))
+    calls = list(
+        db.scalars(select(ToolInvocation).where(ToolInvocation.organization_id == seeded_org.org_id))
+    )
     assert len(calls) == 1 and calls[0].status == "completed"  # the result paired with its request
 
 
 def test_identifier_sanitising_is_deterministic_and_leaves_clean_ids_alone():
-    clean = EventEnvelope.model_validate(event("session.started", session="0b6c2f4e-9a1d-4c3e-8f7a-2d5b6c7e8f90"))
+    clean = EventEnvelope.model_validate(
+        event("session.started", session="0b6c2f4e-9a1d-4c3e-8f7a-2d5b6c7e8f90")
+    )
     assert sanitize_identifiers(clean) is clean
     dirty = EventEnvelope.model_validate({**event("session.started"), "session_id": _canary("same")})
     first, second = sanitize_identifiers(dirty), sanitize_identifiers(dirty)
@@ -81,13 +123,37 @@ def test_identifier_sanitising_is_deterministic_and_leaves_clean_ids_alone():
 def test_typed_names_are_redacted(client, org, db: Session, engine):
     c = {t: _canary(t) for t in ("orgname", "member", "keyname", "agent", "tool", "perm")}
     h = org.user_headers
-    assert client.patch(f"{API}/org/settings", headers=h, json={"name": f"Acme {c['orgname']}"}).status_code == 200
-    assert client.post(f"{API}/org/members", headers=h, json={
-        "email": "member@example.test", "name": c["member"], "role": "viewer",
-        "password": "a-long-enough-password"}).status_code == 201
-    assert client.post(f"{API}/org/api-keys", headers=h, json={"name": c["keyname"], "scopes": ["read"]}).status_code == 201
-    registered = client.post(f"{API}/agents", headers=h, json={
-        "name": c["agent"], "declared_capabilities": {"tools": [{"name": c["tool"]}], "permissions": [c["perm"]]}})
+    assert (
+        client.patch(f"{API}/org/settings", headers=h, json={"name": f"Acme {c['orgname']}"}).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"{API}/org/members",
+            headers=h,
+            json={
+                "email": "member@example.test",
+                "name": c["member"],
+                "role": "viewer",
+                "password": "a-long-enough-password",
+            },
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            f"{API}/org/api-keys", headers=h, json={"name": c["keyname"], "scopes": ["read"]}
+        ).status_code
+        == 201
+    )
+    registered = client.post(
+        f"{API}/agents",
+        headers=h,
+        json={
+            "name": c["agent"],
+            "declared_capabilities": {"tools": [{"name": c["tool"]}], "permissions": [c["perm"]]},
+        },
+    )
     assert registered.status_code == 201, registered.text
     assert c["agent"] not in registered.text
 

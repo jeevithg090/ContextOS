@@ -9,7 +9,9 @@ from typing import Any
 from app.domain.enums import SEVERITY_RANK
 from app.workspace.modes import DEPTH_LIMITS, GenerationOptions, ModeSpec, PresetSpec, may_modify_files
 
-SECURITY_TASK_TYPES = frozenset({"security_vulnerability", "prompt_injection", "agent_misconfiguration", "data_exposure"})
+SECURITY_TASK_TYPES = frozenset(
+    {"security_vulnerability", "prompt_injection", "agent_misconfiguration", "data_exposure"}
+)
 
 
 @dataclass
@@ -43,15 +45,30 @@ class FixContextInput:
     def __post_init__(self) -> None:
         if not isinstance(self.task, Mapping):
             raise ValueError("task must be a mapping of task fields")
-        for name in ("findings", "events", "provenance_paths", "policies", "previous_attempts",
-                     "verification_runs", "context_pack_items", "repo_docs"):
+        for name in (
+            "findings",
+            "events",
+            "provenance_paths",
+            "policies",
+            "previous_attempts",
+            "verification_runs",
+            "context_pack_items",
+            "repo_docs",
+        ):
             value = getattr(self, name)
             if value is None:
                 setattr(self, name, [])
             elif not isinstance(value, (list, tuple)):
                 raise ValueError(f"{name} must be a list")
-        for name in ("findings", "events", "provenance_paths", "policies", "previous_attempts",
-                     "verification_runs", "context_pack_items"):
+        for name in (
+            "findings",
+            "events",
+            "provenance_paths",
+            "policies",
+            "previous_attempts",
+            "verification_runs",
+            "context_pack_items",
+        ):
             if not all(isinstance(x, Mapping) for x in getattr(self, name)):
                 raise ValueError(f"every entry in {name} must be a mapping")
 
@@ -85,14 +102,22 @@ class BuildContext:
         return str(self.task.get("task_type")) in SECURITY_TASK_TYPES or bool(self.data.findings)
 
     def sorted_findings(self) -> list[Mapping[str, Any]]:
-        return sorted(self.data.findings, key=lambda f: (-SEVERITY_RANK.get(str(f.get("severity")), 0),
-                                                          str(f.get("title") or ""), str(f.get("id") or "")))
+        return sorted(
+            self.data.findings,
+            key=lambda f: (
+                -SEVERITY_RANK.get(str(f.get("severity")), 0),
+                str(f.get("title") or ""),
+                str(f.get("id") or ""),
+            ),
+        )
 
     def sorted_events(self) -> list[Mapping[str, Any]]:
         return sorted(self.data.events, key=lambda e: (str(e.get("at") or ""), str(e.get("id") or "")))
 
     def categories(self) -> list[str]:
-        return list(dict.fromkeys(str(f.get("category")) for f in self.sorted_findings() if f.get("category")))
+        return list(
+            dict.fromkeys(str(f.get("category")) for f in self.sorted_findings() if f.get("category"))
+        )
 
 
 def ref(kind: str, record: Mapping[str, Any] | None) -> str | None:

@@ -11,14 +11,31 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 
-_HOME_RE = re.compile(r"^(?:\$HOME|\$\{HOME\}|%USERPROFILE%|%HOMEPATH%|~[A-Za-z0-9_.\-]*)(?=/|$)", re.IGNORECASE)
+_HOME_RE = re.compile(
+    r"^(?:\$HOME|\$\{HOME\}|%USERPROFILE%|%HOMEPATH%|~[A-Za-z0-9_.\-]*)(?=/|$)", re.IGNORECASE
+)
 _USER_DIR_RE = re.compile(r"^(?:[A-Za-z]:)?/(?:users|home)/[^/]+(?=/|$)|^/root(?=/|$)", re.IGNORECASE)
 
-_ENV_SAFE_PARTS = frozenset({"example", "sample", "template", "dist", "defaults", "default", "schema", "tpl", "tmpl", "skel", "stub"})
-_SSH_KEY_NAMES = frozenset({"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "id_ecdsa_sk", "id_ed25519_sk", "identity"})
+_ENV_SAFE_PARTS = frozenset(
+    {"example", "sample", "template", "dist", "defaults", "default", "schema", "tpl", "tmpl", "skel", "stub"}
+)
+_SSH_KEY_NAMES = frozenset(
+    {"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "id_ecdsa_sk", "id_ed25519_sk", "identity"}
+)
 _HISTORY_FILES = frozenset(
-    {".bash_history", ".zsh_history", ".sh_history", ".history", "fish_history", ".python_history",
-     ".psql_history", ".mysql_history", ".node_repl_history", ".rediscli_history", ".sqlite_history"}
+    {
+        ".bash_history",
+        ".zsh_history",
+        ".sh_history",
+        ".history",
+        "fish_history",
+        ".python_history",
+        ".psql_history",
+        ".mysql_history",
+        ".node_repl_history",
+        ".rediscli_history",
+        ".sqlite_history",
+    }
 )
 
 _NAMED_FILES: dict[str, str] = {
@@ -97,7 +114,18 @@ _SSH_FILES: dict[str, str] = {
     "config": "SSH client config — hosts, users and the private keys used for them",
 }
 
-_BROWSER_HINTS = ("chrome", "chromium", "edge", "brave", "vivaldi", "opera", "firefox", "mozilla", "safari", "user data")
+_BROWSER_HINTS = (
+    "chrome",
+    "chromium",
+    "edge",
+    "brave",
+    "vivaldi",
+    "opera",
+    "firefox",
+    "mozilla",
+    "safari",
+    "user data",
+)
 
 
 def _normalize(path: str) -> tuple[str, list[str]]:
@@ -125,7 +153,9 @@ def _env_reason(name: str) -> str | None:
         return None if parts & _ENV_SAFE_PARTS else f"Environment file ({name}) — typically holds secrets"
     if name.endswith(".env") and len(name) > 4:
         stem_parts = set(name[:-4].replace("-", ".").replace("_", ".").split("."))
-        return None if stem_parts & _ENV_SAFE_PARTS else f"Environment file ({name}) — typically holds secrets"
+        return (
+            None if stem_parts & _ENV_SAFE_PARTS else f"Environment file ({name}) — typically holds secrets"
+        )
     return None
 
 
@@ -162,7 +192,11 @@ def _directory_reason(segments: list[str], name: str, low: str) -> str | None:
     if "solana" in dirs and name == "id.json":
         return "Solana keypair"
     if name in {"cookies", "local state"} and any(h in low for h in _BROWSER_HINTS):
-        return "Browser cookie/key store" if name == "cookies" else "Browser key store (decrypts saved passwords)"
+        return (
+            "Browser cookie/key store"
+            if name == "cookies"
+            else "Browser key store (decrypts saved passwords)"
+        )
     if name == "logins.json" and ("firefox" in low or "mozilla" in low):
         return "Firefox saved-password store"
     return None

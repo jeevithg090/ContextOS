@@ -144,20 +144,36 @@ def record_activity(
     return row
 
 
-def audit_task(db: Session, actor: Actor, task: Task, action: str, details: dict[str, Any] | None = None) -> None:
+def audit_task(
+    db: Session, actor: Actor, task: Task, action: str, details: dict[str, Any] | None = None
+) -> None:
     """Audit ``task.<action>`` and queue a ``task.updated`` live notification (ids only)."""
     task.updated_at = utcnow()
     append_audit(
-        db, task.organization_id, action=f"task.{action}", actor_type=actor.type, actor_id=actor.id,
-        target_type="task", target_id=task.id, details={"key": task_key(task), **(details or {})},
+        db,
+        task.organization_id,
+        action=f"task.{action}",
+        actor_type=actor.type,
+        actor_id=actor.id,
+        target_type="task",
+        target_id=task.id,
+        details={"key": task_key(task), **(details or {})},
     )
     notify(db, task.organization_id, "task.updated", id=task.id, board_id=task.board_id)
 
 
-def audit_board(db: Session, actor: Actor, board_id: str, action: str, details: dict[str, Any] | None = None) -> None:
+def audit_board(
+    db: Session, actor: Actor, board_id: str, action: str, details: dict[str, Any] | None = None
+) -> None:
     append_audit(
-        db, actor.org_id, action=f"board.{action}", actor_type=actor.type, actor_id=actor.id,
-        target_type="board", target_id=board_id, details=details or {},
+        db,
+        actor.org_id,
+        action=f"board.{action}",
+        actor_type=actor.type,
+        actor_id=actor.id,
+        target_type="board",
+        target_id=board_id,
+        details=details or {},
     )
     notify(db, actor.org_id, "task.updated", board_id=board_id)
 
@@ -166,16 +182,24 @@ def audit_board(db: Session, actor: Actor, board_id: str, action: str, details: 
 
 
 def board_columns(db: Session, org_id: str, board_id: str) -> list[BoardColumn]:
-    return list(db.scalars(
-        select(BoardColumn)
-        .where(BoardColumn.organization_id == org_id, BoardColumn.board_id == board_id)
-        .order_by(BoardColumn.position, BoardColumn.created_at)
-    ))
+    return list(
+        db.scalars(
+            select(BoardColumn)
+            .where(BoardColumn.organization_id == org_id, BoardColumn.board_id == board_id)
+            .order_by(BoardColumn.position, BoardColumn.created_at)
+        )
+    )
 
 
 def column_task_count(db: Session, column: BoardColumn, *, exclude_task_id: str | None = None) -> int:
-    query = select(func.count()).select_from(Task).where(
-        Task.organization_id == column.organization_id, Task.column_id == column.id, Task.archived_at.is_(None)
+    query = (
+        select(func.count())
+        .select_from(Task)
+        .where(
+            Task.organization_id == column.organization_id,
+            Task.column_id == column.id,
+            Task.archived_at.is_(None),
+        )
     )
     if exclude_task_id:
         query = query.where(Task.id != exclude_task_id)
@@ -189,18 +213,21 @@ def verification_gate(db: Session, column: BoardColumn) -> BoardColumn | None:
     if not column.is_done_column:
         return None
     return db.scalars(
-        select(BoardColumn).where(
+        select(BoardColumn)
+        .where(
             BoardColumn.organization_id == column.organization_id,
             BoardColumn.board_id == column.board_id,
             BoardColumn.requires_verification.is_(True),
             BoardColumn.position < column.position,
-        ).order_by(BoardColumn.position)
+        )
+        .order_by(BoardColumn.position)
     ).first()
 
 
 def verification_block_message(label: str, target: BoardColumn, gate: BoardColumn, status: str) -> str:
     where = (
-        f"'{target.name}' requires it" if gate.id == target.id
+        f"'{target.name}' requires it"
+        if gate.id == target.id
         else f"'{target.name}' comes after the verification gate '{gate.name}' on this board"
     )
     return (
@@ -229,16 +256,23 @@ def check_entry(
     if gate is not None and verification_status != "passed":
         raise ConflictError(
             verification_block_message(label, target, gate, verification_status),
-            details={"reason": "verification_required", "column_id": target.id, "gate_column_id": gate.id,
-                     "verification_status": verification_status},
+            details={
+                "reason": "verification_required",
+                "column_id": target.id,
+                "gate_column_id": gate.id,
+                "verification_status": verification_status,
+            },
         )
     if target.wip_limit is None:
         return False
     # Count under the organisation write lock: concurrent entries are checked one after the other, and
     # the limit is re-read in case it was changed meanwhile.
     lock_org(db, target.organization_id)
-    limit = db.scalar(select(BoardColumn.wip_limit).where(
-        BoardColumn.organization_id == target.organization_id, BoardColumn.id == target.id))
+    limit = db.scalar(
+        select(BoardColumn.wip_limit).where(
+            BoardColumn.organization_id == target.organization_id, BoardColumn.id == target.id
+        )
+    )
     if limit is None:
         return False
     current = column_task_count(db, target, exclude_task_id=task_id)
@@ -249,8 +283,12 @@ def check_entry(
             f"'{target.name}' has a WIP limit of {limit} and already holds {current} task"
             f"{'s' if current != 1 else ''}. Finish or move work out of it first, or override the limit "
             "explicitly (the override is recorded on the task).",
-            details={"reason": "wip_limit_exceeded", "column_id": target.id, "wip_limit": limit,
-                     "task_count": current},
+            details={
+                "reason": "wip_limit_exceeded",
+                "column_id": target.id,
+                "wip_limit": limit,
+                "task_count": current,
+            },
         )
     return True
 
@@ -267,12 +305,18 @@ def apply_done_transition(task: Task, source: BoardColumn | None, target: BoardC
 
 def reposition(db: Session, task: Task, column: BoardColumn, index: int | None) -> None:
     """Place ``task`` at ``index`` within ``column`` (default: end) and renumber the column densely."""
-    siblings = list(db.scalars(
-        select(Task).where(
-            Task.organization_id == column.organization_id, Task.column_id == column.id,
-            Task.archived_at.is_(None), Task.id != task.id,
-        ).order_by(Task.position, Task.number)
-    ))
+    siblings = list(
+        db.scalars(
+            select(Task)
+            .where(
+                Task.organization_id == column.organization_id,
+                Task.column_id == column.id,
+                Task.archived_at.is_(None),
+                Task.id != task.id,
+            )
+            .order_by(Task.position, Task.number)
+        )
+    )
     at = len(siblings) if index is None else max(0, min(index, len(siblings)))
     siblings.insert(at, task)
     for pos, row in enumerate(siblings):

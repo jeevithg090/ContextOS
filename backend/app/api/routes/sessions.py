@@ -48,14 +48,27 @@ def list_sessions(
             return Page[SessionSummaryOut](items=[], total=0, limit=limit, offset=offset)
         agent_id = principal.bound_agent_id
     items, total = sessions_service.list_sessions(
-        db, principal.org_id, agent_id=agent_id, status=status, min_risk=min_risk, trifecta=trifecta,
-        include_simulated=include_simulated, q=q, sort=sort, limit=limit, offset=offset,
+        db,
+        principal.org_id,
+        agent_id=agent_id,
+        status=status,
+        min_risk=min_risk,
+        trifecta=trifecta,
+        include_simulated=include_simulated,
+        q=q,
+        sort=sort,
+        limit=limit,
+        offset=offset,
     )
-    return Page[SessionSummaryOut].model_validate({"items": items, "total": total, "limit": limit, "offset": offset})
+    return Page[SessionSummaryOut].model_validate(
+        {"items": items, "total": total, "limit": limit, "offset": offset}
+    )
 
 
 @router.get("/{session_id}", response_model=SessionDetailOut)
-def get_session(session_id: str, principal: Principal = READ, db: Session = Depends(get_db)) -> SessionDetailOut:
+def get_session(
+    session_id: str, principal: Principal = READ, db: Session = Depends(get_db)
+) -> SessionDetailOut:
     """Session with its risk state (lethal-trifecta conditions and their evidence), parent/child
     sessions and counts."""
     _check_readable(db, principal, session_id)
@@ -67,11 +80,16 @@ def session_timeline(
     session_id: str,
     principal: Principal = READ,
     db: Session = Depends(get_db),
-    invocation_id: str | None = Query(None, max_length=40, description="Return the page containing this tool call"),
+    invocation_id: str | None = Query(
+        None, max_length=40, description="Return the page containing this tool call"
+    ),
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ) -> TimelinePage:
     """Events in server sequence order with plain-language titles and links to the records they produced."""
     _check_readable(db, principal, session_id)
-    return TimelinePage.model_validate(sessions_service.session_timeline(
-        db, principal.org_id, session_id, limit=limit, offset=offset, focus_invocation_id=invocation_id))
+    return TimelinePage.model_validate(
+        sessions_service.session_timeline(
+            db, principal.org_id, session_id, limit=limit, offset=offset, focus_invocation_id=invocation_id
+        )
+    )

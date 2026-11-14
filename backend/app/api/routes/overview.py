@@ -22,8 +22,10 @@ router = APIRouter(prefix="/overview", tags=["overview"])
 
 def _org_wide_reader(principal: Principal = Depends(require(Permission.READ.value))) -> Principal:
     if principal.bound_agent_id:
-        raise PermissionDeniedError("This API key is bound to one agent; the organisation overview needs an unbound "
-                                    "read key or a signed-in member")
+        raise PermissionDeniedError(
+            "This API key is bound to one agent; the organisation overview needs an unbound "
+            "read key or a signed-in member"
+        )
     return principal
 
 
@@ -41,7 +43,9 @@ def nav_counts(principal: Principal = READ, db: Session = Depends(get_db)) -> Na
 def get_overview(
     principal: Principal = READ,
     db: Session = Depends(get_db),
-    window: str = Query("24h", pattern="^(24h|7d|30d)$", description="Hourly buckets for 24h, daily otherwise"),
+    window: str = Query(
+        "24h", pattern="^(24h|7d|30d)$", description="Hourly buckets for 24h, daily otherwise"
+    ),
     include_simulated: bool = Query(False, description="Count Simulation Lab rows (each item is labelled)"),
 ) -> OverviewOut:
     """Current posture (agents, sessions, lethal-trifecta sessions, source trust, open findings,
@@ -49,4 +53,5 @@ def get_overview(
     decision series, the riskiest agents, what needs attention, recently denied or paused tool calls,
     integration health, recent audit activity and onboarding progress."""
     return OverviewOut.model_validate(
-        overview_service.overview(db, principal.org_id, window=window, include_simulated=include_simulated))
+        overview_service.overview(db, principal.org_id, window=window, include_simulated=include_simulated)
+    )

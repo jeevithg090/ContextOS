@@ -71,7 +71,9 @@ def test_blocked_has_no_capabilities() -> None:
 
 def test_manual_classification_wins_over_rules() -> None:
     rules = [rule("r1", "*.example.com", "EXTERNAL", match_field="domain")]
-    history = SourceHistory(manually_classified=True, current_level="APPROVED", current_capabilities=("read",))
+    history = SourceHistory(
+        manually_classified=True, current_level="APPROVED", current_capabilities=("read",)
+    )
     result = assess_source("web", "https://example.com", rules=rules, history=history)
     assert result.level == "APPROVED" and result.matched_rule_id is None
     assert "manually" in result.reasons[0]
@@ -104,7 +106,9 @@ def test_trusted_inheritance_passes_through() -> None:
 
 def test_rule_cannot_make_output_more_trusted_than_its_inputs() -> None:
     rules = [rule("r1", "*", "TRUSTED", source_type="agent_output")]
-    result = assess_source("agent_output", "helper", rules=rules, history=SourceHistory(inherited_level="EXTERNAL"))
+    result = assess_source(
+        "agent_output", "helper", rules=rules, history=SourceHistory(inherited_level="EXTERNAL")
+    )
     assert result.level == "EXTERNAL" and result.capabilities == ["read"]
     assert any("capped at EXTERNAL" in r for r in result.reasons)
 

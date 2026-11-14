@@ -33,7 +33,7 @@ def readme(payload: str) -> str:
 
 
 _PAGE_HEAD = (
-    "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><title>Release notes 4.2</title></head>\n"
+    '<!doctype html>\n<html lang="en">\n<head><meta charset="utf-8"><title>Release notes 4.2</title></head>\n'
     "<body>\n<h1>Release notes 4.2</h1>\n"
     "<p>This release improves start-up time and fixes two crashes in the importer.</p>\n"
 )
@@ -45,7 +45,7 @@ def html_visible(payload: str) -> str:
 
 
 def html_display_none(payload: str) -> str:
-    return f"{_PAGE_HEAD}<div class=\"promo\" style=\"display:none\">{payload}</div>\n{_PAGE_TAIL}"
+    return f'{_PAGE_HEAD}<div class="promo" style="display:none">{payload}</div>\n{_PAGE_TAIL}'
 
 
 def html_comment(payload: str) -> str:
@@ -92,7 +92,7 @@ def code_comment(payload: str) -> str:
         "logger = logging.getLogger(__name__)\n\n\n"
         f"{comment}\n"
         "def normalise_ids(rows):\n"
-        "    \"\"\"Return the rows with canonical lower-case ids.\"\"\"\n"
+        '    """Return the rows with canonical lower-case ids."""\n'
         "    return [row.strip().lower() for row in rows]\n"
     )
 

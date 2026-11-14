@@ -53,29 +53,70 @@ class PackProfile:
 
 PROFILES: dict[str, PackProfile] = {
     "minimal": PackProfile(
-        "minimal", "Minimal", "Project instructions, related records and the most relevant files only.",
-        2_000, ("CLAUDE.md", "AGENTS.md"), (), 600, 5, 0, False,
+        "minimal",
+        "Minimal",
+        "Project instructions, related records and the most relevant files only.",
+        2_000,
+        ("CLAUDE.md", "AGENTS.md"),
+        (),
+        600,
+        5,
+        0,
+        False,
     ),
     "standard": PackProfile(
-        "standard", "Standard", "Instructions, architecture, related files and their tests.",
-        8_000, _INSTRUCTIONS, ("docs/ARCHITECTURE.md",), 2_500, 15, 2, True,
+        "standard",
+        "Standard",
+        "Instructions, architecture, related files and their tests.",
+        8_000,
+        _INSTRUCTIONS,
+        ("docs/ARCHITECTURE.md",),
+        2_500,
+        15,
+        2,
+        True,
     ),
     "deep": PackProfile(
-        "deep", "Deep", "Adds the data model and API specification for cross-cutting changes.",
-        20_000, _INSTRUCTIONS, ("docs/ARCHITECTURE.md", "docs/DATA_MODEL.md", "docs/API_SPECIFICATION.md"),
-        5_000, 30, 3, True,
+        "deep",
+        "Deep",
+        "Adds the data model and API specification for cross-cutting changes.",
+        20_000,
+        _INSTRUCTIONS,
+        ("docs/ARCHITECTURE.md", "docs/DATA_MODEL.md", "docs/API_SPECIFICATION.md"),
+        5_000,
+        30,
+        3,
+        True,
     ),
     "security_critical": PackProfile(
-        "security_critical", "Security critical", "Security and threat models are prioritised alongside instructions.",
-        24_000, _INSTRUCTIONS + ("docs/SECURITY_MODEL.md", "docs/THREAT_MODEL.md"),
-        ("docs/ARCHITECTURE.md", "docs/DATA_MODEL.md"), 5_000, 30, 3, True,
+        "security_critical",
+        "Security critical",
+        "Security and threat models are prioritised alongside instructions.",
+        24_000,
+        _INSTRUCTIONS + ("docs/SECURITY_MODEL.md", "docs/THREAT_MODEL.md"),
+        ("docs/ARCHITECTURE.md", "docs/DATA_MODEL.md"),
+        5_000,
+        30,
+        3,
+        True,
     ),
     "full": PackProfile(
-        "full", "Full", "Every standard project document plus related files, tests and history.",
-        60_000, _INSTRUCTIONS,
-        ("docs/ARCHITECTURE.md", "docs/SECURITY_MODEL.md", "docs/THREAT_MODEL.md", "docs/DATA_MODEL.md",
-         "docs/API_SPECIFICATION.md"),
-        12_000, 50, 3, True,
+        "full",
+        "Full",
+        "Every standard project document plus related files, tests and history.",
+        60_000,
+        _INSTRUCTIONS,
+        (
+            "docs/ARCHITECTURE.md",
+            "docs/SECURITY_MODEL.md",
+            "docs/THREAT_MODEL.md",
+            "docs/DATA_MODEL.md",
+            "docs/API_SPECIFICATION.md",
+        ),
+        12_000,
+        50,
+        3,
+        True,
     ),
 }
 
@@ -91,15 +132,32 @@ def get_profile(key: str) -> PackProfile:
 
 def describe_profiles() -> list[dict[str, Any]]:
     return [
-        {"key": p.key, "label": p.label, "description": p.description, "token_budget": p.token_budget,
-         "documents": list(p.priority_docs + p.supporting_docs), "includes_tests": p.tests_per_file > 0,
-         "includes_git_history": p.include_git}
+        {
+            "key": p.key,
+            "label": p.label,
+            "description": p.description,
+            "token_budget": p.token_budget,
+            "documents": list(p.priority_docs + p.supporting_docs),
+            "includes_tests": p.tests_per_file > 0,
+            "includes_git_history": p.include_git,
+        }
         for p in PROFILES.values()
     ]
 
 
-def _item(kind: str, ref: str, *, title: str, category: str, reason: str, verified: bool, status: str,
-          origin: str, priority: int, content: str | None = None) -> dict[str, Any]:
+def _item(
+    kind: str,
+    ref: str,
+    *,
+    title: str,
+    category: str,
+    reason: str,
+    verified: bool,
+    status: str,
+    origin: str,
+    priority: int,
+    content: str | None = None,
+) -> dict[str, Any]:
     return {
         "key": f"{kind}:{ref}",
         "kind": kind,
@@ -119,28 +177,74 @@ def _item(kind: str, ref: str, *, title: str, category: str, reason: str, verifi
     }
 
 
-def _file_item(root: Path | None, raw: object, *, kind_hint: str | None, origin: str, priority: int,
-               reason: str, title: str | None = None) -> dict[str, Any]:
+def _file_item(
+    root: Path | None,
+    raw: object,
+    *,
+    kind_hint: str | None,
+    origin: str,
+    priority: int,
+    reason: str,
+    title: str | None = None,
+) -> dict[str, Any]:
     res = rf.resolve_repo_path(root, raw)
     kind = kind_hint or _kind_for(res.rel)
     name = title or DOC_TITLES.get(res.rel) or PurePosixPath(res.rel).name or res.rel
     common: dict[str, Any] = {"title": name, "origin": origin, "priority": priority}
     if res.status == "sensitive":
-        return _item(kind, res.rel, category="assumption", verified=False, status="excluded_sensitive",
-                     reason=f"Excluded: {res.reason}. Sensitive files are never read.", **common)
+        return _item(
+            kind,
+            res.rel,
+            category="assumption",
+            verified=False,
+            status="excluded_sensitive",
+            reason=f"Excluded: {res.reason}. Sensitive files are never read.",
+            **common,
+        )
     if res.status == "rejected":
-        return _item(kind, res.rel, category="assumption", verified=False, status="rejected",
-                     reason=f"Rejected: {res.reason}", **common)
+        return _item(
+            kind,
+            res.rel,
+            category="assumption",
+            verified=False,
+            status="rejected",
+            reason=f"Rejected: {res.reason}",
+            **common,
+        )
     if res.status in ("missing", "unverified"):
-        return _item(kind, res.rel, category="assumption", verified=False, status=res.status, reason=res.reason, **common)
+        return _item(
+            kind,
+            res.rel,
+            category="assumption",
+            verified=False,
+            status=res.status,
+            reason=res.reason,
+            **common,
+        )
     if res.status == "directory":
-        return _item(kind, res.rel, category="fact", verified=True, status="reference",
-                     reason=f"{reason} Directory; list the specific files you need.", **common)
+        return _item(
+            kind,
+            res.rel,
+            category="fact",
+            verified=True,
+            status="reference",
+            reason=f"{reason} Directory; list the specific files you need.",
+            **common,
+        )
     if res.status == "not_regular":
-        return _item(kind, res.rel, category="fact", verified=True, status="skipped", reason=res.reason, **common)
+        return _item(
+            kind, res.rel, category="fact", verified=True, status="skipped", reason=res.reason, **common
+        )
     if res.abs_path is None:  # resolve_repo_path always sets it for "ok"; never read an unresolved path
-        return _item(kind, res.rel, category="assumption", verified=False, status="rejected",
-                     reason="Rejected: path could not be resolved.", **common)
+        return _item(
+            kind,
+            res.rel,
+            category="assumption",
+            verified=False,
+            status="rejected",
+            reason="Rejected: path could not be resolved.",
+            **common,
+        )
     status, text = rf.read_text_file(res.abs_path)
     if status != "ok" or text is None:
         why = {
@@ -151,10 +255,25 @@ def _file_item(root: Path | None, raw: object, *, kind_hint: str | None, origin:
         return _item(kind, res.rel, category="fact", verified=True, status="skipped", reason=why, **common)
     content = clean(text, limit=len(text) + 1) if text.strip() else ""
     if not content:
-        return _item(kind, res.rel, category="fact", verified=True, status="reference",
-                     reason=f"{reason} File is empty.", **common)
-    return _item(kind, res.rel, category="fact", verified=True, status="candidate", reason=reason,
-                 content=content, **common)
+        return _item(
+            kind,
+            res.rel,
+            category="fact",
+            verified=True,
+            status="reference",
+            reason=f"{reason} File is empty.",
+            **common,
+        )
+    return _item(
+        kind,
+        res.rel,
+        category="fact",
+        verified=True,
+        status="candidate",
+        reason=reason,
+        content=content,
+        **common,
+    )
 
 
 def _kind_for(rel: str) -> str:
@@ -178,15 +297,32 @@ def _record_item(record: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError(f"Invalid record category {category!r}")
     body = record.get("summary") or record.get("excerpt") or ""
     content = clean(body, limit=_RECORD_EXCERPT_CHARS)
-    return _item(kind, inline(ref, 120), title=inline(record.get("title") or ref, 200), category=category,
-                 reason=inline(record.get("reason") or "Linked ContextOS record.", 300),
-                 verified=kind != "note", status="candidate" if content else "reference", origin="record",
-                 priority=_P_RECORD, content=content or None)
+    return _item(
+        kind,
+        inline(ref, 120),
+        title=inline(record.get("title") or ref, 200),
+        category=category,
+        reason=inline(record.get("reason") or "Linked ContextOS record.", 300),
+        verified=kind != "note",
+        status="candidate" if content else "reference",
+        origin="record",
+        priority=_P_RECORD,
+        content=content or None,
+    )
 
 
 def _note(ref: str, title: str, reason: str) -> dict[str, Any]:
-    return _item("note", ref, title=title, category="assumption", reason=reason, verified=False, status="note",
-                 origin="system", priority=_P_GIT)
+    return _item(
+        "note",
+        ref,
+        title=title,
+        category="assumption",
+        reason=reason,
+        verified=False,
+        status="note",
+        origin="system",
+        priority=_P_GIT,
+    )
 
 
 def _apply_budget(items: list[dict[str, Any]], profile: PackProfile) -> int:
@@ -211,7 +347,9 @@ def _apply_budget(items: list[dict[str, Any]], profile: PackProfile) -> int:
             continue
         remaining -= cost
         reason = item["reason"] + (" Excerpt truncated to fit the token budget." if truncated else "")
-        item.update(status="included", included=True, token_estimate=cost, excerpt=excerpt, reason=reason.strip())
+        item.update(
+            status="included", included=True, token_estimate=cost, excerpt=excerpt, reason=reason.strip()
+        )
     return profile.token_budget - remaining
 
 
@@ -241,40 +379,81 @@ def build_context_pack(
             if not (root / doc).exists():
                 continue  # profile documents are optional; absent ones are simply not part of this repo
             tier = _P_INSTRUCTION_DOC if doc in spec.priority_docs else _P_SUPPORT_DOC
-            add(_file_item(root, doc, kind_hint="doc", origin="profile", priority=tier,
-                           reason=f"Selected by the '{spec.key}' profile."))
+            add(
+                _file_item(
+                    root,
+                    doc,
+                    kind_hint="doc",
+                    origin="profile",
+                    priority=tier,
+                    reason=f"Selected by the '{spec.key}' profile.",
+                )
+            )
 
     unique_related = list(dict.fromkeys(f for f in related_files if isinstance(f, str)))
     accepted = unique_related[: spec.max_related_files]
     related_items = [
-        _file_item(root, raw, kind_hint=None, origin="related_file", priority=_P_RELATED,
-                   reason="Listed as a related file on the task.")
+        _file_item(
+            root,
+            raw,
+            kind_hint=None,
+            origin="related_file",
+            priority=_P_RELATED,
+            reason="Listed as a related file on the task.",
+        )
         for raw in accepted
     ]
     for item in related_items:
         add(item)
     if len(unique_related) > len(accepted):
-        add(_note("related_files_limit", "Some related files were not processed",
-                  f"{len(unique_related) - len(accepted)} related file(s) beyond the '{spec.key}' profile limit of "
-                  f"{spec.max_related_files} were not processed."))
+        add(
+            _note(
+                "related_files_limit",
+                "Some related files were not processed",
+                f"{len(unique_related) - len(accepted)} related file(s) beyond the '{spec.key}' profile limit of "
+                f"{spec.max_related_files} were not processed.",
+            )
+        )
 
-    verified_sources = [i["ref"] for i in related_items
-                        if i["verified"] and i["kind"] == "source_file" and i["status"] != "reference"]
+    verified_sources = [
+        i["ref"]
+        for i in related_items
+        if i["verified"] and i["kind"] == "source_file" and i["status"] != "reference"
+    ]
     if root is not None and spec.tests_per_file > 0 and verified_sources:
         for source, tests in rf.discover_related_tests(root, verified_sources, spec.tests_per_file).items():
             for test in tests:
                 if test in seen:
                     continue
-                add(_file_item(root, test, kind_hint="test_file", origin="discovered", priority=_P_TEST,
-                               reason=f"Test whose filename matches {source}; likely related (not proven coverage)."))
+                add(
+                    _file_item(
+                        root,
+                        test,
+                        kind_hint="test_file",
+                        origin="discovered",
+                        priority=_P_TEST,
+                        reason=f"Test whose filename matches {source}; likely related (not proven coverage).",
+                    )
+                )
 
     if root is not None and include_git and spec.include_git:
         verified_files = [i["ref"] for i in related_items if i["verified"] and i["kind"] != "note"]
         ok, output = rf.git_recent_history(root, verified_files)
         if ok:
-            add(_item("git_history", "recent", title="Recent commits touching the related files", category="evidence",
-                      reason="Output of git log -n 10 for the verified related files.", verified=True,
-                      status="candidate", origin="git", priority=_P_GIT, content=output))
+            add(
+                _item(
+                    "git_history",
+                    "recent",
+                    title="Recent commits touching the related files",
+                    category="evidence",
+                    reason="Output of git log -n 10 for the verified related files.",
+                    verified=True,
+                    status="candidate",
+                    origin="git",
+                    priority=_P_GIT,
+                    content=output,
+                )
+            )
         elif verified_files:
             add(_note("git_history", "Git history unavailable", output))
 
@@ -284,18 +463,28 @@ def build_context_pack(
 
 def _resolve_root(repo_root: str | None, items: list[dict[str, Any]]) -> Path | None:
     if repo_root is None:
-        items.append(_note("repository", "No repository connected",
-                           "No repository root is configured, so documents and source files were not read "
-                           "and related paths could not be verified."))
+        items.append(
+            _note(
+                "repository",
+                "No repository connected",
+                "No repository root is configured, so documents and source files were not read "
+                "and related paths could not be verified.",
+            )
+        )
         return None
     try:
         root = Path(repo_root).resolve(strict=True)
     except (OSError, RuntimeError):
         root = None
     if root is None or not root.is_dir():
-        items.append(_note("repository", "Repository not accessible",
-                           "The configured repository root does not exist or is not a directory; "
-                           "related paths could not be verified."))
+        items.append(
+            _note(
+                "repository",
+                "Repository not accessible",
+                "The configured repository root does not exist or is not a directory; "
+                "related paths could not be verified.",
+            )
+        )
         return None
     return root
 

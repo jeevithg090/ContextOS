@@ -73,26 +73,42 @@ def list_agents(
     """Agent inventory with session, finding and tool counts. Simulation Lab agents are hidden unless
     ``include_simulated`` is true (``facets.simulated`` says how many exist)."""
     items, total, facets = agents_service.list_agents(
-        db, principal.org_id, q=q, environment=environment, framework=framework, status=status,
-        include_simulated=include_simulated, sort=sort, limit=limit, offset=offset,
+        db,
+        principal.org_id,
+        q=q,
+        environment=environment,
+        framework=framework,
+        status=status,
+        include_simulated=include_simulated,
+        sort=sort,
+        limit=limit,
+        offset=offset,
         only_agent_id=principal.bound_agent_id,
     )
-    return AgentPage.model_validate({"items": items, "total": total, "limit": limit, "offset": offset, "facets": facets})
+    return AgentPage.model_validate(
+        {"items": items, "total": total, "limit": limit, "offset": offset, "facets": facets}
+    )
 
 
 @router.post("", response_model=AgentDetailOut, status_code=201)
-def register_agent(body: AgentCreate, principal: Principal = WRITE, db: Session = Depends(get_db)) -> AgentDetailOut:
+def register_agent(
+    body: AgentCreate, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> AgentDetailOut:
     """Pre-register an agent with its declared tools. Integrations reporting the same name attach to it."""
     agent = agents_service.create_agent(db, principal.org_id, _actor(principal), body.model_dump(mode="json"))
     return AgentDetailOut.model_validate(agents_service.agent_detail(db, principal.org_id, agent))
 
 
 @router.get("/graph", response_model=AgentGraphOut)
-def agent_graph(principal: Principal = Depends(require_org_wide(Permission.READ.value)), db: Session = Depends(get_db),
-                include_simulated: bool = False) -> AgentGraphOut:
+def agent_graph(
+    principal: Principal = Depends(require_org_wide(Permission.READ.value)),
+    db: Session = Depends(get_db),
+    include_simulated: bool = False,
+) -> AgentGraphOut:
     """Agents and the delegation/messaging relationships observed between them."""
     return AgentGraphOut.model_validate(
-        agents_service.agent_graph(db, principal.org_id, include_simulated=include_simulated))
+        agents_service.agent_graph(db, principal.org_id, include_simulated=include_simulated)
+    )
 
 
 @router.get("/{agent_id}", response_model=AgentDetailOut)
@@ -102,12 +118,19 @@ def get_agent(agent_id: str, principal: Principal = READ, db: Session = Depends(
 
 
 @router.patch("/{agent_id}", response_model=AgentDetailOut)
-def update_agent(agent_id: str, body: AgentPatch, principal: Principal = WRITE,
-                 db: Session = Depends(get_db)) -> AgentDetailOut:
+def update_agent(
+    agent_id: str, body: AgentPatch, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> AgentDetailOut:
     agent = _agent(db, principal.org_id, agent_id)
     changes = body.model_dump(mode="json", exclude_unset=True)
-    agent = agents_service.update_agent(db, principal.org_id, _actor(principal), agent, changes,
-                                        may_manage_policy=principal.has(Permission.POLICY_MANAGE.value))
+    agent = agents_service.update_agent(
+        db,
+        principal.org_id,
+        _actor(principal),
+        agent,
+        changes,
+        may_manage_policy=principal.has(Permission.POLICY_MANAGE.value),
+    )
     return AgentDetailOut.model_validate(agents_service.agent_detail(db, principal.org_id, agent))
 
 
@@ -123,10 +146,18 @@ def agent_sessions(
 ) -> Page[SessionSummaryOut]:
     agent = _readable_agent(db, principal, agent_id)
     items, total = sessions_service.list_sessions(
-        db, principal.org_id, agent_id=agent.id, status=status, include_simulated=True, sort=sort,
-        limit=limit, offset=offset,
+        db,
+        principal.org_id,
+        agent_id=agent.id,
+        status=status,
+        include_simulated=True,
+        sort=sort,
+        limit=limit,
+        offset=offset,
     )
-    return Page[SessionSummaryOut].model_validate({"items": items, "total": total, "limit": limit, "offset": offset})
+    return Page[SessionSummaryOut].model_validate(
+        {"items": items, "total": total, "limit": limit, "offset": offset}
+    )
 
 
 @router.get("/{agent_id}/tools", response_model=Page[AgentToolOut])
@@ -142,11 +173,14 @@ def agent_tools(
     agent = _readable_agent(db, principal, agent_id)
     tools = agents_service.agent_tools(db, principal.org_id, agent)
     return Page[AgentToolOut].model_validate(
-        {"items": tools[offset : offset + limit], "total": len(tools), "limit": limit, "offset": offset})
+        {"items": tools[offset : offset + limit], "total": len(tools), "limit": limit, "offset": offset}
+    )
 
 
 @router.get("/{agent_id}/posture", response_model=AgentPostureOut)
-def agent_posture(agent_id: str, principal: Principal = READ, db: Session = Depends(get_db)) -> AgentPostureOut:
+def agent_posture(
+    agent_id: str, principal: Principal = READ, db: Session = Depends(get_db)
+) -> AgentPostureOut:
     """Explainable 0-100 posture (higher is better), computed now from persisted configuration and activity."""
     agent = _readable_agent(db, principal, agent_id)
     return AgentPostureOut.model_validate(agents_service.agent_posture(db, principal.org_id, agent))

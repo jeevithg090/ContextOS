@@ -94,7 +94,9 @@ def _normalise_edge(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     edge["relation"] = str(raw.get("relation") or UNSPECIFIED_RELATION)
     edge["confidence"] = str(raw.get("confidence") or DEFAULT_CONFIDENCE).lower()
     edge_id = raw.get("id")
-    edge["id"] = str(edge_id) if edge_id not in (None, "") else f"{edge['src']}->{edge['dst']}:{edge['relation']}"
+    edge["id"] = (
+        str(edge_id) if edge_id not in (None, "") else f"{edge['src']}->{edge['dst']}:{edge['relation']}"
+    )
     return edge
 
 

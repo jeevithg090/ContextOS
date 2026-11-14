@@ -17,8 +17,15 @@ KEY = "ctxk_abcdefghijklmnopqrstuvwxyz0123456789"
 def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     h = tmp_path / "home"
     monkeypatch.setenv("CONTEXTOS_HOME", str(h))
-    for var in ("CONTEXTOS_URL", "CONTEXTOS_API_KEY", "CONTEXTOS_AGENT_NAME", "CONTEXTOS_FAIL_MODE",
-                "CONTEXTOS_TIMEOUT_S", "CONTEXTOS_APPROVAL_TIMEOUT_S", "CONTEXTOS_ENVIRONMENT"):
+    for var in (
+        "CONTEXTOS_URL",
+        "CONTEXTOS_API_KEY",
+        "CONTEXTOS_AGENT_NAME",
+        "CONTEXTOS_FAIL_MODE",
+        "CONTEXTOS_TIMEOUT_S",
+        "CONTEXTOS_APPROVAL_TIMEOUT_S",
+        "CONTEXTOS_ENVIRONMENT",
+    ):
         monkeypatch.delenv(var, raising=False)
     return h
 
@@ -39,7 +46,10 @@ def test_precedence_env_over_project_over_user(home: Path, tmp_path: Path) -> No
     project = tmp_path / "repo"
     nested = project / "src" / "pkg"
     nested.mkdir(parents=True)
-    _write(home / "config.json", {"url": "http://user:1", "api_key": KEY, "agent_name": "user-agent", "fail_mode": "ask"})
+    _write(
+        home / "config.json",
+        {"url": "http://user:1", "api_key": KEY, "agent_name": "user-agent", "fail_mode": "ask"},
+    )
     _write(project / ".contextos" / "config.json", {"url": "http://project:2", "agent_name": "project-agent"})
 
     cfg = load_config(nested, env={"CONTEXTOS_AGENT_NAME": "env-agent"})

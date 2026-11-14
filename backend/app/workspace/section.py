@@ -15,13 +15,34 @@ from typing import Any
 
 from app.workspace.modes import SECTION_KEYS
 
-SECTION_KINDS: tuple[str, ...] = ("fact", "evidence", "assumption", "hypothesis", "recommendation", "instruction")
+SECTION_KINDS: tuple[str, ...] = (
+    "fact",
+    "evidence",
+    "assumption",
+    "hypothesis",
+    "recommendation",
+    "instruction",
+)
 
 # Render order of parts inside a mixed section.
-PART_ORDER: tuple[str, ...] = ("fact", "evidence", "assumption", "hypothesis", "recommendation", "instruction")
+PART_ORDER: tuple[str, ...] = (
+    "fact",
+    "evidence",
+    "assumption",
+    "hypothesis",
+    "recommendation",
+    "instruction",
+)
 
 # Least certain wins when a section mixes kinds.
-_UNCERTAINTY = {"fact": 0, "evidence": 1, "instruction": 2, "recommendation": 3, "assumption": 4, "hypothesis": 5}
+_UNCERTAINTY = {
+    "fact": 0,
+    "evidence": 1,
+    "instruction": 2,
+    "recommendation": 3,
+    "assumption": 4,
+    "hypothesis": 5,
+}
 
 SUBHEADINGS: dict[str, str] = {
     "fact": "Confirmed facts",
@@ -146,5 +167,12 @@ class Parts:
                 chunks.append(f"### {heading}\n\n" + "\n\n".join(part.blocks))
             content = "\n\n".join(chunks)
         kind = max(kinds, key=lambda k: _UNCERTAINTY[k])
-        return Section(key=key, title=SECTION_TITLES[key], content=content, kind=kind,
-                       sources=list(self.sources), kinds=kinds, required=required)
+        return Section(
+            key=key,
+            title=SECTION_TITLES[key],
+            content=content,
+            kind=kind,
+            sources=list(self.sources),
+            kinds=kinds,
+            required=required,
+        )

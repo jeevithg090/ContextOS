@@ -58,8 +58,15 @@ MAX_DECIDE_BYTES = 500_000  # the server rejects events above 512 kB
 MAX_REASON_CHARS = 1_800
 # Tools whose file access is not fully described by a path argument (commands, patterns, subagents).
 PATH_OPAQUE_TOOLS = frozenset({"Bash", "PowerShell", "BashOutput", "Glob", "Grep", "Agent", "Task"})
-PATH_ARGS = {"Read": ["file_path"], "Write": ["file_path"], "Edit": ["file_path"], "MultiEdit": ["file_path"],
-             "NotebookEdit": ["notebook_path"], "NotebookRead": ["notebook_path"], "LS": ["path"]}
+PATH_ARGS = {
+    "Read": ["file_path"],
+    "Write": ["file_path"],
+    "Edit": ["file_path"],
+    "MultiEdit": ["file_path"],
+    "NotebookEdit": ["notebook_path"],
+    "NotebookRead": ["notebook_path"],
+    "LS": ["path"],
+}
 
 Permission = Literal["deny", "ask"]
 
@@ -82,8 +89,11 @@ class Verdict:
         if self.permission is not None:
             if self.permission not in ("deny", "ask"):  # defensive: the hook must never weaken permissions
                 raise ValueError(f"refusing to emit permissionDecision {self.permission!r}")
-            specific: dict[str, Any] = {"hookEventName": "PreToolUse", "permissionDecision": self.permission,
-                                        "permissionDecisionReason": _clip(self.reason or "Blocked by ContextOS")}
+            specific: dict[str, Any] = {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": self.permission,
+                "permissionDecisionReason": _clip(self.reason or "Blocked by ContextOS"),
+            }
             if self.updated_input is not None:
                 specific["updatedInput"] = self.updated_input
             out["hookSpecificOutput"] = specific
@@ -103,23 +113,44 @@ _ref = decision_ref
 def fail_mode_verdict(cfg_fail_mode: str, tool: str, why: str) -> Verdict:
     """Answer when ContextOS could not decide (see module docstring)."""
     if cfg_fail_mode == "open":
-        return Verdict(None, system_message=f"ContextOS could not check {tool} ({why}); fail mode 'open' let it "
-                       "continue WITHOUT a policy decision.", outcome="fail_open", notes={"why": why})
+        return Verdict(
+            None,
+            system_message=f"ContextOS could not check {tool} ({why}); fail mode 'open' let it "
+            "continue WITHOUT a policy decision.",
+            outcome="fail_open",
+            notes={"why": why},
+        )
     if cfg_fail_mode == "ask":
-        return Verdict("ask", reason=f"ContextOS could not check this {tool} call ({why}). Approve it only if you "
-                       "trust it; it has no ContextOS policy decision.", outcome="fail_ask", notes={"why": why})
-    return Verdict("deny", reason=f"ContextOS could not check this {tool} call ({why}) and its fail mode is "
-                   "'closed', so the call was blocked. Tell the user ContextOS is unavailable; do not try to "
-                   "achieve the same result another way.",
-                   system_message=f"ContextOS blocked {tool}: {why} (fail mode 'closed')", outcome="fail_closed",
-                   notes={"why": why})
+        return Verdict(
+            "ask",
+            reason=f"ContextOS could not check this {tool} call ({why}). Approve it only if you "
+            "trust it; it has no ContextOS policy decision.",
+            outcome="fail_ask",
+            notes={"why": why},
+        )
+    return Verdict(
+        "deny",
+        reason=f"ContextOS could not check this {tool} call ({why}) and its fail mode is "
+        "'closed', so the call was blocked. Tell the user ContextOS is unavailable; do not try to "
+        "achieve the same result another way.",
+        system_message=f"ContextOS blocked {tool}: {why} (fail mode 'closed')",
+        outcome="fail_closed",
+        notes={"why": why},
+    )
 
 
 class PreToolUseEnforcer:
     """Requests a decision for one PreToolUse payload and maps it to a :class:`Verdict`."""
 
-    def __init__(self, client: ContextOSClient, cfg: HookConfig, *, deadline: float,
-                 clock: Callable[[], float] = time.monotonic, poll_s: float = POLL_S) -> None:
+    def __init__(
+        self,
+        client: ContextOSClient,
+        cfg: HookConfig,
+        *,
+        deadline: float,
+        clock: Callable[[], float] = time.monotonic,
+        poll_s: float = POLL_S,
+    ) -> None:
         self.client = client
         self.cfg = cfg
         self.deadline = deadline
@@ -133,18 +164,27 @@ class PreToolUseEnforcer:
         try:
             envelope = mapping.tool_request(h, self.client.agent)
         except ValueError as exc:
-            return self._unavailable(h, None, f"the decision request could not be built: {type(exc).__name__}")
+            return self._unavailable(
+                h, None, f"the decision request could not be built: {type(exc).__name__}"
+            )
         size = len(json.dumps(envelope.to_wire(), ensure_ascii=False, default=str).encode("utf-8"))
         if size > MAX_DECIDE_BYTES:
-            return self._unavailable(h, envelope, f"the tool input is {size:,} bytes, above the "
-                                     f"{MAX_DECIDE_BYTES:,}-byte limit ContextOS can evaluate")
+            return self._unavailable(
+                h,
+                envelope,
+                f"the tool input is {size:,} bytes, above the "
+                f"{MAX_DECIDE_BYTES:,}-byte limit ContextOS can evaluate",
+            )
         try:
             decision = self.client.decide(envelope)
         except AuthError as exc:
-            return Verdict("deny", reason=f"ContextOS rejected this hook's API key ({exc.message}), so the {tool} call "
-                           "was blocked (fail closed). Ask the user to run `contextos doctor`.",
-                           system_message=f"ContextOS blocked {tool}: API key rejected ({exc.message})",
-                           outcome="auth_error")
+            return Verdict(
+                "deny",
+                reason=f"ContextOS rejected this hook's API key ({exc.message}), so the {tool} call "
+                "was blocked (fail closed). Ask the user to run `contextos doctor`.",
+                system_message=f"ContextOS blocked {tool}: API key rejected ({exc.message})",
+                outcome="auth_error",
+            )
         except (Unreachable, ServerError) as exc:
             what = "unreachable" if isinstance(exc, Unreachable) else f"failing (HTTP {exc.status_code})"
             return self._unavailable(h, envelope, f"ContextOS is {what}")
@@ -153,8 +193,12 @@ class PreToolUseEnforcer:
         verdict = self._apply(h, decision)
         verdict.decision = decision
         if verdict.permission == "ask":
-            remember_host_prompt(h.correlation_id, reason=verdict.outcome,
-                                 approval_id=decision.approval_id, policy_decision_id=decision.policy_decision_id)
+            remember_host_prompt(
+                h.correlation_id,
+                reason=verdict.outcome,
+                approval_id=decision.approval_id,
+                policy_decision_id=decision.policy_decision_id,
+            )
         if h.is_delegation and verdict.permission != "deny":
             self._report_delegation(h)
         return verdict
@@ -167,33 +211,48 @@ class PreToolUseEnforcer:
         if outcome in (Decision.ALLOW, Decision.AUDIT):
             return Verdict(None, outcome=outcome.lower())
         if outcome == Decision.DENY:
-            return Verdict("deny", reason=f"ContextOS policy blocked this {tool} call. Policy: {_policies(decision)}. "
-                           f"{decision.reason} ({_ref(decision)}.) Do not try to achieve the same result another "
-                           "way; tell the user what was blocked and why.",
-                           system_message=f"ContextOS denied {tool} — {_policies(decision)}", outcome="deny")
+            return Verdict(
+                "deny",
+                reason=f"ContextOS policy blocked this {tool} call. Policy: {_policies(decision)}. "
+                f"{decision.reason} ({_ref(decision)}.) Do not try to achieve the same result another "
+                "way; tell the user what was blocked and why.",
+                system_message=f"ContextOS denied {tool} — {_policies(decision)}",
+                outcome="deny",
+            )
         if outcome == Decision.REQUIRE_APPROVAL:
             return self._approval(h, decision)
         if outcome == Decision.RESTRICT:
             return self._restrict(h, decision)
-        return Verdict("deny", reason=f"ContextOS returned an unrecognised decision '{decision.decision}' for this "
-                       f"{tool} call, so it was blocked (fail closed). ({_ref(decision)}.)", outcome="unrecognised")
+        return Verdict(
+            "deny",
+            reason=f"ContextOS returned an unrecognised decision '{decision.decision}' for this "
+            f"{tool} call, so it was blocked (fail closed). ({_ref(decision)}.)",
+            outcome="unrecognised",
+        )
 
     def _approval(self, h: HookInput, decision: DecisionResponse) -> Verdict:
         tool = h.tool_name
         if (decision.approval_status or "").lower() == ApprovalStatus.APPROVED:
             return Verdict(None, outcome="approved")
         if not decision.approval_id:
-            return Verdict("deny", reason=f"ContextOS requires approval for this {tool} call but returned no approval "
-                           f"id, so it was blocked (fail closed). ({_ref(decision)}.)", outcome="approval_missing")
+            return Verdict(
+                "deny",
+                reason=f"ContextOS requires approval for this {tool} call but returned no approval "
+                f"id, so it was blocked (fail closed). ({_ref(decision)}.)",
+                outcome="approval_missing",
+            )
         wait = max(0.0, min(self.cfg.effective_approval_wait_s, self.deadline - self.clock() - 1.0))
         result = await_approval(self.client, decision.approval_id, wait, self.poll_s)
         withdrawn = False
         if result.status == ApprovalStatus.PENDING:
             # The hook answers on its own now, so approving this request later would run nothing:
             # withdraw it. A person may have decided it a moment ago (409 carries that status).
-            after = withdraw_approval(self.client, result.approval_id,
-                                      f"The Claude Code hook stopped waiting after {wait:.0f}s and answered "
-                                      f"'{self.cfg.on_approval_timeout}'.")
+            after = withdraw_approval(
+                self.client,
+                result.approval_id,
+                f"The Claude Code hook stopped waiting after {wait:.0f}s and answered "
+                f"'{self.cfg.on_approval_timeout}'.",
+            )
             if after in (ApprovalStatus.APPROVED, ApprovalStatus.REJECTED, ApprovalStatus.EXPIRED):
                 result = ApprovalOutcome(result.approval_id, after)
             withdrawn = after == ApprovalStatus.CANCELLED
@@ -201,37 +260,59 @@ class PreToolUseEnforcer:
             return Verdict(None, outcome="approved", notes={"approval_id": result.approval_id})
         if result.status in (ApprovalStatus.REJECTED, ApprovalStatus.EXPIRED, ApprovalStatus.CANCELLED):
             note = f" Reviewer note: {result.note}" if result.note else ""
-            return Verdict("deny", reason=f"ContextOS approval {result.approval_id} for this {tool} call was "
-                           f"{result.status}.{note} Policy: {_policies(decision)}. Do not retry it another way.",
-                           system_message=f"ContextOS approval {result.approval_id} {result.status}: {tool} blocked",
-                           outcome=f"approval_{result.status}")
+            return Verdict(
+                "deny",
+                reason=f"ContextOS approval {result.approval_id} for this {tool} call was "
+                f"{result.status}.{note} Policy: {_policies(decision)}. Do not retry it another way.",
+                system_message=f"ContextOS approval {result.approval_id} {result.status}: {tool} blocked",
+                outcome=f"approval_{result.status}",
+            )
         if result.status == "error":
-            return Verdict("deny", reason=f"ContextOS requires approval for this {tool} call, but approval "
-                           f"{result.approval_id} could not be checked ({result.error}), so it was blocked (fail "
-                           "closed).", outcome="approval_error")
+            return Verdict(
+                "deny",
+                reason=f"ContextOS requires approval for this {tool} call, but approval "
+                f"{result.approval_id} could not be checked ({result.error}), so it was blocked (fail "
+                "closed).",
+                outcome="approval_error",
+            )
         summary = f"{decision.reason} Policy: {_policies(decision)}."
-        stale = ("The request was withdrawn from the Approval Centre, so it can no longer be approved."
-                 if withdrawn else "Approving that request now will not run this call.")
+        stale = (
+            "The request was withdrawn from the Approval Centre, so it can no longer be approved."
+            if withdrawn
+            else "Approving that request now will not run this call."
+        )
         if self.cfg.on_approval_timeout == "deny":
             # Approvals belong to one call: approving this request later does not run anything, and a
             # retry is a new call with a new approval request. Say so, so nobody waits on a dead request.
-            return Verdict("deny", reason=f"ContextOS approval {result.approval_id} for this {tool} call was still "
-                           f"pending after {wait:.0f}s, so it was blocked. {summary} {stale} If the user still "
-                           "wants it, they can ask you to retry and approve the new request in the ContextOS "
-                           f"Approval Centre within {wait:.0f}s.",
-                           system_message=f"ContextOS approval {result.approval_id} not decided in time: {tool} blocked",
-                           outcome="approval_timeout_deny", notes={"approval_withdrawn": withdrawn})
-        return Verdict("ask", reason=f"ContextOS approval {result.approval_id} was not decided within {wait:.0f}s — "
-                       f"decide at this prompt. {stale} {summary}", outcome="approval_pending",
-                       notes={"approval_id": result.approval_id, "approval_withdrawn": withdrawn})
+            return Verdict(
+                "deny",
+                reason=f"ContextOS approval {result.approval_id} for this {tool} call was still "
+                f"pending after {wait:.0f}s, so it was blocked. {summary} {stale} If the user still "
+                "wants it, they can ask you to retry and approve the new request in the ContextOS "
+                f"Approval Centre within {wait:.0f}s.",
+                system_message=f"ContextOS approval {result.approval_id} not decided in time: {tool} blocked",
+                outcome="approval_timeout_deny",
+                notes={"approval_withdrawn": withdrawn},
+            )
+        return Verdict(
+            "ask",
+            reason=f"ContextOS approval {result.approval_id} was not decided within {wait:.0f}s — "
+            f"decide at this prompt. {stale} {summary}",
+            outcome="approval_pending",
+            notes={"approval_id": result.approval_id, "approval_withdrawn": withdrawn},
+        )
 
     def _restrict(self, h: HookInput, decision: DecisionResponse) -> Verdict:
         tool = h.tool_name
         restrictions = decision.restrictions or {}
-        has_paths = restrictions.get("allowed_path_globs") is not None or bool(restrictions.get("deny_path_globs"))
+        has_paths = restrictions.get("allowed_path_globs") is not None or bool(
+            restrictions.get("deny_path_globs")
+        )
         if has_paths and (tool in PATH_OPAQUE_TOOLS or tool.startswith("mcp__")):
-            problem = (f"path restrictions cannot be checked for {tool} (it can touch files that are not named in "
-                       "its arguments)")
+            problem = (
+                f"path restrictions cannot be checked for {tool} (it can touch files that are not named in "
+                "its arguments)"
+            )
             return self._restrict_denied(tool, decision, problem)
 
         def verify(masked: dict[str, Any]) -> bool | None:
@@ -240,33 +321,52 @@ class PreToolUseEnforcer:
             return None if found is None else not found
 
         _, _, server = mapping.split_tool_name(tool)
-        outcome = apply_restrictions(restrictions, h.tool_input, category_hint=None,
-                                     path_args=PATH_ARGS.get(tool) if server is None else None,
-                                     verify_redaction=verify, cwd=h.cwd)
+        outcome = apply_restrictions(
+            restrictions,
+            h.tool_input,
+            category_hint=None,
+            path_args=PATH_ARGS.get(tool) if server is None else None,
+            verify_redaction=verify,
+            cwd=h.cwd,
+        )
         if not outcome.allowed:
             return self._restrict_denied(tool, decision, outcome.reason or "a restriction could not be met")
         applied = "; ".join(outcome.applied) or "restrictions satisfied"
         if outcome.arguments == h.tool_input:
             return Verdict(None, outcome="restrict_satisfied", notes={"applied": outcome.applied})
-        return Verdict("ask", updated_input=outcome.arguments,
-                       reason=f"ContextOS restricted this {tool} call: {applied}. The input shown is the restricted "
-                       f"version; approve it only if it still does what you intended. Policy: {_policies(decision)}. "
-                       f"({_ref(decision)}.)", outcome="restricted",
-                       notes={"applied": outcome.applied, "redacted_types": outcome.redacted_types})
+        return Verdict(
+            "ask",
+            updated_input=outcome.arguments,
+            reason=f"ContextOS restricted this {tool} call: {applied}. The input shown is the restricted "
+            f"version; approve it only if it still does what you intended. Policy: {_policies(decision)}. "
+            f"({_ref(decision)}.)",
+            outcome="restricted",
+            notes={"applied": outcome.applied, "redacted_types": outcome.redacted_types},
+        )
 
     def _restrict_denied(self, tool: str, decision: DecisionResponse, problem: str) -> Verdict:
-        return Verdict("deny", reason=f"ContextOS allows this {tool} call only with restrictions, and {problem}; the "
-                       f"call was blocked (fail closed). Policy: {_policies(decision)}. ({_ref(decision)}.)",
-                       system_message=f"ContextOS blocked {tool}: restriction not applicable", outcome="restrict_denied")
+        return Verdict(
+            "deny",
+            reason=f"ContextOS allows this {tool} call only with restrictions, and {problem}; the "
+            f"call was blocked (fail closed). Policy: {_policies(decision)}. ({_ref(decision)}.)",
+            system_message=f"ContextOS blocked {tool}: restriction not applicable",
+            outcome="restrict_denied",
+        )
 
     # -- helpers ----------------------------------------------------------------------------------
 
     def _unavailable(self, h: HookInput, envelope: EventEnvelope | None, why: str) -> Verdict:
         verdict = fail_mode_verdict(self.cfg.fail_mode, h.tool_name, why)
         if envelope is not None:
-            local = {"fail_closed": "not_run", "fail_ask": "asked_user", "fail_open": "ran_unguarded"}[verdict.outcome]
-            metadata = {**envelope.metadata, "decision_unavailable": True, "fail_mode": self.cfg.fail_mode,
-                        "local_outcome": local}
+            local = {"fail_closed": "not_run", "fail_ask": "asked_user", "fail_open": "ran_unguarded"}[
+                verdict.outcome
+            ]
+            metadata = {
+                **envelope.metadata,
+                "decision_unavailable": True,
+                "fail_mode": self.cfg.fail_mode,
+                "local_outcome": local,
+            }
             try:
                 self.client.spool_events([envelope.model_copy(update={"metadata": metadata})])
             except OSError as exc:

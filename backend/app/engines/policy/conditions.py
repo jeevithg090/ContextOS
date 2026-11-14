@@ -44,6 +44,7 @@ class Outcome:
 
 # ---- formatting ------------------------------------------------------------------------------
 
+
 def fmt_value(value: Any, *, limit: int = 80, _depth: int = 0) -> str:
     """Short, single-line rendering of an observed value for explanations (inputs are pre-redacted)."""
     if value is None:
@@ -155,6 +156,7 @@ def explain(node: Any, *, _depth: int = 0) -> str:
 
 # ---- resolution ------------------------------------------------------------------------------
 
+
 def resolve(data: dict[str, Any], path: str) -> tuple[bool, list[Any]]:
     """Return ``(found, values)``. ``values`` has one entry unless the path contains a wildcard."""
     segs = parse_path(path)
@@ -181,6 +183,7 @@ def resolve(data: dict[str, Any], path: str) -> tuple[bool, list[Any]]:
 
 
 # ---- operators -------------------------------------------------------------------------------
+
 
 def _fold(v: Any) -> Any:
     return v.casefold() if isinstance(v, str) else v
@@ -270,6 +273,7 @@ def _apply(op: str, observed: Any, expected: Any, spec: dict[str, Any] | None) -
 
 
 # ---- evaluation ------------------------------------------------------------------------------
+
 
 def _leaf(node: dict[str, Any], data: dict[str, Any]) -> Outcome:
     path, op = node.get("field"), node.get("op")

@@ -212,15 +212,25 @@ def user_memberships(db: Session, user_id: str) -> list[tuple[Membership, Organi
     return [(m, o) for m, o in rows]
 
 
-def _audit_each_org(db: Session, org_ids: Iterable[str], *, action: str, user_id: str, details: dict[str, Any]) -> None:
+def _audit_each_org(
+    db: Session, org_ids: Iterable[str], *, action: str, user_id: str, details: dict[str, Any]
+) -> None:
     for org_id in dict.fromkeys(org_ids):
         append_audit(
-            db, org_id, action=action, actor_type="user", actor_id=user_id,
-            target_type="user", target_id=user_id, details=details,
+            db,
+            org_id,
+            action=action,
+            actor_type="user",
+            actor_id=user_id,
+            target_type="user",
+            target_id=user_id,
+            details=details,
         )
 
 
-def login(db: Session, *, email: str, password: str, client_ip: str | None, user_agent: str | None) -> tuple[User, str]:
+def login(
+    db: Session, *, email: str, password: str, client_ip: str | None, user_agent: str | None
+) -> tuple[User, str]:
     """Verify credentials and open a session. Returns ``(user, raw_session_token)``.
 
     On a credential failure the ``auth.login_failed`` audit entries are COMMITTED before the error is
@@ -247,21 +257,29 @@ def login(db: Session, *, email: str, password: str, client_ip: str | None, user
         ip_login_limiter.record_failure(ip_key)
         reason = "inactive_user" if user.is_active is False else "bad_password"
         _audit_each_org(
-            db, (m.organization_id for m, _ in memberships), action="auth.login_failed",
-            user_id=user.id, details={"reason": reason, "ip": client_ip},
+            db,
+            (m.organization_id for m, _ in memberships),
+            action="auth.login_failed",
+            user_id=user.id,
+            details={"reason": reason, "ip": client_ip},
         )
         db.commit()
         raise AuthenticationError(INVALID_CREDENTIALS)
 
     if not memberships:
-        raise PermissionDeniedError("Your account is not a member of any organisation. Ask an administrator to add you.")
+        raise PermissionDeniedError(
+            "Your account is not a member of any organisation. Ask an administrator to add you."
+        )
 
     login_limiter.reset(key)
     user.last_login_at = utcnow()
     token = create_session(db, user, user_agent=user_agent)
     _audit_each_org(
-        db, (m.organization_id for m, _ in memberships), action="auth.login",
-        user_id=user.id, details={"ip": client_ip},
+        db,
+        (m.organization_id for m, _ in memberships),
+        action="auth.login",
+        user_id=user.id,
+        details={"ip": client_ip},
     )
     return user, token
 
@@ -284,7 +302,9 @@ def build_me(db: Session, user: User, org_id: str, role: str) -> MeOut:
         organization=MeOrganization(id=org.id, name=org.name, slug=org.slug),
         role=role,
         permissions=sorted(ROLE_PERMISSIONS.get(role, set())),
-        memberships=[MeMembership(organization_id=o.id, organization_name=o.name, role=m.role) for m, o in memberships],
+        memberships=[
+            MeMembership(organization_id=o.id, organization_name=o.name, role=m.role) for m, o in memberships
+        ],
     )
 
 
@@ -299,7 +319,8 @@ def _lock_org(db: Session, org_id: str) -> None:
 def _owner_count(db: Session, org_id: str) -> int:
     return int(
         db.scalar(
-            select(func.count()).select_from(Membership)
+            select(func.count())
+            .select_from(Membership)
             .where(Membership.organization_id == org_id, Membership.role == Role.OWNER.value)
         )
         or 0
@@ -311,9 +332,18 @@ def _check_role(role: str) -> None:
         raise ValidationFailedError(f"Unknown role '{role}'")
 
 
-def list_members(db: Session, org_id: str, *, limit: int, offset: int) -> tuple[list[tuple[Membership, User]], int]:
-    base = select(Membership, User).join(User, User.id == Membership.user_id).where(Membership.organization_id == org_id)
-    total = int(db.scalar(select(func.count()).select_from(Membership).where(Membership.organization_id == org_id)) or 0)
+def list_members(
+    db: Session, org_id: str, *, limit: int, offset: int
+) -> tuple[list[tuple[Membership, User]], int]:
+    base = (
+        select(Membership, User)
+        .join(User, User.id == Membership.user_id)
+        .where(Membership.organization_id == org_id)
+    )
+    total = int(
+        db.scalar(select(func.count()).select_from(Membership).where(Membership.organization_id == org_id))
+        or 0
+    )
     rows = db.execute(base.order_by(Membership.created_at, Membership.id).limit(limit).offset(offset)).all()
     return [(m, u) for m, u in rows], total
 
@@ -337,20 +367,29 @@ def add_member(
         db.add(user)
         db.flush()
         created = True
-    elif db.scalar(select(Membership.id).where(Membership.organization_id == org_id, Membership.user_id == user.id)):
+    elif db.scalar(
+        select(Membership.id).where(Membership.organization_id == org_id, Membership.user_id == user.id)
+    ):
         raise ConflictError(f"{email} is already a member of this organisation")
     membership = Membership(id=new_id("membership"), organization_id=org_id, user_id=user.id, role=role)
     db.add(membership)
     db.flush()
     append_audit(
-        db, org_id, action="member.added", actor_type=actor.type, actor_id=actor.id,
-        target_type="membership", target_id=membership.id,
+        db,
+        org_id,
+        action="member.added",
+        actor_type=actor.type,
+        actor_id=actor.id,
+        target_type="membership",
+        target_id=membership.id,
         details={"user_id": user.id, "email": email, "role": role, "new_user": created},
     )
     return membership, user, created
 
 
-def change_member_role(db: Session, org_id: str, actor: Actor, membership_id: str, role: str) -> tuple[Membership, User]:
+def change_member_role(
+    db: Session, org_id: str, actor: Actor, membership_id: str, role: str
+) -> tuple[Membership, User]:
     _check_role(role)
     _lock_org(db, org_id)
     membership = get_scoped(db, Membership, membership_id, org_id, label="Member")
@@ -366,8 +405,13 @@ def change_member_role(db: Session, org_id: str, actor: Actor, membership_id: st
         raise ConflictError("This is the organisation's last owner. Make someone else an owner first.")
     membership.role = role
     append_audit(
-        db, org_id, action="member.role_changed", actor_type=actor.type, actor_id=actor.id,
-        target_type="membership", target_id=membership.id,
+        db,
+        org_id,
+        action="member.role_changed",
+        actor_type=actor.type,
+        actor_id=actor.id,
+        target_type="membership",
+        target_id=membership.id,
         details={"user_id": user.id, "from": previous, "to": role},
     )
     return membership, user
@@ -387,8 +431,14 @@ def remove_member(db: Session, org_id: str, actor: Actor, membership_id: str) ->
     db.delete(membership)
     db.flush()
     append_audit(
-        db, org_id, action="member.removed", actor_type=actor.type, actor_id=actor.id,
-        target_type="membership", target_id=membership_id, details=details,
+        db,
+        org_id,
+        action="member.removed",
+        actor_type=actor.type,
+        actor_id=actor.id,
+        target_type="membership",
+        target_id=membership_id,
+        details=details,
     )
 
 
@@ -410,12 +460,18 @@ def list_api_keys(db: Session, org_id: str, *, limit: int, offset: int) -> tuple
         .outerjoin(User, User.id == ApiKey.created_by_user_id)
         .where(ApiKey.organization_id == org_id)
     )
-    total = int(db.scalar(select(func.count()).select_from(ApiKey).where(ApiKey.organization_id == org_id)) or 0)
-    rows = db.execute(query.order_by(ApiKey.created_at.desc(), ApiKey.id.desc()).limit(limit).offset(offset)).all()
+    total = int(
+        db.scalar(select(func.count()).select_from(ApiKey).where(ApiKey.organization_id == org_id)) or 0
+    )
+    rows = db.execute(
+        query.order_by(ApiKey.created_at.desc(), ApiKey.id.desc()).limit(limit).offset(offset)
+    ).all()
     return [api_key_view(key, agent_name, creator) for key, agent_name, creator in rows], total
 
 
-def api_key_view(key: ApiKey, agent_name: str | None = None, creator_name: str | None = None) -> dict[str, Any]:
+def api_key_view(
+    key: ApiKey, agent_name: str | None = None, creator_name: str | None = None
+) -> dict[str, Any]:
     """Display fields for an API key. Never includes the hash."""
     return {
         "id": key.id,
@@ -450,7 +506,9 @@ def create_api_key(
         raise ValidationFailedError("Choose at least one scope")
     unknown = scope_set - API_KEY_SCOPES
     if unknown:
-        raise ValidationFailedError(f"Unknown scope(s): {', '.join(sorted(unknown))}. Allowed: ingest, decide, read")
+        raise ValidationFailedError(
+            f"Unknown scope(s): {', '.join(sorted(unknown))}. Allowed: ingest, decide, read"
+        )
     if expires_in_days is not None and not 1 <= expires_in_days <= 3650:
         raise ValidationFailedError("Expiry must be between 1 and 3650 days")
     agent = get_scoped(db, Agent, agent_id, org_id, label="Agent") if agent_id else None
@@ -470,10 +528,20 @@ def create_api_key(
     db.add(key)
     db.flush()
     append_audit(
-        db, org_id, action="api_key.created", actor_type=actor.type, actor_id=actor.id,
-        target_type="api_key", target_id=key.id,
-        details={"name": name, "prefix": prefix, "scopes": key.scopes, "agent_id": key.agent_id,
-                 "expires_in_days": expires_in_days},
+        db,
+        org_id,
+        action="api_key.created",
+        actor_type=actor.type,
+        actor_id=actor.id,
+        target_type="api_key",
+        target_id=key.id,
+        details={
+            "name": name,
+            "prefix": prefix,
+            "scopes": key.scopes,
+            "agent_id": key.agent_id,
+            "expires_in_days": expires_in_days,
+        },
     )
     return key, raw, agent
 
@@ -483,7 +551,13 @@ def revoke_api_key(db: Session, org_id: str, actor: Actor, key_id: str) -> ApiKe
     if key.revoked_at is None:
         key.revoked_at = utcnow()
         append_audit(
-            db, org_id, action="api_key.revoked", actor_type=actor.type, actor_id=actor.id,
-            target_type="api_key", target_id=key.id, details={"name": key.name, "prefix": key.prefix},
+            db,
+            org_id,
+            action="api_key.revoked",
+            actor_type=actor.type,
+            actor_id=actor.id,
+            target_type="api_key",
+            target_id=key.id,
+            details={"name": key.name, "prefix": key.prefix},
         )
     return key

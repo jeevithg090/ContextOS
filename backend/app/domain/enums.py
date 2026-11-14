@@ -10,12 +10,12 @@ from enum import StrEnum
 
 
 class TrustLevel(StrEnum):
-    TRUSTED = "TRUSTED"        # first-party / explicitly trusted; may provide instructions
-    APPROVED = "APPROVED"      # approved for the listed capabilities only (e.g. read, not instruct)
-    EXTERNAL = "EXTERNAL"      # known third-party; content is data, never instructions
-    UNKNOWN = "UNKNOWN"        # never classified
+    TRUSTED = "TRUSTED"  # first-party / explicitly trusted; may provide instructions
+    APPROVED = "APPROVED"  # approved for the listed capabilities only (e.g. read, not instruct)
+    EXTERNAL = "EXTERNAL"  # known third-party; content is data, never instructions
+    UNKNOWN = "UNKNOWN"  # never classified
     SUSPICIOUS = "SUSPICIOUS"  # evidence of malicious or manipulative content
-    BLOCKED = "BLOCKED"        # must not be consumed / contacted
+    BLOCKED = "BLOCKED"  # must not be consumed / contacted
 
 
 # Lower rank = less trustworthy. Used to compute "lowest trust in session".
@@ -32,11 +32,11 @@ UNTRUSTED_LEVELS = {TrustLevel.BLOCKED, TrustLevel.SUSPICIOUS, TrustLevel.UNKNOW
 
 
 class TrustCapability(StrEnum):
-    READ = "read"                          # content may be consumed as data
-    INSTRUCT = "instruct"                  # content may direct agent behaviour
-    EXECUTE = "execute"                    # content may trigger tool execution
+    READ = "read"  # content may be consumed as data
+    INSTRUCT = "instruct"  # content may direct agent behaviour
+    EXECUTE = "execute"  # content may trigger tool execution
     CREDENTIAL_ACCESS = "credential_access"  # content may lead to credential access
-    SEND = "send"                          # (destinations) data may be sent here
+    SEND = "send"  # (destinations) data may be sent here
 
 
 class Decision(StrEnum):
@@ -63,9 +63,9 @@ class PolicyMode(StrEnum):
 
 
 class EnforcementMode(StrEnum):
-    ENFORCED = "enforced"    # decision was returned at a real execution boundary that honours it
-    ADVISORY = "advisory"    # decision returned, but the integration may not honour it
-    OBSERVED = "observed"    # event reported after the fact; nothing could be prevented
+    ENFORCED = "enforced"  # decision was returned at a real execution boundary that honours it
+    ADVISORY = "advisory"  # decision returned, but the integration may not honour it
+    OBSERVED = "observed"  # event reported after the fact; nothing could be prevented
 
 
 class Severity(StrEnum):
@@ -181,21 +181,25 @@ class Role(StrEnum):
 
 
 class Permission(StrEnum):
-    READ = "read"                    # view all org security data
-    WRITE = "write"                  # triage findings, manage incidents, tasks
-    APPROVE = "approve"              # decide approval requests
+    READ = "read"  # view all org security data
+    WRITE = "write"  # triage findings, manage incidents, tasks
+    APPROVE = "approve"  # decide approval requests
     POLICY_MANAGE = "policy:manage"
     TRUST_MANAGE = "trust:manage"
-    ADMIN = "admin"                  # users, API keys, org settings, integrations
-    INGEST = "ingest"                # API keys: submit events
-    DECIDE = "decide"                # API keys: synchronous policy decisions
+    ADMIN = "admin"  # users, API keys, org settings, integrations
+    INGEST = "ingest"  # API keys: submit events
+    DECIDE = "decide"  # API keys: synchronous policy decisions
 
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
     Role.OWNER: {p.value for p in Permission},
     Role.ADMIN: {p.value for p in Permission},
     Role.SECURITY_ANALYST: {
-        Permission.READ, Permission.WRITE, Permission.APPROVE, Permission.POLICY_MANAGE, Permission.TRUST_MANAGE,
+        Permission.READ,
+        Permission.WRITE,
+        Permission.APPROVE,
+        Permission.POLICY_MANAGE,
+        Permission.TRUST_MANAGE,
     },
     Role.DEVELOPER: {Permission.READ, Permission.WRITE},
     Role.VIEWER: {Permission.READ},
@@ -248,18 +252,18 @@ class ProvenanceNodeType(StrEnum):
 
 
 class ProvenanceRelation(StrEnum):
-    SOURCE_PRODUCED_ITEM = "source_produced_item"        # source -> context_item
-    ITEM_ENTERED_SESSION = "item_entered_session"        # context_item -> session
-    SESSION_INVOKED_TOOL = "session_invoked_tool"        # session -> tool_invocation
-    INVOCATION_USED_TOOL = "invocation_used_tool"        # tool_invocation -> tool
+    SOURCE_PRODUCED_ITEM = "source_produced_item"  # source -> context_item
+    ITEM_ENTERED_SESSION = "item_entered_session"  # context_item -> session
+    SESSION_INVOKED_TOOL = "session_invoked_tool"  # session -> tool_invocation
+    INVOCATION_USED_TOOL = "invocation_used_tool"  # tool_invocation -> tool
     INVOCATION_ACCESSED_RESOURCE = "invocation_accessed_resource"  # tool_invocation -> resource
-    INVOCATION_SENT_TO = "invocation_sent_to"            # tool_invocation -> destination
+    INVOCATION_SENT_TO = "invocation_sent_to"  # tool_invocation -> destination
     INVOCATION_RETURNED_ITEM = "invocation_returned_item"  # tool_invocation -> context_item
-    AGENT_RAN_SESSION = "agent_ran_session"              # agent -> session
-    SESSION_DELEGATED_TO = "session_delegated_to"        # session -> session
-    AGENT_MESSAGED = "agent_messaged"                    # session -> context_item (message)
-    ITEM_TRIGGERED_FINDING = "item_triggered_finding"    # context_item -> finding
-    INVOCATION_DECIDED_BY = "invocation_decided_by"      # tool_invocation -> policy_decision
+    AGENT_RAN_SESSION = "agent_ran_session"  # agent -> session
+    SESSION_DELEGATED_TO = "session_delegated_to"  # session -> session
+    AGENT_MESSAGED = "agent_messaged"  # session -> context_item (message)
+    ITEM_TRIGGERED_FINDING = "item_triggered_finding"  # context_item -> finding
+    INVOCATION_DECIDED_BY = "invocation_decided_by"  # tool_invocation -> policy_decision
 
 
 class TaskPriority(StrEnum):

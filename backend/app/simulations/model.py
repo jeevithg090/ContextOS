@@ -133,11 +133,21 @@ class StepOutcome:
 
     def evidence(self) -> list[dict[str, str]]:
         out: list[dict[str, str]] = []
-        for key, kind in (("policy_decision_id", "policy_decision"), ("tool_invocation_id", "tool_invocation"),
-                          ("context_item_id", "context_item"), ("approval_id", "approval")):
+        for key, kind in (
+            ("policy_decision_id", "policy_decision"),
+            ("tool_invocation_id", "tool_invocation"),
+            ("context_item_id", "context_item"),
+            ("approval_id", "approval"),
+        ):
             value = self.refs.get(key) or (self.approval_id if key == "approval_id" else None)
             if value:
-                out.append({"type": kind, "id": str(value), **({"session_id": self.session_id} if self.session_id else {})})
+                out.append(
+                    {
+                        "type": kind,
+                        "id": str(value),
+                        **({"session_id": self.session_id} if self.session_id else {}),
+                    }
+                )
         return out
 
 

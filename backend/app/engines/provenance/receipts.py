@@ -42,7 +42,9 @@ def _source_fields(item: Any) -> dict[str, Any]:
     identifier = source.get("identifier") or get(item, "source_identifier")
     # Trust AT INGEST: the item's own trust_level is authoritative. A source's *current* trust level is
     # deliberately not used — it can change on reassessment, which would silently invalidate receipts.
-    trust = get(item, "trust_level") or source.get("trust_level_at_ingest") or get(item, "trust_level_at_ingest")
+    trust = (
+        get(item, "trust_level") or source.get("trust_level_at_ingest") or get(item, "trust_level_at_ingest")
+    )
     return {
         "type": lower(source_type),
         "identifier": _str_or_none(identifier),
@@ -94,8 +96,10 @@ def receipt_fields(item: Mapping[str, Any] | Any) -> dict[str, Any]:
     ``detection_summary`` (or ``detection``) and ``tool_invocation_id``.
     """
     fingerprints = get(item, "secret_fingerprints")
-    fingerprint_count = count_of(fingerprints) if fingerprints is not None else count_of(
-        get(item, "secret_fingerprint_count")
+    fingerprint_count = (
+        count_of(fingerprints)
+        if fingerprints is not None
+        else count_of(get(item, "secret_fingerprint_count"))
     )
     return {
         "receipt_version": RECEIPT_VERSION,

@@ -29,7 +29,11 @@ _EA = r"(?![A-Za-z0-9])"
 _TOKEN_PATTERNS: tuple[tuple[str, re.Pattern[str], int | str], ...] = tuple(
     (kind, re.compile(pattern), group)
     for kind, pattern, group in (
-        ("private_key", r"-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----[\s\S]{16,20000}?-----END [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----", 0),
+        (
+            "private_key",
+            r"-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----[\s\S]{16,20000}?-----END [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----",
+            0,
+        ),
         ("aws_access_key", _BA + r"(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}" + _EA, 0),
         ("github_token", _B + r"gh[pousr]_[A-Za-z0-9]{36,251}" + _E, 0),
         ("github_token", _B + r"github_pat_[A-Za-z0-9_]{60,251}" + _E, 0),
@@ -50,26 +54,102 @@ _TOKEN_PATTERNS: tuple[tuple[str, re.Pattern[str], int | str], ...] = tuple(
         ("docker_hub_token", _B + r"dckr_pat_[A-Za-z0-9_\-]{27,}" + _E, 0),
         ("vault_token", _B + r"hv[sbr]\.[A-Za-z0-9_\-]{24,}" + _E, 0),
         ("contextos_api_key", _B + r"ctx[ks]_[A-Za-z0-9_\-]{20,}" + _E, 0),
-        ("slack_webhook", r"(?i)https?://hooks\.slack\.com/(?P<body>(?:services|workflows|triggers)/[A-Za-z0-9_/\-]{20,})", "body"),
-        ("discord_webhook", r"(?i)https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/(?P<body>\d{5,30}/[A-Za-z0-9_\-]{40,})", "body"),
+        (
+            "slack_webhook",
+            r"(?i)https?://hooks\.slack\.com/(?P<body>(?:services|workflows|triggers)/[A-Za-z0-9_/\-]{20,})",
+            "body",
+        ),
+        (
+            "discord_webhook",
+            r"(?i)https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/(?P<body>\d{5,30}/[A-Za-z0-9_\-]{40,})",
+            "body",
+        ),
         ("jwt", r"eyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{16,}" + _E, 0),
-        ("url_credentials", r"[A-Za-z][A-Za-z0-9+.\-]{1,24}://[^\s:/@'\"`<>\\]{0,128}:(?P<secret>[^\s@/'\"`<>\\]{3,256})@[A-Za-z0-9.\-_\[\]%]{1,253}", "secret"),
-        ("bearer_token", r"(?i)\b(?:bearer|token|basic)\s+(?P<secret>[A-Za-z0-9\-._~+/]{16,4096}=*)(?![A-Za-z0-9\-._~+/=])", "secret"),
+        (
+            "url_credentials",
+            r"[A-Za-z][A-Za-z0-9+.\-]{1,24}://[^\s:/@'\"`<>\\]{0,128}:(?P<secret>[^\s@/'\"`<>\\]{3,256})@[A-Za-z0-9.\-_\[\]%]{1,253}",
+            "secret",
+        ),
+        (
+            "bearer_token",
+            r"(?i)\b(?:bearer|token|basic)\s+(?P<secret>[A-Za-z0-9\-._~+/]{16,4096}=*)(?![A-Za-z0-9\-._~+/=])",
+            "secret",
+        ),
         ("azure_storage_key", r"(?i)AccountKey=(?P<secret>[A-Za-z0-9+/]{40,}={0,2})", "secret"),
-        ("assigned_secret", r"(?i)\b[A-Za-z0-9_]*(?:password|passwd|pwd|secret|token|api[_\-]?key|access[_\-]?key|private[_\-]?key|client[_\-]?secret)\b[\"']?\s*[:=]\s*[\"']?(?P<secret>[^\s\"',;`]{8,512})", "secret"),
+        (
+            "assigned_secret",
+            r"(?i)\b[A-Za-z0-9_]*(?:password|passwd|pwd|secret|token|api[_\-]?key|access[_\-]?key|private[_\-]?key|client[_\-]?secret)\b[\"']?\s*[:=]\s*[\"']?(?P<secret>[^\s\"',;`]{8,512})",
+            "secret",
+        ),
     )
 )
 
 _PLACEHOLDER_RE = re.compile(r"^(?:\$\{?[A-Za-z_]|<[^>]*>$|\{\{|%\(|x{6,}$|\*{4,}|\[REDACTED)", re.IGNORECASE)
 
-_SECRET_WORDS = ("password", "passwd", "passphrase", "secret", "token", "apikey", "accesskey", "privatekey",
-                 "clientsecret", "authorization", "cookie", "credential", "credentials", "sessionkey", "bearer")
-_METADATA_SUFFIXES = frozenset({
-    "type", "kind", "id", "ids", "name", "count", "length", "len", "size", "prefix", "hint", "label",
-    "fingerprint", "hash", "url", "uri", "path", "file", "filename", "env", "var", "expires", "expiry",
-    "ttl", "version", "mode", "enabled", "required", "present", "status", "provider", "scope", "scopes",
-    "limit", "max", "min", "timeout", "used", "usage", "budget", "redacted", "masked", "field",
-})
+_SECRET_WORDS = (
+    "password",
+    "passwd",
+    "passphrase",
+    "secret",
+    "token",
+    "apikey",
+    "accesskey",
+    "privatekey",
+    "clientsecret",
+    "authorization",
+    "cookie",
+    "credential",
+    "credentials",
+    "sessionkey",
+    "bearer",
+)
+_METADATA_SUFFIXES = frozenset(
+    {
+        "type",
+        "kind",
+        "id",
+        "ids",
+        "name",
+        "count",
+        "length",
+        "len",
+        "size",
+        "prefix",
+        "hint",
+        "label",
+        "fingerprint",
+        "hash",
+        "url",
+        "uri",
+        "path",
+        "file",
+        "filename",
+        "env",
+        "var",
+        "expires",
+        "expiry",
+        "ttl",
+        "version",
+        "mode",
+        "enabled",
+        "required",
+        "present",
+        "status",
+        "provider",
+        "scope",
+        "scopes",
+        "limit",
+        "max",
+        "min",
+        "timeout",
+        "used",
+        "usage",
+        "budget",
+        "redacted",
+        "masked",
+        "field",
+    }
+)
 _KEY_SPLIT_RE = re.compile(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
 
 
@@ -160,26 +240,43 @@ def mask_value(value: Any, *, _key: str | None = None, _depth: int = 0) -> tuple
 
 # --- sensitive paths -------------------------------------------------------------------------
 
-_ENV_SAFE = frozenset({"example", "sample", "template", "dist", "defaults", "default", "schema", "tpl", "tmpl"})
+_ENV_SAFE = frozenset(
+    {"example", "sample", "template", "dist", "defaults", "default", "schema", "tpl", "tmpl"}
+)
 _NAMED: dict[str, str] = {
-    "id_rsa": "SSH private key", "id_dsa": "SSH private key", "id_ecdsa": "SSH private key",
-    "id_ed25519": "SSH private key", ".netrc": "netrc file — plain-text machine logins",
-    ".npmrc": "npm config — may contain registry tokens", ".pypirc": "PyPI upload credentials",
-    ".git-credentials": "Git credential store — plain-text tokens", ".pgpass": "PostgreSQL password file",
-    ".my.cnf": "MySQL client config — may contain a password", ".htpasswd": "HTTP basic-auth password file",
-    ".vault-token": "HashiCorp Vault token", ".dockercfg": "Docker registry credentials",
-    ".s3cfg": "s3cmd config — S3 access keys", ".boto": "Boto config — cloud credentials",
+    "id_rsa": "SSH private key",
+    "id_dsa": "SSH private key",
+    "id_ecdsa": "SSH private key",
+    "id_ed25519": "SSH private key",
+    ".netrc": "netrc file — plain-text machine logins",
+    ".npmrc": "npm config — may contain registry tokens",
+    ".pypirc": "PyPI upload credentials",
+    ".git-credentials": "Git credential store — plain-text tokens",
+    ".pgpass": "PostgreSQL password file",
+    ".my.cnf": "MySQL client config — may contain a password",
+    ".htpasswd": "HTTP basic-auth password file",
+    ".vault-token": "HashiCorp Vault token",
+    ".dockercfg": "Docker registry credentials",
+    ".s3cfg": "s3cmd config — S3 access keys",
+    ".boto": "Boto config — cloud credentials",
     ".bash_history": "Shell history — often contains pasted secrets",
     ".zsh_history": "Shell history — often contains pasted secrets",
-    "credentials.tfrc.json": "Terraform Cloud credentials", "wallet.dat": "Cryptocurrency wallet",
+    "credentials.tfrc.json": "Terraform Cloud credentials",
+    "wallet.dat": "Cryptocurrency wallet",
 }
 _EXTENSIONS: dict[str, str] = {
-    ".pem": "PEM file — private key or certificate material", ".key": "Private key file",
-    ".p12": "PKCS#12 bundle — contains a private key", ".pfx": "PKCS#12 bundle — contains a private key",
-    ".p8": "PKCS#8 private key", ".ppk": "PuTTY private key", ".jks": "Java keystore",
-    ".keystore": "Keystore — private keys", ".kdbx": "KeePass password database",
+    ".pem": "PEM file — private key or certificate material",
+    ".key": "Private key file",
+    ".p12": "PKCS#12 bundle — contains a private key",
+    ".pfx": "PKCS#12 bundle — contains a private key",
+    ".p8": "PKCS#8 private key",
+    ".ppk": "PuTTY private key",
+    ".jks": "Java keystore",
+    ".keystore": "Keystore — private keys",
+    ".kdbx": "KeePass password database",
     ".tfstate": "Terraform state — stores resource secrets in plain text",
-    ".tfvars": "Terraform variables — often hold credentials", ".ovpn": "OpenVPN profile — embeds keys",
+    ".tfvars": "Terraform variables — often hold credentials",
+    ".ovpn": "OpenVPN profile — embeds keys",
 }
 _NAME_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^(?:.*[._-])?secrets?\.(?:ya?ml|json|toml|ini|txt|env|properties)$"), "Secrets file"),
@@ -189,19 +286,29 @@ _NAME_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^kubeconfig(?:[._-].*)?$|\.kubeconfig$"), "Kubernetes kubeconfig — cluster credentials"),
 )
 _DIRS: dict[str, str] = {
-    ".ssh": "SSH directory — private keys and config", ".aws": "AWS CLI directory — access keys",
-    ".gnupg": "GnuPG directory — private keys", "gcloud": "Google Cloud SDK credentials",
+    ".ssh": "SSH directory — private keys and config",
+    ".aws": "AWS CLI directory — access keys",
+    ".gnupg": "GnuPG directory — private keys",
+    "gcloud": "Google Cloud SDK credentials",
     ".azure": "Azure CLI cached tokens",
 }
-_SYSTEM = {"etc/shadow": "System password hashes", "etc/gshadow": "System group password hashes",
-           "etc/sudoers": "sudo privilege configuration", "etc/master.passwd": "System password hashes"}
+_SYSTEM = {
+    "etc/shadow": "System password hashes",
+    "etc/gshadow": "System group password hashes",
+    "etc/sudoers": "sudo privilege configuration",
+    "etc/master.passwd": "System password hashes",
+}
 
 
 def _env_reason(name: str) -> str | None:
     if name in {".env", ".envrc"}:
         return f"{name} file — typically holds application secrets"
     if name.startswith(".env."):
-        return None if set(name[5:].split(".")) & _ENV_SAFE else f"Environment file ({name}) — typically holds secrets"
+        return (
+            None
+            if set(name[5:].split(".")) & _ENV_SAFE
+            else f"Environment file ({name}) — typically holds secrets"
+        )
     return None
 
 
@@ -218,12 +325,20 @@ def sensitive_path_reason(path: str) -> str | None:
     checks: list[Callable[[], str | None]] = [
         lambda: _env_reason(name),
         lambda: next((reason for d, reason in _DIRS.items() if d in segments[:-1] or name == d), None),
-        lambda: "Kubernetes kubeconfig — cluster credentials" if ".kube" in segments[:-1] and name == "config" else None,
-        lambda: "Docker config — registry credentials" if ".docker" in segments[:-1] and name == "config.json" else None,
+        lambda: (
+            "Kubernetes kubeconfig — cluster credentials"
+            if ".kube" in segments[:-1] and name == "config"
+            else None
+        ),
+        lambda: (
+            "Docker config — registry credentials"
+            if ".docker" in segments[:-1] and name == "config.json"
+            else None
+        ),
         lambda: _NAMED.get(name),
         lambda: _SYSTEM.get("/".join(segments[-2:])),
         lambda: next((reason for regex, reason in _NAME_PATTERNS if regex.search(name)), None),
-        lambda: _EXTENSIONS.get(name[name.rfind("."):]) if name.rfind(".") > 0 else None,
+        lambda: _EXTENSIONS.get(name[name.rfind(".") :]) if name.rfind(".") > 0 else None,
     ]
     for check in checks:
         reason = check()

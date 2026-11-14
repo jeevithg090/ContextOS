@@ -30,7 +30,9 @@ def hi(payload: dict, event: str | None = None) -> HookInput:
 
 
 def observe_events(payload: dict, **kw) -> list[EventEnvelope]:
-    return observe.observation_events(hi(payload), AGENT, max_result_chars=kw.pop("max_result_chars", 60_000), **kw)
+    return observe.observation_events(
+        hi(payload), AGENT, max_result_chars=kw.pop("max_result_chars", 60_000), **kw
+    )
 
 
 def wire(event: EventEnvelope) -> dict:
@@ -102,8 +104,11 @@ def test_pre_tool_use_maps_to_tool_requested_with_full_arguments() -> None:
 
 
 def test_envelopes_never_carry_trust_risk_or_decision() -> None:
-    for event in (mapping.tool_request(hi(P.PRE_EXFIL), AGENT), *observe_events(P.POST_READ),
-                  *observe_events(P.SESSION_START)):
+    for event in (
+        mapping.tool_request(hi(P.PRE_EXFIL), AGENT),
+        *observe_events(P.POST_READ),
+        *observe_events(P.SESSION_START),
+    ):
         assert not {"trust", "trust_level", "risk", "decision"} & set(event.to_wire())
 
 
@@ -159,11 +164,14 @@ def test_read_result_is_the_file_text_the_model_reads() -> None:
     assert data["collected_via"] == "claude_code:PostToolUse:Read"
 
 
-@pytest.mark.parametrize(("payload", "expected"), [
-    (P.POST_BASH, "plain-output\n[stderr]\nwarning: x"),
-    (P.POST_WEBFETCH, "Setup: install the CLI, then run it."),
-    (P.POST_MCP, "Created issue #42"),
-])
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        (P.POST_BASH, "plain-output\n[stderr]\nwarning: x"),
+        (P.POST_WEBFETCH, "Setup: install the CLI, then run it."),
+        (P.POST_MCP, "Created issue #42"),
+    ],
+)
 def test_known_result_shapes_are_reduced_to_text(payload: dict, expected: str) -> None:
     assert observe_events(payload)[0].result == expected
 
@@ -214,8 +222,13 @@ def test_background_agent_launch_keeps_the_child_session_open_until_subagent_sto
     observe.remember_delegation(hi(P.PRE_AGENT), AGENT)
     events = observe_events(P.POST_AGENT_ASYNC)
     assert [e.event_type for e in events] == ["tool.completed"]
-    assert events[0].result == {"status": "async_launched", "isAsync": True, "agentId": "a40815fc9bf677980",
-                                "description": "Read notes.txt first line", "resolvedModel": "claude-haiku-5-5"}
+    assert events[0].result == {
+        "status": "async_launched",
+        "isAsync": True,
+        "agentId": "a40815fc9bf677980",
+        "description": "Read notes.txt first line",
+        "resolvedModel": "claude-haiku-5-5",
+    }
     [ended] = observe_events(P.SUBAGENT_STOP)
     data = wire(ended)
     assert data["event_type"] == "session.ended"

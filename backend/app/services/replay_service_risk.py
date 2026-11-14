@@ -50,11 +50,15 @@ RISK_NOTE = (
 
 # Mirrors the ingestion pipeline (services/ingestion_tools.py and services/approvals.py).
 _STATUS_BY_DECISION = {
-    Decision.ALLOW.value: "allowed", Decision.AUDIT.value: "allowed", Decision.RESTRICT.value: "restricted",
-    Decision.DENY.value: "denied", Decision.REQUIRE_APPROVAL.value: "pending_approval",
+    Decision.ALLOW.value: "allowed",
+    Decision.AUDIT.value: "allowed",
+    Decision.RESTRICT.value: "restricted",
+    Decision.DENY.value: "denied",
+    Decision.REQUIRE_APPROVAL.value: "pending_approval",
 }
 _STATUS_BY_APPROVAL = {
-    ApprovalStatus.APPROVED.value: "approved", ApprovalStatus.REJECTED.value: "rejected",
+    ApprovalStatus.APPROVED.value: "approved",
+    ApprovalStatus.REJECTED.value: "rejected",
     ApprovalStatus.EXPIRED.value: "expired",
 }
 
@@ -82,16 +86,27 @@ class _Inv:
     def status_at(self, pos: int, at: datetime) -> str:
         if self.res_pos is not None and self.res_pos <= pos:
             return self.final_status
-        if self.approval_status in _STATUS_BY_APPROVAL and self.approval_decided_at and self.approval_decided_at <= at:
+        if (
+            self.approval_status in _STATUS_BY_APPROVAL
+            and self.approval_decided_at
+            and self.approval_decided_at <= at
+        ):
             return _STATUS_BY_APPROVAL[self.approval_status]
         return self.initial_status
 
 
-def _items_by_pos(db: Session, org_id: str, session_id: str, positions: dict[str, int]) -> dict[int, list[dict[str, Any]]]:
+def _items_by_pos(
+    db: Session, org_id: str, session_id: str, positions: dict[str, int]
+) -> dict[int, list[dict[str, Any]]]:
     rows = db.execute(
         select(
-            ContextItem.id, ContextItem.event_id, ContextItem.trust_level, ContextItem.source_id,
-            ContextItem.contains_secrets, ContextItem.sensitivity, ContextItem.detection_summary,
+            ContextItem.id,
+            ContextItem.event_id,
+            ContextItem.trust_level,
+            ContextItem.source_id,
+            ContextItem.contains_secrets,
+            ContextItem.sensitivity,
+            ContextItem.detection_summary,
             ContextSource.source_type,
         )
         .join(ContextSource, ContextSource.id == ContextItem.source_id)
@@ -104,24 +119,41 @@ def _items_by_pos(db: Session, org_id: str, session_id: str, positions: dict[str
             continue
         summary = r.detection_summary or {}
         level = r.trust_level if r.trust_level in TRUST_RANK else TrustLevel.UNKNOWN.value
-        out.setdefault(pos, []).append({
-            "id": r.id, "trust_level": level, "source_type": r.source_type, "source_id": r.source_id,
-            "contains_secrets": bool(r.contains_secrets), "sensitivity": r.sensitivity,
-            "detection_max_severity": summary.get("max_severity"),
-            "detection_categories": list(summary.get("categories") or []),
-        })
+        out.setdefault(pos, []).append(
+            {
+                "id": r.id,
+                "trust_level": level,
+                "source_type": r.source_type,
+                "source_id": r.source_id,
+                "contains_secrets": bool(r.contains_secrets),
+                "sensitivity": r.sensitivity,
+                "detection_max_severity": summary.get("max_severity"),
+                "detection_categories": list(summary.get("categories") or []),
+            }
+        )
     return out
 
 
 def _invocations(db: Session, org_id: str, session_id: str, positions: dict[str, int]) -> list[_Inv]:
     rows = db.execute(
         select(
-            ToolInvocation.id, ToolInvocation.request_event_id, ToolInvocation.result_event_id,
-            ToolInvocation.status, ToolInvocation.decision, ToolInvocation.enforcement, ToolInvocation.resources,
-            ToolInvocation.destination_id, ToolInvocation.sensitive_data_detected,
-            ToolInvocation.matched_session_fingerprints, ToolInvocation.arguments_redacted,
-            ToolInvocation.policy_decision_id, ToolInvocation.approval_id,
-            Tool.name.label("tool_name"), Tool.category, Tool.provider, Tool.server,
+            ToolInvocation.id,
+            ToolInvocation.request_event_id,
+            ToolInvocation.result_event_id,
+            ToolInvocation.status,
+            ToolInvocation.decision,
+            ToolInvocation.enforcement,
+            ToolInvocation.resources,
+            ToolInvocation.destination_id,
+            ToolInvocation.sensitive_data_detected,
+            ToolInvocation.matched_session_fingerprints,
+            ToolInvocation.arguments_redacted,
+            ToolInvocation.policy_decision_id,
+            ToolInvocation.approval_id,
+            Tool.name.label("tool_name"),
+            Tool.category,
+            Tool.provider,
+            Tool.server,
             Destination.classification.label("destination_classification"),
         )
         .join(Tool, Tool.id == ToolInvocation.tool_id)
@@ -131,17 +163,25 @@ def _invocations(db: Session, org_id: str, session_id: str, positions: dict[str,
     decision_ids = [r.policy_decision_id for r in rows if r.policy_decision_id]
     recorded_dest: dict[str, Any] = {}
     if decision_ids:
-        recorded_dest = dict(db.execute(
-            select(PolicyDecision.id, PolicyDecision.input_snapshot["destination"]["classification"].as_string())
-            .where(PolicyDecision.organization_id == org_id, PolicyDecision.id.in_(decision_ids))
-        ).all())
+        recorded_dest = dict(
+            db.execute(
+                select(
+                    PolicyDecision.id,
+                    PolicyDecision.input_snapshot["destination"]["classification"].as_string(),
+                ).where(PolicyDecision.organization_id == org_id, PolicyDecision.id.in_(decision_ids))
+            ).all()
+        )
     approval_ids = [r.approval_id for r in rows if r.approval_id]
     approvals: dict[str, tuple[str, datetime | None]] = {}
     if approval_ids:
-        approvals = {a.id: (a.status, ensure_utc(a.decided_at)) for a in db.execute(
-            select(Approval.id, Approval.status, Approval.decided_at)
-            .where(Approval.organization_id == org_id, Approval.id.in_(approval_ids))
-        ).all()}
+        approvals = {
+            a.id: (a.status, ensure_utc(a.decided_at))
+            for a in db.execute(
+                select(Approval.id, Approval.status, Approval.decided_at).where(
+                    Approval.organization_id == org_id, Approval.id.in_(approval_ids)
+                )
+            ).all()
+        }
 
     out: list[_Inv] = []
     for r in rows:
@@ -151,24 +191,51 @@ def _invocations(db: Session, org_id: str, session_id: str, positions: dict[str,
             req_pos = res_pos
         if req_pos is None:
             continue
-        outbound = bool(r.destination_id) or classify_tool(
-            r.tool_name, r.provider, server=r.server, arguments=r.arguments_redacted or {}
-        ).outbound
-        initial = "requested" if r.enforcement == "observed" else _STATUS_BY_DECISION.get(str(r.decision), "allowed")
+        outbound = (
+            bool(r.destination_id)
+            or classify_tool(
+                r.tool_name, r.provider, server=r.server, arguments=r.arguments_redacted or {}
+            ).outbound
+        )
+        initial = (
+            "requested"
+            if r.enforcement == "observed"
+            else _STATUS_BY_DECISION.get(str(r.decision), "allowed")
+        )
         approval = approvals.get(r.approval_id or "", (None, None))
         signal = {
-            "id": r.id, "tool_name": r.tool_name, "category": r.category, "status": initial, "decision": r.decision,
-            "sensitive_resources": [x.get("id") for x in (r.resources or []) if isinstance(x, dict) and x.get("sensitive")],
-            "destination_classification": recorded_dest.get(r.policy_decision_id or "") or r.destination_classification,
-            "outbound": outbound, "sensitive_data_detected": bool(r.sensitive_data_detected),
+            "id": r.id,
+            "tool_name": r.tool_name,
+            "category": r.category,
+            "status": initial,
+            "decision": r.decision,
+            "sensitive_resources": [
+                x.get("id") for x in (r.resources or []) if isinstance(x, dict) and x.get("sensitive")
+            ],
+            "destination_classification": recorded_dest.get(r.policy_decision_id or "")
+            or r.destination_classification,
+            "outbound": outbound,
+            "sensitive_data_detected": bool(r.sensitive_data_detected),
             "matched_session_fingerprints": list(r.matched_session_fingerprints or []),
         }
-        out.append(_Inv(id=r.id, signal=signal, final_status=r.status, initial_status=initial, req_pos=req_pos,
-                        res_pos=res_pos, approval_status=approval[0], approval_decided_at=approval[1]))
+        out.append(
+            _Inv(
+                id=r.id,
+                signal=signal,
+                final_status=r.status,
+                initial_status=initial,
+                req_pos=req_pos,
+                res_pos=res_pos,
+                approval_status=approval[0],
+                approval_decided_at=approval[1],
+            )
+        )
     return out
 
 
-def _findings_by_pos(db: Session, org_id: str, session_id: str, points: list[TimelinePoint]) -> dict[int, list[dict[str, Any]]]:
+def _findings_by_pos(
+    db: Session, org_id: str, session_id: str, points: list[TimelinePoint]
+) -> dict[int, list[dict[str, Any]]]:
     first_pos: dict[str, int] = {}
     for pos, point in enumerate(points):
         for fid in point.refs.get("finding_ids") or []:
@@ -176,19 +243,23 @@ def _findings_by_pos(db: Session, org_id: str, session_id: str, points: list[Tim
     if not first_pos:
         return {}
     rows = db.execute(
-        select(SecurityFinding.id, SecurityFinding.category, SecurityFinding.severity)
-        .where(SecurityFinding.organization_id == org_id, SecurityFinding.session_id == session_id,
-               SecurityFinding.id.in_(list(first_pos)))
+        select(SecurityFinding.id, SecurityFinding.category, SecurityFinding.severity).where(
+            SecurityFinding.organization_id == org_id,
+            SecurityFinding.session_id == session_id,
+            SecurityFinding.id.in_(list(first_pos)),
+        )
     ).all()
     out: dict[int, list[dict[str, Any]]] = {}
     for r in rows:
         out.setdefault(first_pos[r.id], []).append(
-            {"id": r.id, "category": r.category, "severity": r.severity, "status": "open"})
+            {"id": r.id, "category": r.category, "severity": r.severity, "status": "open"}
+        )
     return out
 
 
-def risk_progression(db: Session, org_id: str, session: AgentSession, agent: Agent,
-                     points: list[TimelinePoint], *, upto: int) -> list[SessionRisk]:
+def risk_progression(
+    db: Session, org_id: str, session: AgentSession, agent: Agent, points: list[TimelinePoint], *, upto: int
+) -> list[SessionRisk]:
     """Recomputed session risk after each of the first ``upto`` recorded events (in order)."""
     upto = min(upto, len(points))
     if upto <= 0:
@@ -228,9 +299,14 @@ def risk_progression(db: Session, org_id: str, session: AgentSession, agent: Age
             for inv in active:
                 inv.signal["status"] = inv.status_at(pos, at)
                 calls.append(dict(inv.signal))
-            risk = compute_session_risk(SessionSignals(
-                context_items=list(items), tool_invocations=calls, declared_tools=declared, findings=list(findings),
-            ))
+            risk = compute_session_risk(
+                SessionSignals(
+                    context_items=list(items),
+                    tool_invocations=calls,
+                    declared_tools=declared,
+                    findings=list(findings),
+                )
+            )
         assert risk is not None
         results.append(risk)
         previous_at = at
@@ -239,9 +315,13 @@ def risk_progression(db: Session, org_id: str, session: AgentSession, agent: Age
 
 def risk_brief(risk: SessionRisk, previous: SessionRisk | None) -> dict[str, Any]:
     return {
-        "score": risk.score, "level": risk.level, "delta": risk.score - (previous.score if previous else 0),
-        "trifecta": risk.trifecta, "sensitive_access": risk.sensitive_access,
-        "untrusted_exposure": risk.untrusted_exposure, "outbound_channel": risk.outbound_channel,
+        "score": risk.score,
+        "level": risk.level,
+        "delta": risk.score - (previous.score if previous else 0),
+        "trifecta": risk.trifecta,
+        "sensitive_access": risk.sensitive_access,
+        "untrusted_exposure": risk.untrusted_exposure,
+        "outbound_channel": risk.outbound_channel,
         "summary": risk.summary,
         "factors": [{"key": f.key, "label": f.label, "weight": f.weight} for f in risk.factors],
     }

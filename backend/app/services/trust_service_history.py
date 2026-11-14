@@ -66,15 +66,23 @@ def describe_entry(entry: AuditEvent) -> str:
     return action
 
 
-def history(db: Session, org_id: str, target_type: str, target_id: str, *, limit: int = _HISTORY_LIMIT) -> list[dict[str, Any]]:
+def history(
+    db: Session, org_id: str, target_type: str, target_id: str, *, limit: int = _HISTORY_LIMIT
+) -> list[dict[str, Any]]:
     actions = SOURCE_ACTIONS if target_type == SOURCE_TARGET else DESTINATION_ACTIONS
-    rows = list(db.scalars(
-        select(AuditEvent)
-        .where(AuditEvent.organization_id == org_id, AuditEvent.target_type == target_type,
-               AuditEvent.target_id == target_id, AuditEvent.action.in_(actions))
-        .order_by(AuditEvent.seq.desc())
-        .limit(limit)
-    ))
+    rows = list(
+        db.scalars(
+            select(AuditEvent)
+            .where(
+                AuditEvent.organization_id == org_id,
+                AuditEvent.target_type == target_type,
+                AuditEvent.target_id == target_id,
+                AuditEvent.action.in_(actions),
+            )
+            .order_by(AuditEvent.seq.desc())
+            .limit(limit)
+        )
+    )
     users = user_labels(db, [r.actor_id for r in rows if r.actor_type == "user"])
     return [
         {
@@ -96,8 +104,12 @@ def history(db: Session, org_id: str, target_type: str, target_id: str, *, limit
 def latest_manual(db: Session, org_id: str, source_id: str) -> AuditEvent | None:
     return db.scalar(
         select(AuditEvent)
-        .where(AuditEvent.organization_id == org_id, AuditEvent.target_type == SOURCE_TARGET,
-               AuditEvent.target_id == source_id, AuditEvent.action == MANUAL_SOURCE_ACTION)
+        .where(
+            AuditEvent.organization_id == org_id,
+            AuditEvent.target_type == SOURCE_TARGET,
+            AuditEvent.target_id == source_id,
+            AuditEvent.action == MANUAL_SOURCE_ACTION,
+        )
         .order_by(AuditEvent.seq.desc())
         .limit(1)
     )
@@ -128,15 +140,19 @@ def manual_details(db: Session, org_id: str, source: ContextSource) -> dict[str,
     }
 
 
-def recently_downgraded(db: Session, org_id: str, *, limit: int = 10,
-                        include_simulated: bool = False) -> list[dict[str, Any]]:
+def recently_downgraded(
+    db: Session, org_id: str, *, limit: int = 10, include_simulated: bool = False
+) -> list[dict[str, Any]]:
     """Latest downgrade per source/destination in the window. Records only Simulation Lab traffic
     observed are left out unless ``include_simulated``; every row says whether it is simulated."""
     since = utcnow() - timedelta(days=DOWNGRADE_WINDOW_DAYS)
     rows = db.scalars(
         select(AuditEvent)
-        .where(AuditEvent.organization_id == org_id, AuditEvent.occurred_at >= since,
-               AuditEvent.action.in_(SOURCE_ACTIONS + DESTINATION_ACTIONS))
+        .where(
+            AuditEvent.organization_id == org_id,
+            AuditEvent.occurred_at >= since,
+            AuditEvent.action.in_(SOURCE_ACTIONS + DESTINATION_ACTIONS),
+        )
         .order_by(AuditEvent.seq.desc())
         .limit(_DOWNGRADE_SCAN)
     )
@@ -154,8 +170,16 @@ def recently_downgraded(db: Session, org_id: str, *, limit: int = 10,
             break
     source_ids = [e.target_id for e in picked if e.target_type == SOURCE_TARGET]
     dest_ids = [e.target_id for e in picked if e.target_type == DESTINATION_TARGET]
-    sources = {s.id: s for s in db.scalars(scoped(ContextSource, org_id).where(ContextSource.id.in_(source_ids)))} if source_ids else {}
-    dests = {d.id: d for d in db.scalars(scoped(Destination, org_id).where(Destination.id.in_(dest_ids)))} if dest_ids else {}
+    sources = (
+        {s.id: s for s in db.scalars(scoped(ContextSource, org_id).where(ContextSource.id.in_(source_ids)))}
+        if source_ids
+        else {}
+    )
+    dests = (
+        {d.id: d for d in db.scalars(scoped(Destination, org_id).where(Destination.id.in_(dest_ids)))}
+        if dest_ids
+        else {}
+    )
     simulated_dests = simulation_only_destinations(db, org_id, dests)
     users = user_labels(db, [e.actor_id for e in picked if e.actor_type == "user"])
     out: list[dict[str, Any]] = []
@@ -163,7 +187,11 @@ def recently_downgraded(db: Session, org_id: str, *, limit: int = 10,
         d = entry.details or {}
         if entry.target_type == SOURCE_TARGET and entry.target_id in sources:
             src = sources[entry.target_id]
-            target_type, label, simulated = "source", src.display_name or src.identifier, bool(src.is_simulation)
+            target_type, label, simulated = (
+                "source",
+                src.display_name or src.identifier,
+                bool(src.is_simulation),
+            )
         elif entry.target_type == DESTINATION_TARGET and entry.target_id in dests:
             target_type, label = "destination", dests[entry.target_id].identifier
             simulated = entry.target_id in simulated_dests
@@ -171,12 +199,19 @@ def recently_downgraded(db: Session, org_id: str, *, limit: int = 10,
             continue  # the record was deleted (retention); nothing to link to
         if simulated and not include_simulated:
             continue
-        out.append({
-            "target_type": target_type, "target_id": entry.target_id, "label": label[:400],
-            "from_level": d["from"], "to_level": d["to"], "at": entry.occurred_at,
-            "actor_label": actor_label(entry.actor_type, entry.actor_id, users), "summary": describe_entry(entry),
-            "is_simulation": simulated,
-        })
+        out.append(
+            {
+                "target_type": target_type,
+                "target_id": entry.target_id,
+                "label": label[:400],
+                "from_level": d["from"],
+                "to_level": d["to"],
+                "at": entry.occurred_at,
+                "actor_label": actor_label(entry.actor_type, entry.actor_id, users),
+                "summary": describe_entry(entry),
+                "is_simulation": simulated,
+            }
+        )
         if len(out) >= limit:
             break
     return out

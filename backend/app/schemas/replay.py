@@ -54,7 +54,9 @@ class StepOutcomeOut(BaseModel):
     decision: str
     enforcement: str
     explanation: str
-    matched_policies: list[str] = Field(default_factory=list, description="Enforce-mode policies that matched")
+    matched_policies: list[str] = Field(
+        default_factory=list, description="Enforce-mode policies that matched"
+    )
     approval_id: str | None = None
     approval_status: str | None = None
 
@@ -170,7 +172,9 @@ class EvaluatedPolicyOut(BaseModel):
     enabled: bool
     priority: int
     source: Literal["saved", "draft"]
-    changes: list[str] = Field(default_factory=list, description="What this simulation changed, in plain words")
+    changes: list[str] = Field(
+        default_factory=list, description="What this simulation changed, in plain words"
+    )
 
 
 class PolicySetOut(BaseModel):
@@ -202,7 +206,9 @@ class EvidenceFieldOut(BaseModel):
     field: str = Field(description="Field path referenced by a matching condition")
     present: bool
     value: Any = Field(default=None, description="Value in the recorded (redacted) input snapshot")
-    policies: list[str] = Field(default_factory=list, description="Matching policies whose conditions use this field")
+    policies: list[str] = Field(
+        default_factory=list, description="Matching policies whose conditions use this field"
+    )
 
 
 class CounterfactualToolOut(BaseModel):
@@ -229,7 +235,9 @@ class CounterfactualStepOut(BaseModel):
     hypothetical_monitor_matches: list[HypotheticalMatchOut]
     hypothetical_restrictions: dict[str, Any]
     evaluation_errors: list[dict[str, str]]
-    current_decision: str = Field(description="Outcome under today's saved policies, without hypothetical changes")
+    current_decision: str = Field(
+        description="Outcome under today's saved policies, without hypothetical changes"
+    )
     drifted: bool = Field(description="Today's saved policies already give a different outcome than recorded")
     policy_changes: list[PolicyChangeOut]
     explanation: str

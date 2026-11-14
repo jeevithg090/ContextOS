@@ -60,9 +60,16 @@ class PayloadTooLargeError(AppError):
     code = "payload_too_large"
 
 
-_HTTP_CODES = {400: "bad_request", 401: "unauthenticated", 403: "forbidden", 404: "not_found",
-               405: "method_not_allowed", 413: "payload_too_large", 415: "unsupported_media_type",
-               429: "rate_limited"}
+_HTTP_CODES = {
+    400: "bad_request",
+    401: "unauthenticated",
+    403: "forbidden",
+    404: "not_found",
+    405: "method_not_allowed",
+    413: "payload_too_large",
+    415: "unsupported_media_type",
+    429: "rate_limited",
+}
 _ECHO_LIMIT = 200
 
 
@@ -83,25 +90,38 @@ def _envelope(code: str, message: str, details: Any = None) -> dict[str, Any]:
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _app_error(_: Request, exc: AppError) -> JSONResponse:
-        return JSONResponse(status_code=exc.status_code, content=_envelope(exc.code, exc.message, exc.details))
+        return JSONResponse(
+            status_code=exc.status_code, content=_envelope(exc.code, exc.message, exc.details)
+        )
 
     @app.exception_handler(RequestValidationError)
     async def _validation(_: Request, exc: RequestValidationError) -> JSONResponse:
         # Locations can carry client-chosen keys (an unexpected field name) and messages can quote
         # input: both are redacted before they are echoed. The input value itself is never echoed.
         details = [
-            {"loc": [_echo(part) for part in err.get("loc", [])], "msg": _echo(err.get("msg")), "type": err.get("type")}
+            {
+                "loc": [_echo(part) for part in err.get("loc", [])],
+                "msg": _echo(err.get("msg")),
+                "type": err.get("type"),
+            }
             for err in exc.errors()
         ]
-        return JSONResponse(status_code=422, content=_envelope("validation_failed", "Request validation failed", details))
+        return JSONResponse(
+            status_code=422, content=_envelope("validation_failed", "Request validation failed", details)
+        )
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         """Framework errors (unknown route, wrong method, unparsable body) in the same envelope."""
         code = _HTTP_CODES.get(exc.status_code, "http_error")
-        message = exc.detail if isinstance(exc.detail, str) and exc.detail else code.replace("_", " ").capitalize()
-        return JSONResponse(status_code=exc.status_code, content=_envelope(code, message),
-                            headers=getattr(exc, "headers", None))
+        message = (
+            exc.detail if isinstance(exc.detail, str) and exc.detail else code.replace("_", " ").capitalize()
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=_envelope(code, message),
+            headers=getattr(exc, "headers", None),
+        )
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:

@@ -61,17 +61,23 @@ def list_boards(
     """
     seeded = boards.seed_default_board(db, principal.org_id, principal.user_id)
     if seeded:
-        audit_board(db, as_actor(principal), seeded[0].id, "defaults_seeded",
-                    {"board_ids": [b.id for b in seeded]})
+        audit_board(
+            db, as_actor(principal), seeded[0].id, "defaults_seeded", {"board_ids": [b.id for b in seeded]}
+        )
     rows = boards.list_boards(db, principal.org_id, include_archived=include_archived)
-    page = rows[offset: offset + limit]
-    return Page(items=board_summaries(db, principal.org_id, page), total=len(rows), limit=limit, offset=offset)
+    page = rows[offset : offset + limit]
+    return Page(
+        items=board_summaries(db, principal.org_id, page), total=len(rows), limit=limit, offset=offset
+    )
 
 
 @router.post("", response_model=BoardDetailOut, status_code=201)
-def create_board(body: BoardCreate, principal: Principal = WRITE, db: Session = Depends(get_db)) -> BoardDetailOut:
-    board = boards.create_board(db, as_actor(principal), name=body.name, template=body.template,
-                                description=body.description)
+def create_board(
+    body: BoardCreate, principal: Principal = WRITE, db: Session = Depends(get_db)
+) -> BoardDetailOut:
+    board = boards.create_board(
+        db, as_actor(principal), name=body.name, template=body.template, description=body.description
+    )
     return board_detail(db, board)
 
 
@@ -132,7 +138,11 @@ def reorder_columns(
 
 @router.patch("/{board_id}/columns/{column_id}", response_model=ColumnOut)
 def update_column(
-    board_id: str, column_id: str, body: ColumnPatch, principal: Principal = WRITE, db: Session = Depends(get_db)
+    board_id: str,
+    column_id: str,
+    body: ColumnPatch,
+    principal: Principal = WRITE,
+    db: Session = Depends(get_db),
 ) -> ColumnOut:
     board = boards.get_active_board(db, principal.org_id, board_id)
     column = boards.get_board_column(db, board, column_id)
@@ -155,5 +165,7 @@ def delete_column(
     """Delete a column. Refused while it holds tasks unless ``move_to`` names another column of the board."""
     board = boards.get_active_board(db, principal.org_id, board_id)
     column = boards.get_board_column(db, board, column_id)
-    result = boards.delete_column(db, as_actor(principal), board, column, move_to=move_to, override_wip=override_wip)
+    result = boards.delete_column(
+        db, as_actor(principal), board, column, move_to=move_to, override_wip=override_wip
+    )
     return ColumnDeleteOut.model_validate(result)

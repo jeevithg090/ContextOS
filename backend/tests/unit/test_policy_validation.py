@@ -166,9 +166,14 @@ def test_multiple_errors_are_all_reported():
 
 # ---- restrictions ----------------------------------------------------------------------------
 
+
 def test_valid_restrictions():
-    r = {"redact_secrets": True, "allowed_path_globs": ["src/*"], "deny_path_globs": ["*.pem"],
-         "max_argument_bytes": 4096}
+    r = {
+        "redact_secrets": True,
+        "allowed_path_globs": ["src/*"],
+        "deny_path_globs": ["*.pem"],
+        "max_argument_bytes": 4096,
+    }
     assert validate_restrictions(r, outcome="RESTRICT") == []
     assert validate_restrictions({}, outcome="DENY") == []
 
@@ -195,6 +200,7 @@ def test_invalid_restrictions(restrictions, outcome, fragment):
 
 # ---- catalog ---------------------------------------------------------------------------------
 
+
 def test_catalog_covers_every_evaluation_input_field():
     roots = {e["path"].split(".")[0].split("[")[0] for e in FIELD_CATALOG}
     assert roots == {f.name for f in fields(EvaluationInput)}
@@ -216,14 +222,41 @@ def test_catalog_entries_are_well_formed():
 
 @pytest.mark.parametrize(
     "path",
-    ["agent.name", "agent.environment", "agent.labels", "agent.framework", "tool.name", "tool.category",
-     "tool.provider", "tool.server", "tool.risk_level", "resources[*].kind", "resources[*].id",
-     "resources[*].sensitive", "sensitive_resources", "destination.kind", "destination.identifier",
-     "destination.classification", "secrets_in_arguments", "session_secret_matches", "session.score",
-     "session.level", "session.untrusted_exposure", "session.sensitive_access", "session.outbound_channel",
-     "session.trifecta", "context.lowest_trust", "context.untrusted_item_count", "context.injection_detected",
-     "context.max_detection_severity", "detection.rule_ids", "detection.max_severity", "detection.categories",
-     "integration.kind", "integration.supports_enforcement"],
+    [
+        "agent.name",
+        "agent.environment",
+        "agent.labels",
+        "agent.framework",
+        "tool.name",
+        "tool.category",
+        "tool.provider",
+        "tool.server",
+        "tool.risk_level",
+        "resources[*].kind",
+        "resources[*].id",
+        "resources[*].sensitive",
+        "sensitive_resources",
+        "destination.kind",
+        "destination.identifier",
+        "destination.classification",
+        "secrets_in_arguments",
+        "session_secret_matches",
+        "session.score",
+        "session.level",
+        "session.untrusted_exposure",
+        "session.sensitive_access",
+        "session.outbound_channel",
+        "session.trifecta",
+        "context.lowest_trust",
+        "context.untrusted_item_count",
+        "context.injection_detected",
+        "context.max_detection_severity",
+        "detection.rule_ids",
+        "detection.max_severity",
+        "detection.categories",
+        "integration.kind",
+        "integration.supports_enforcement",
+    ],
 )
 def test_catalog_contains_documented_paths(path):
     assert lookup_field(path) is not None

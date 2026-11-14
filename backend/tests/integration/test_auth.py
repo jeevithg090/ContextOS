@@ -26,7 +26,9 @@ def _reset_limiter():
 
 def _audit_actions(db, org_id: str) -> list[str]:
     db.expire_all()
-    return list(db.scalars(select(models.AuditEvent.action).where(models.AuditEvent.organization_id == org_id)))
+    return list(
+        db.scalars(select(models.AuditEvent.action).where(models.AuditEvent.organization_id == org_id))
+    )
 
 
 def _cookie_name() -> str:
@@ -47,7 +49,9 @@ def test_setup_creates_org_owner_and_signs_in(client, db):
     assert me["organization"]["slug"] == "acme-ai"
     assert me["role"] == "owner"
     assert "admin" in me["permissions"] and "policy:manage" in me["permissions"]
-    assert me["memberships"] == [{"organization_id": me["organization"]["id"], "organization_name": "Acme AI", "role": "owner"}]
+    assert me["memberships"] == [
+        {"organization_id": me["organization"]["id"], "organization_name": "Acme AI", "role": "owner"}
+    ]
 
     cookie = res.headers["set-cookie"]
     assert f"{_cookie_name()}=ctxs_" in cookie
@@ -61,7 +65,11 @@ def test_setup_creates_org_owner_and_signs_in(client, db):
     org_id = me["organization"]["id"]
     org = db.get(models.Organization, org_id)
     assert org.settings["fail_mode"] == "ask"
-    policies = db.scalar(select(func.count()).select_from(models.SecurityPolicy).where(models.SecurityPolicy.organization_id == org_id))
+    policies = db.scalar(
+        select(func.count())
+        .select_from(models.SecurityPolicy)
+        .where(models.SecurityPolicy.organization_id == org_id)
+    )
     assert policies > 0, "built-in policy pack should be seeded"
     user = db.get(models.User, me["user"]["id"])
     assert user.password_hash.startswith("scrypt$") and SETUP["password"] not in user.password_hash
@@ -108,12 +116,20 @@ def test_login_sets_cookie_and_returns_me(client, org, db):
 
 
 def test_login_errors_are_uniform(client, org, db):
-    wrong_password = client.post("/api/v1/auth/login", json={"email": org.email, "password": "nope-nope-nope"})
-    unknown_email = client.post("/api/v1/auth/login", json={"email": "nobody@nowhere.test", "password": "nope-nope-nope"})
+    wrong_password = client.post(
+        "/api/v1/auth/login", json={"email": org.email, "password": "nope-nope-nope"}
+    )
+    unknown_email = client.post(
+        "/api/v1/auth/login", json={"email": "nobody@nowhere.test", "password": "nope-nope-nope"}
+    )
     malformed = client.post("/api/v1/auth/login", json={"email": "not an email", "password": "x"})
     for res in (wrong_password, unknown_email, malformed):
         assert res.status_code == 401
-        assert res.json()["error"] == {"code": "unauthenticated", "message": "Invalid email or password", "details": None}
+        assert res.json()["error"] == {
+            "code": "unauthenticated",
+            "message": "Invalid email or password",
+            "details": None,
+        }
         assert "set-cookie" not in res.headers
     # The failure against a real account is audited (and survives the request rollback).
     assert _audit_actions(db, org.org_id).count("auth.login_failed") == 1
@@ -129,14 +145,19 @@ def test_inactive_user_cannot_login(client, org, db):
 
 
 def test_cookie_session_requires_csrf_header_on_unsafe_requests(client, org):
-    assert client.post("/api/v1/auth/login", json={"email": org.email, "password": org.password}).status_code == 200
+    assert (
+        client.post("/api/v1/auth/login", json={"email": org.email, "password": org.password}).status_code
+        == 200
+    )
     # Safe request: cookie alone is enough.
     assert client.get("/api/v1/org").status_code == 200
     # Unsafe request with the cookie but without the CSRF header is refused.
     res = client.patch("/api/v1/org/settings", json={"retention_days": 30})
     assert res.status_code == 403
     assert "CSRF" in res.json()["error"]["message"]
-    ok = client.patch("/api/v1/org/settings", json={"retention_days": 30}, headers={"X-Requested-With": "contextos"})
+    ok = client.patch(
+        "/api/v1/org/settings", json={"retention_days": 30}, headers={"X-Requested-With": "contextos"}
+    )
     assert ok.status_code == 200
     # Logout is also an unsafe cookie request.
     assert client.post("/api/v1/auth/logout").status_code == 403
@@ -169,7 +190,9 @@ def test_me_rejects_api_keys(client, org):
 def test_me_honours_org_header_for_multi_org_users(client, org, other_org):
     # other_org's owner adds org's owner (an existing user) to their organisation.
     res = client.post(
-        "/api/v1/org/members", headers=other_org.user_headers, json={"email": org.email, "name": "ignored", "role": "viewer"}
+        "/api/v1/org/members",
+        headers=other_org.user_headers,
+        json={"email": org.email, "name": "ignored", "role": "viewer"},
     )
     assert res.status_code == 201, res.text
 
@@ -177,7 +200,9 @@ def test_me_honours_org_header_for_multi_org_users(client, org, other_org):
     assert default["organization"]["id"] == org.org_id and default["role"] == "owner"
     assert {m["organization_id"] for m in default["memberships"]} == {org.org_id, other_org.org_id}
 
-    switched = client.get("/api/v1/auth/me", headers={**org.user_headers, "X-ContextOS-Org": other_org.org_id}).json()
+    switched = client.get(
+        "/api/v1/auth/me", headers={**org.user_headers, "X-ContextOS-Org": other_org.org_id}
+    ).json()
     assert switched["organization"]["id"] == other_org.org_id
     assert switched["role"] == "viewer"
     assert "admin" not in switched["permissions"]
@@ -187,7 +212,9 @@ def test_me_honours_org_header_for_multi_org_users(client, org, other_org):
     via_cookie = client.get("/api/v1/auth/me", headers={"X-ContextOS-Org": other_org.org_id}).json()
     assert via_cookie["organization"]["id"] == other_org.org_id
 
-    stranger = client.get("/api/v1/auth/me", headers={**other_org.user_headers, "X-ContextOS-Org": org.org_id})
+    stranger = client.get(
+        "/api/v1/auth/me", headers={**other_org.user_headers, "X-ContextOS-Org": org.org_id}
+    )
     assert stranger.status_code == 403
 
 
@@ -196,23 +223,42 @@ def test_me_honours_org_header_for_multi_org_users(client, org, other_org):
 
 def test_login_rate_limited_after_five_failures(client, org):
     for _ in range(5):
-        assert client.post("/api/v1/auth/login", json={"email": org.email, "password": "wrong-password"}).status_code == 401
+        assert (
+            client.post(
+                "/api/v1/auth/login", json={"email": org.email, "password": "wrong-password"}
+            ).status_code
+            == 401
+        )
     blocked = client.post("/api/v1/auth/login", json={"email": org.email, "password": org.password})
     assert blocked.status_code == 429
     error = blocked.json()["error"]
     assert error["code"] == "rate_limited"
     assert 0 < error["details"]["retry_after_s"] <= 300
     # Other accounts from the same client are unaffected.
-    assert client.post("/api/v1/auth/login", json={"email": "someone@else.test", "password": "x"}).status_code == 401
+    assert (
+        client.post("/api/v1/auth/login", json={"email": "someone@else.test", "password": "x"}).status_code
+        == 401
+    )
 
 
 def test_successful_login_resets_failure_count(client, org):
     for _ in range(4):
         client.post("/api/v1/auth/login", json={"email": org.email, "password": "wrong-password"})
-    assert client.post("/api/v1/auth/login", json={"email": org.email, "password": org.password}).status_code == 200
+    assert (
+        client.post("/api/v1/auth/login", json={"email": org.email, "password": org.password}).status_code
+        == 200
+    )
     for _ in range(4):
-        assert client.post("/api/v1/auth/login", json={"email": org.email, "password": "wrong-password"}).status_code == 401
-    assert client.post("/api/v1/auth/login", json={"email": org.email, "password": org.password}).status_code == 200
+        assert (
+            client.post(
+                "/api/v1/auth/login", json={"email": org.email, "password": "wrong-password"}
+            ).status_code
+            == 401
+        )
+    assert (
+        client.post("/api/v1/auth/login", json={"email": org.email, "password": org.password}).status_code
+        == 200
+    )
 
 
 def test_rate_limiter_window_and_key_isolation():

@@ -109,8 +109,11 @@ def is_contextos_hook(handler: Any) -> str | None:
 
 
 def _desired(event: str, matcher: str | None, base: str, timeout: int) -> dict[str, Any]:
-    handler: dict[str, Any] = {"type": "command", "command": hook_command(base, event),
-                               "timeout": timeout if event == "PreToolUse" else min(timeout, OBSERVATION_TIMEOUT_S)}
+    handler: dict[str, Any] = {
+        "type": "command",
+        "command": hook_command(base, event),
+        "timeout": timeout if event == "PreToolUse" else min(timeout, OBSERVATION_TIMEOUT_S),
+    }
     if event == "PreToolUse":
         handler["statusMessage"] = PRE_TOOL_STATUS
     group: dict[str, Any] = {"hooks": [handler]}
@@ -131,7 +134,9 @@ def _load(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"{path} is not valid JSON (line {exc.lineno}); fix it before installing hooks") from None
+        raise ValueError(
+            f"{path} is not valid JSON (line {exc.lineno}); fix it before installing hooks"
+        ) from None
     if not isinstance(data, dict):
         raise ValueError(f"{path} must contain a JSON object")  # noqa: TRY004 - a file-content error, like bad JSON
     return data
@@ -186,8 +191,14 @@ def _backup(path: Path) -> Path | None:
     return backup
 
 
-def apply_hooks(project_dir: Path, scope: str = "project", command: str | None = None, timeout: int = 60, *,
-                home: Path | None = None) -> InstallReport:
+def apply_hooks(
+    project_dir: Path,
+    scope: str = "project",
+    command: str | None = None,
+    timeout: int = 60,
+    *,
+    home: Path | None = None,
+) -> InstallReport:
     """Merge the ContextOS hooks into the settings file for ``scope``; see the module docstring."""
     if not isinstance(timeout, int) or isinstance(timeout, bool) or not 10 <= timeout <= 600:
         raise ValueError("timeout must be an integer number of seconds between 10 and 600")
@@ -201,8 +212,13 @@ def apply_hooks(project_dir: Path, scope: str = "project", command: str | None =
     for event, matcher in HOOK_EVENTS:
         desired = _desired(event, matcher, base, timeout)
         groups = list(hooks.get(event, []))
-        ours = [g for g in groups if isinstance(g, dict) and isinstance(g.get("hooks"), list)
-                and any(is_contextos_hook(h) for h in g["hooks"])]
+        ours = [
+            g
+            for g in groups
+            if isinstance(g, dict)
+            and isinstance(g.get("hooks"), list)
+            and any(is_contextos_hook(h) for h in g["hooks"])
+        ]
         if len(ours) == 1 and ours[0] == desired:
             continue  # already exactly as wanted: leave the file untouched
         hooks[event] = [*_without_ours(groups), desired]
@@ -216,8 +232,14 @@ def apply_hooks(project_dir: Path, scope: str = "project", command: str | None =
     return report
 
 
-def install_hooks(project_dir: Path, scope: str = "project", command: str | None = None, timeout: int = 60, *,
-                  home: Path | None = None) -> Path:
+def install_hooks(
+    project_dir: Path,
+    scope: str = "project",
+    command: str | None = None,
+    timeout: int = 60,
+    *,
+    home: Path | None = None,
+) -> Path:
     """Install (or update) the hooks; returns the settings file. Idempotent."""
     return apply_hooks(project_dir, scope, command, timeout, home=home).path
 
@@ -232,8 +254,12 @@ def uninstall_hooks(project_dir: Path, scope: str = "project", *, home: Path | N
     hooks = _hooks_section(settings, path)
     cleaned: dict[str, Any] = {}
     for event, groups in hooks.items():
-        if any(isinstance(g, dict) and isinstance(g.get("hooks"), list) and any(is_contextos_hook(h) for h in g["hooks"])
-               for g in groups):
+        if any(
+            isinstance(g, dict)
+            and isinstance(g.get("hooks"), list)
+            and any(is_contextos_hook(h) for h in g["hooks"])
+            for g in groups
+        ):
             report.events.append(event)
             remaining = _without_ours(groups)
             if remaining:
@@ -302,8 +328,10 @@ def hooks_status(project_dir: Path, *, home: Path | None = None) -> dict[str, An
     if disabled:
         detail = f"disableAllHooks is true in the {', '.join(disabled)} settings: Claude Code runs no hooks"
     elif broken and not enforcing:
-        detail = (f"the PreToolUse command in the {', '.join(broken)} settings cannot be started; Claude Code "
-                  "would run tools unchecked. Re-run `contextos init --claude-code`")
+        detail = (
+            f"the PreToolUse command in the {', '.join(broken)} settings cannot be started; Claude Code "
+            "would run tools unchecked. Re-run `contextos init --claude-code`"
+        )
     elif enforcing:
         missing = sorted({m for s in enforcing for m in scopes[s]["missing"]})
         detail = f"enforcing via PreToolUse ({', '.join(enforcing)} scope)"
@@ -317,12 +345,16 @@ def hooks_status(project_dir: Path, *, home: Path | None = None) -> dict[str, An
 
 
 def _cli(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m contextos.integrations.claude_code.install",
-                                     description="Manage the ContextOS hooks in Claude Code settings.")
+    parser = argparse.ArgumentParser(
+        prog="python -m contextos.integrations.claude_code.install",
+        description="Manage the ContextOS hooks in Claude Code settings.",
+    )
     parser.add_argument("action", choices=("install", "uninstall", "status"))
     parser.add_argument("--project-dir", default=".", type=Path)
     parser.add_argument("--scope", default="project", choices=SCOPES)
-    parser.add_argument("--timeout", default=60, type=int, help="PreToolUse hook timeout in seconds (default 60)")
+    parser.add_argument(
+        "--timeout", default=60, type=int, help="PreToolUse hook timeout in seconds (default 60)"
+    )
     args = parser.parse_args(argv)
     try:
         if args.action == "install":
@@ -334,8 +366,11 @@ def _cli(argv: Sequence[str] | None = None) -> int:
                 print(f"original settings kept at {report.backup}")
         elif args.action == "uninstall":
             report = uninstall_hooks(args.project_dir, args.scope)
-            print(f"Removed ContextOS hooks for {', '.join(report.events)} from {report.path}" if report.changed
-                  else f"No ContextOS hooks in {report.path}")
+            print(
+                f"Removed ContextOS hooks for {', '.join(report.events)} from {report.path}"
+                if report.changed
+                else f"No ContextOS hooks in {report.path}"
+            )
         else:
             print(json.dumps(hooks_status(args.project_dir), indent=2))
     except (OSError, ValueError) as exc:

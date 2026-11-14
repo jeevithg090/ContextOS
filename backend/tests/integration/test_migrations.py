@@ -47,7 +47,9 @@ def test_revisions_form_a_single_portable_chain():
         # Revisions must not import application code (models change; migrations are history).
         assert "from app" not in source and "import app" not in source, path.name
         assert "UTCDateTime(" not in source and "astext_type=Text()" not in source, path.name
-        assert "def downgrade() -> None:" in source and "pass\n" not in source.split("def downgrade")[1], path.name
+        assert "def downgrade() -> None:" in source and "pass\n" not in source.split("def downgrade")[1], (
+            path.name
+        )
 
 
 def test_upgrade_head_on_a_fresh_database_matches_the_models(fresh):
@@ -65,7 +67,9 @@ def test_upgrade_head_on_a_fresh_database_matches_the_models(fresh):
     assert fks["fk_context_items_session_id_agent_sessions"]["options"].get("ondelete") == "CASCADE"
     assert fks["fk_context_items_organization_id_organizations"]["options"].get("ondelete") == "CASCADE"
     parent = {fk["name"]: fk for fk in insp.get_foreign_keys("agent_sessions")}
-    assert parent["fk_agent_sessions_parent_session_id_agent_sessions"]["options"].get("ondelete") == "SET NULL"
+    assert (
+        parent["fk_agent_sessions_parent_session_id_agent_sessions"]["options"].get("ondelete") == "SET NULL"
+    )
     tasks = {fk["name"]: fk for fk in insp.get_foreign_keys("tasks")}
     assert tasks["fk_tasks_column_id_board_columns"]["options"].get("ondelete") == "RESTRICT"
     # Unique constraints and indexes, including the per-tenant idempotency key.
@@ -102,8 +106,13 @@ def test_migrated_schema_accepts_the_application_data_path(fresh):
     from app.services.retention import purge_expired
 
     with session_factory()() as db:
-        org, _ = create_organization(db, name="Migrated Co", owner_email="owner@migrated.test", owner_name="Owner",
-                                     password="migrated-password-123")
+        org, _ = create_organization(
+            db,
+            name="Migrated Co",
+            owner_email="owner@migrated.test",
+            owner_name="Owner",
+            password="migrated-password-123",
+        )
         db.commit()
         assert org.created_at.tzinfo is not None and org.settings["retention_days"] == 90
         assert purge_expired(db, org.id).total == 0
@@ -195,7 +204,9 @@ def test_app_refuses_a_database_behind_the_latest_migration(fresh, monkeypatch):
     with pytest.raises(SchemaNotReadyError) as err:
         _start(engine)
     message = str(err.value)
-    assert f"at revision {current[0]} but this build needs 0002_next" in message and MIGRATE_COMMAND in message
+    assert (
+        f"at revision {current[0]} but this build needs 0002_next" in message and MIGRATE_COMMAND in message
+    )
 
 
 def test_production_refuses_a_schema_created_without_migrations(tmp_path, monkeypatch):

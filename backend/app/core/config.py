@@ -17,7 +17,9 @@ INSECURE_DEV_SECRET = "contextos-dev-insecure-secret-change-me"  # noqa: S105 (d
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="CONTEXTOS_", env_file=".env", extra="ignore", populate_by_name=True)
+    model_config = SettingsConfigDict(
+        env_prefix="CONTEXTOS_", env_file=".env", extra="ignore", populate_by_name=True
+    )
 
     env: Literal["development", "test", "production"] = "development"
     database_url: str = "sqlite:///./data/contextos.db"
@@ -29,7 +31,9 @@ class Settings(BaseSettings):
     session_ttl_hours: int = 12
     session_cookie_name: str = "contextos_session"
     cookie_secure: bool = False
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"])
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
+    )
 
     log_level: str = "INFO"
     log_json: bool = False

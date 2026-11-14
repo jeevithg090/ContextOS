@@ -56,7 +56,9 @@ def _option_value(prog: str, key: str, value: str, spec: dict[str, Any], acc: Ac
         acc.add_email(value)
     elif key in spec.get("exec", ()):
         acc.exec_on_connect = True
-        acc.network(prog, f"{prog} runs '{san.truncate(value, 60)}' for whoever connects (reverse/bind shell pattern)")
+        acc.network(
+            prog, f"{prog} runs '{san.truncate(value, 60)}' for whoever connects (reverse/bind shell pattern)"
+        )
     return False
 
 
@@ -199,5 +201,9 @@ def analyze_network_program(prog: str, args: list[str], spec: dict[str, Any], ac
         networked = False
     if networked:
         targets = acc.targets[targets_before:]
-        detail = f" (targets: {', '.join(dict.fromkeys(targets[-3:]))})" if targets else " (target not statically known)"
+        detail = (
+            f" (targets: {', '.join(dict.fromkeys(targets[-3:]))})"
+            if targets
+            else " (target not statically known)"
+        )
         acc.network(prog, f"{prog} can transmit data off this machine{detail}")

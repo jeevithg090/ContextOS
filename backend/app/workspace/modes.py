@@ -30,7 +30,14 @@ SECTION_KEYS: tuple[str, ...] = (
     "related_documentation",
 )
 
-_CORE = ("task_summary", "problem_description", "available_evidence", "codebase_context", "constraints", "verification")
+_CORE = (
+    "task_summary",
+    "problem_description",
+    "available_evidence",
+    "codebase_context",
+    "constraints",
+    "verification",
+)
 
 
 class PromptMode(StrEnum):
@@ -137,8 +144,14 @@ MODES: dict[PromptMode, ModeSpec] = {
         "Implementation plan",
         "Produce a reviewed, step-by-step plan for the fix. No changes.",
         False,
-        _CORE + ("expected_behaviour", "root_cause_hypotheses", "required_implementation", "acceptance_criteria",
-                 "testing_requirements"),
+        _CORE
+        + (
+            "expected_behaviour",
+            "root_cause_hypotheses",
+            "required_implementation",
+            "acceptance_criteria",
+            "testing_requirements",
+        ),
         (
             NO_MODIFY + " Produce a plan for review instead.",
             "List each file to change (only files you confirmed exist, or new files clearly marked as new), the change, and why.",
@@ -151,8 +164,15 @@ MODES: dict[PromptMode, ModeSpec] = {
         "Implement fix",
         "Confirm the root cause, implement the smallest correct fix and prove it with tests.",
         True,
-        _CORE + ("expected_behaviour", "reproduction_steps", "root_cause_hypotheses", "required_implementation",
-                 "acceptance_criteria", "testing_requirements"),
+        _CORE
+        + (
+            "expected_behaviour",
+            "reproduction_steps",
+            "root_cause_hypotheses",
+            "required_implementation",
+            "acceptance_criteria",
+            "testing_requirements",
+        ),
         (
             "Confirm the root cause before changing code; if the evidence contradicts every hypothesis, stop and report.",
             "Make the smallest change that fixes the root cause; avoid unrelated refactors.",
@@ -165,8 +185,15 @@ MODES: dict[PromptMode, ModeSpec] = {
         "Security hardening",
         "Fix the vulnerability and harden the surrounding boundary against bypasses.",
         True,
-        _CORE + ("expected_behaviour", "reproduction_steps", "root_cause_hypotheses", "required_implementation",
-                 "acceptance_criteria", "testing_requirements"),
+        _CORE
+        + (
+            "expected_behaviour",
+            "reproduction_steps",
+            "root_cause_hypotheses",
+            "required_implementation",
+            "acceptance_criteria",
+            "testing_requirements",
+        ),
         (
             "Treat this as security-sensitive work: fail closed, validate input at trust boundaries, never log secrets.",
             "Add adversarial tests for plausible bypasses of this specific issue (encoding and case variants, "
@@ -180,8 +207,14 @@ MODES: dict[PromptMode, ModeSpec] = {
         "Refactor",
         "Restructure code without changing externally observable behaviour.",
         True,
-        _CORE + ("current_behaviour", "expected_behaviour", "required_implementation", "acceptance_criteria",
-                 "testing_requirements"),
+        _CORE
+        + (
+            "current_behaviour",
+            "expected_behaviour",
+            "required_implementation",
+            "acceptance_criteria",
+            "testing_requirements",
+        ),
         (
             "Preserve externally observable behaviour; add characterisation tests first where coverage is missing.",
             "Make no functional changes unless they are listed in the acceptance criteria.",
@@ -252,7 +285,9 @@ PRESETS: dict[Preset, PresetSpec] = {
         Preset.CURSOR,
         "Cursor",
         ".cursor/rules",
-        ("Cursor applies project rules from `.cursor/rules`; follow them where they apply to the files you touch.",),
+        (
+            "Cursor applies project rules from `.cursor/rules`; follow them where they apply to the files you touch.",
+        ),
     ),
     Preset.GENERIC: PresetSpec(Preset.GENERIC, "Generic agent", None, ()),
 }
@@ -315,7 +350,9 @@ class GenerationOptions:
         self.testing_requirements = _enum(RequiredTesting, self.testing_requirements, "testing_requirements")
         self.security_requirements = _enum(SecurityLevel, self.security_requirements, "security_requirements")
         self.output_format = _enum(OutputFormat, self.output_format, "output_format")
-        if not isinstance(self.constraints, (list, tuple)) or not all(isinstance(c, str) for c in self.constraints):
+        if not isinstance(self.constraints, (list, tuple)) or not all(
+            isinstance(c, str) for c in self.constraints
+        ):
             raise ValueError("constraints must be a list of strings")
         items = [c.strip() for c in self.constraints if c.strip()]
         if len(items) > _MAX_CONSTRAINTS:

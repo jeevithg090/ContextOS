@@ -36,7 +36,9 @@ def setup_guide(
     kind: str, request: Request, principal: Principal = READ, db: Session = Depends(get_db)
 ) -> SetupGuideOut:
     """Step-by-step setup for one integration kind. Planned kinds return their interim path."""
-    guide = integrations_service.setup_guide_for_org(db, principal.org_id, kind.strip().lower(), str(request.base_url))
+    guide = integrations_service.setup_guide_for_org(
+        db, principal.org_id, kind.strip().lower(), str(request.base_url)
+    )
     if guide is None:
         raise NotFoundError(f"Integration '{kind}' is not in the catalog")
     return guide

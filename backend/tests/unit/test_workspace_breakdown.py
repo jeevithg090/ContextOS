@@ -19,13 +19,24 @@ def test_every_plan_has_acyclic_dependencies_and_parent_title(plan):
     for d in drafts:
         assert "Fix the thing" in d.title
         assert d.description and d.acceptance_criteria
-        assert set(d.to_dict()) == {"title", "description", "task_type", "acceptance_criteria",
-                                    "testing_requirements", "depends_on"}
+        assert set(d.to_dict()) == {
+            "title",
+            "description",
+            "task_type",
+            "acceptance_criteria",
+            "testing_requirements",
+            "depends_on",
+        }
 
 
 def test_security_vulnerability_follows_reproduce_rootcause_fix_tests_docs_order():
-    drafts = decompose({"title": "Token leak in logs", "task_type": "security_vulnerability",
-                        "related_finding_id": "fnd_123"})
+    drafts = decompose(
+        {
+            "title": "Token leak in logs",
+            "task_type": "security_vulnerability",
+            "related_finding_id": "fnd_123",
+        }
+    )
     titles = [d.title for d in drafts]
     assert titles[0].startswith("Reproduce with a failing test")
     assert titles[1].startswith("Identify root cause")
@@ -41,11 +52,19 @@ def test_security_vulnerability_follows_reproduce_rootcause_fix_tests_docs_order
 @pytest.mark.parametrize(
     ("task", "plan"),
     [
-        ({"title": "MCP gateway does not intercept tools/call", "task_type": "security_vulnerability"}, "mcp_interception"),
-        ({"title": "Bypass", "description": "Requests skip the MCP proxy", "task_type": "integration_bug"},
-         "mcp_interception"),
+        (
+            {"title": "MCP gateway does not intercept tools/call", "task_type": "security_vulnerability"},
+            "mcp_interception",
+        ),
+        (
+            {"title": "Bypass", "description": "Requests skip the MCP proxy", "task_type": "integration_bug"},
+            "mcp_interception",
+        ),
         ({"title": "README injection", "task_type": "prompt_injection"}, "prompt_injection"),
-        ({"title": "Vuln", "task_type": "security_vulnerability", "category": "secret_exposure"}, "data_exposure"),
+        (
+            {"title": "Vuln", "task_type": "security_vulnerability", "category": "secret_exposure"},
+            "data_exposure",
+        ),
         ({"title": "Vuln", "task_type": "security_vulnerability"}, "security_vulnerability"),
         ({"title": "Slow list", "task_type": "performance"}, "performance"),
         ({"title": "Dark mode", "task_type": "feature"}, "feature"),
@@ -68,7 +87,10 @@ def test_mcp_plan_covers_fail_closed_and_honest_enforcement_docs():
 
 
 def test_breakdown_is_deterministic_truncates_titles_and_redacts():
-    task = {"title": "Leak of ghp_R8xk2LmQ9vTz4WcY7pJn3HbFd6SaEu1Go0Ki " + "x" * 300, "task_type": "data_exposure"}
+    task = {
+        "title": "Leak of ghp_R8xk2LmQ9vTz4WcY7pJn3HbFd6SaEu1Go0Ki " + "x" * 300,
+        "task_type": "data_exposure",
+    }
     first = [d.to_dict() for d in decompose(task)]
     assert first == [d.to_dict() for d in decompose(task)]
     assert all("ghp_R8xk2" not in d["title"] for d in first)

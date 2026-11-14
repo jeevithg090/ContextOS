@@ -50,11 +50,15 @@ class ContextItem(OrgScopedMixin, Base):
     __tablename__ = "context_items"
     __table_args__ = (
         Index("ix_context_items_org_session", "organization_id", "session_id"),
-        Index("ix_context_items_org_received", "organization_id", "received_at"),  # retention, time-range scans
+        Index(
+            "ix_context_items_org_received", "organization_id", "received_at"
+        ),  # retention, time-range scans
     )
 
     id: Mapped[str] = id_column()
-    source_id: Mapped[str] = mapped_column(String(40), ForeignKey("context_sources.id", ondelete="CASCADE"), index=True)
+    source_id: Mapped[str] = mapped_column(
+        String(40), ForeignKey("context_sources.id", ondelete="CASCADE"), index=True
+    )
     agent_id: Mapped[str] = mapped_column(String(40), ForeignKey("agents.id", ondelete="CASCADE"), index=True)
     session_id: Mapped[str] = mapped_column(String(40), ForeignKey("agent_sessions.id", ondelete="CASCADE"))
     event_id: Mapped[str] = mapped_column(String(40), index=True)  # ingested_events.id
@@ -62,9 +66,13 @@ class ContextItem(OrgScopedMixin, Base):
     collected_at: Mapped[datetime] = mapped_column()  # client-observed timestamp
     received_at: Mapped[datetime] = mapped_column(default=utcnow)  # server timestamp (authoritative)
     content_type: Mapped[str] = mapped_column(String(64), default="text/plain")
-    content_hash: Mapped[str | None] = mapped_column(String(64), default=None, index=True)  # sha256 of raw content
+    content_hash: Mapped[str | None] = mapped_column(
+        String(64), default=None, index=True
+    )  # sha256 of raw content
     content_length: Mapped[int] = mapped_column(Integer, default=0)
-    redacted_preview: Mapped[str | None] = mapped_column(Text, default=None)  # redacted + truncated; never raw
+    redacted_preview: Mapped[str | None] = mapped_column(
+        Text, default=None
+    )  # redacted + truncated; never raw
     sensitivity: Mapped[str] = mapped_column(String(16), default="internal")
     contains_secrets: Mapped[bool] = mapped_column(Boolean, default=False)
     secret_fingerprints: Mapped[list[Any]] = mapped_column(default=list)  # [{"type", "fingerprint"}]
@@ -73,9 +81,13 @@ class ContextItem(OrgScopedMixin, Base):
     # {"score": float, "max_severity": str|None, "rule_ids": [...], "hit_count": int}
     detection_summary: Mapped[dict[str, Any]] = mapped_column(default=dict)
     tool_invocation_id: Mapped[str | None] = mapped_column(String(40), default=None, index=True)
-    origin_agent_id: Mapped[str | None] = mapped_column(String(40), default=None)  # for agent outputs/messages
+    origin_agent_id: Mapped[str | None] = mapped_column(
+        String(40), default=None
+    )  # for agent outputs/messages
     origin_session_id: Mapped[str | None] = mapped_column(String(40), default=None)
-    receipt_signature: Mapped[str | None] = mapped_column(String(64), default=None)  # HMAC over receipt fields
+    receipt_signature: Mapped[str | None] = mapped_column(
+        String(64), default=None
+    )  # HMAC over receipt fields
     is_simulation: Mapped[bool] = mapped_column(Boolean, default=False)
     item_metadata: Mapped[dict[str, Any]] = mapped_column(default=dict)
 

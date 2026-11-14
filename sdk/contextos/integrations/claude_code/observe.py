@@ -31,8 +31,11 @@ DELEGATIONS = "delegations"
 
 def remember_delegation(h: HookInput, agent: AgentRef) -> None:
     """Called after an ``Agent``/``Task`` PreToolUse was reported as ``agent.delegated``."""
-    state.put(DELEGATIONS, f"tool:{h.session_id}:{h.correlation_id}",
-              {"child_agent": mapping.child_agent(agent, h).name, "child_session_id": mapping.child_session_id(h)})
+    state.put(
+        DELEGATIONS,
+        f"tool:{h.session_id}:{h.correlation_id}",
+        {"child_agent": mapping.child_agent(agent, h).name, "child_session_id": mapping.child_session_id(h)},
+    )
 
 
 def _delegation_for_tool(h: HookInput, tool_use_id: str) -> dict[str, Any] | None:
@@ -44,29 +47,38 @@ def _delegation_for_subagent(h: HookInput, agent_id: str, *, remove: bool = Fals
 
 
 def _child(record: Mapping[str, Any], agent: AgentRef) -> AgentRef:
-    return AgentRef(name=str(record.get("child_agent") or f"{agent.name}/subagent")[:200],
-                    framework=mapping.FRAMEWORK, environment=agent.environment)
+    return AgentRef(
+        name=str(record.get("child_agent") or f"{agent.name}/subagent")[:200],
+        framework=mapping.FRAMEWORK,
+        environment=agent.environment,
+    )
 
 
-def _tool_events(h: HookInput, agent: AgentRef, max_result_chars: int,
-                 extra: Mapping[str, Any] | None) -> list[EventEnvelope]:
+def _tool_events(
+    h: HookInput, agent: AgentRef, max_result_chars: int, extra: Mapping[str, Any] | None
+) -> list[EventEnvelope]:
     events = [mapping.tool_result(h, agent, max_result_chars=max_result_chars, extra_metadata=extra)]
     if not h.is_delegation:
         return events
     record = _delegation_for_tool(h, h.correlation_id) or {
-        "child_agent": mapping.child_agent(agent, h).name, "child_session_id": mapping.child_session_id(h)}
+        "child_agent": mapping.child_agent(agent, h).name,
+        "child_session_id": mapping.child_session_id(h),
+    }
     launched = h.launched_agent_id
     if h.event == "PostToolUse" and h.runs_in_background:
         if launched:
             state.put(DELEGATIONS, f"agent:{h.session_id}:{launched}", dict(record))
         return events
     reason = "subagent_returned" if h.event == "PostToolUse" else "subagent_failed"
-    events.append(mapping.child_session_closed(h, _child(record, agent), str(record["child_session_id"]), reason))
+    events.append(
+        mapping.child_session_closed(h, _child(record, agent), str(record["child_session_id"]), reason)
+    )
     return events
 
 
-def observation_events(h: HookInput, agent: AgentRef, *, max_result_chars: int,
-                       extra_metadata: Mapping[str, Any] | None = None) -> list[EventEnvelope]:
+def observation_events(
+    h: HookInput, agent: AgentRef, *, max_result_chars: int, extra_metadata: Mapping[str, Any] | None = None
+) -> list[EventEnvelope]:
     """Events to report for one observation hook (may read and update delegation records)."""
     if h.event == "SessionStart":
         return [mapping.session_started(h, agent)]
@@ -84,8 +96,11 @@ def observation_events(h: HookInput, agent: AgentRef, *, max_result_chars: int,
         record = _delegation_for_subagent(h, agent_id, remove=True) if agent_id else None
         if not record or not record.get("child_session_id"):
             return []  # a foreground subagent (already closed) or one of Claude Code's internal agents
-        return [mapping.child_session_closed(h, _child(record, agent), str(record["child_session_id"]),
-                                             "subagent_stopped")]
+        return [
+            mapping.child_session_closed(
+                h, _child(record, agent), str(record["child_session_id"]), "subagent_stopped"
+            )
+        ]
     if h.event == "SessionEnd":
         return [mapping.session_ended(h, agent)]
     return []

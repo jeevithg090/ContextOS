@@ -22,10 +22,29 @@ EXCLUDED_TITLE = "Excluded for safety (do not open, print or copy these)"
 _FILE_KINDS = ("source_file", "test_file")
 _EXCERPT_LIMIT = 250_000
 _LANG = {
-    ".py": "python", ".ts": "ts", ".tsx": "tsx", ".js": "js", ".jsx": "jsx", ".mjs": "js", ".cjs": "js",
-    ".json": "json", ".md": "markdown", ".yml": "yaml", ".yaml": "yaml", ".toml": "toml", ".sql": "sql",
-    ".sh": "bash", ".go": "go", ".rs": "rust", ".java": "java", ".kt": "kotlin", ".rb": "ruby", ".css": "css",
-    ".html": "html", ".ini": "ini", ".cfg": "ini",
+    ".py": "python",
+    ".ts": "ts",
+    ".tsx": "tsx",
+    ".js": "js",
+    ".jsx": "jsx",
+    ".mjs": "js",
+    ".cjs": "js",
+    ".json": "json",
+    ".md": "markdown",
+    ".yml": "yaml",
+    ".yaml": "yaml",
+    ".toml": "toml",
+    ".sql": "sql",
+    ".sh": "bash",
+    ".go": "go",
+    ".rs": "rust",
+    ".java": "java",
+    ".kt": "kotlin",
+    ".rb": "ruby",
+    ".css": "css",
+    ".html": "html",
+    ".ini": "ini",
+    ".cfg": "ini",
 }
 
 
@@ -50,8 +69,15 @@ def _normalise(path: str) -> str:
 
 
 def _classify(ctx: BuildContext) -> dict[str, list[Mapping[str, Any]]]:
-    groups: dict[str, list[Mapping[str, Any]]] = {"verified": [], "unverified": [], "excluded": [], "notes": [],
-                                                  "git": [], "docs": [], "unverified_docs": []}
+    groups: dict[str, list[Mapping[str, Any]]] = {
+        "verified": [],
+        "unverified": [],
+        "excluded": [],
+        "notes": [],
+        "git": [],
+        "docs": [],
+        "unverified_docs": [],
+    }
     for item in ctx.data.context_pack_items:
         kind, status = item.get("kind"), item.get("status")
         if kind == "note":
@@ -75,16 +101,24 @@ def _classify(ctx: BuildContext) -> dict[str, list[Mapping[str, Any]]]:
         if res.status in ("sensitive", "rejected"):
             groups["excluded"].append({**entry, "reason": res.reason})
         else:
-            groups["unverified"].append({**entry, "reason": "Listed on the task but not checked against the repository."})
+            groups["unverified"].append(
+                {**entry, "reason": "Listed on the task but not checked against the repository."}
+            )
     return groups
 
 
 def codebase_context(ctx: BuildContext, p: Parts) -> None:
     g = _classify(ctx)
     if g["verified"]:
-        rows = [f"{code(str(i['ref']))} — {inline(i.get('title'), 120)} ({_status_note(i)})" for i in g["verified"]]
-        p.add("fact", "Verified references (confirmed to exist in the repository when the context pack was built):\n\n"
-              + bullets(rows))
+        rows = [
+            f"{code(str(i['ref']))} — {inline(i.get('title'), 120)} ({_status_note(i)})"
+            for i in g["verified"]
+        ]
+        p.add(
+            "fact",
+            "Verified references (confirmed to exist in the repository when the context pack was built):\n\n"
+            + bullets(rows),
+        )
         for item in g["verified"]:
             p.source(f"context_pack:{item.get('key')}")
             if item.get("included") and item.get("excerpt"):
@@ -94,26 +128,41 @@ def codebase_context(ctx: BuildContext, p: Parts) -> None:
         p.add("fact", "Project documents are listed under Related documentation.")
     for item in g["git"]:
         if item.get("included") and item.get("excerpt"):
-            p.add("evidence", "Recent commits touching the verified files (`git log`), oldest last:\n\n"
-                  + fence(clean(item["excerpt"], limit=_EXCERPT_LIMIT), "text"))
+            p.add(
+                "evidence",
+                "Recent commits touching the verified files (`git log`), oldest last:\n\n"
+                + fence(clean(item["excerpt"], limit=_EXCERPT_LIMIT), "text"),
+            )
             p.source(f"context_pack:{item.get('key')}")
         else:
             p.add("fact", f"Recent Git history was collected but not included ({_status_note(item)}).")
     if g["notes"]:
-        p.add("fact", "Context pack notes:\n\n" + bullets(
-            [f"{inline(n.get('title'), 120)}: {inline(n.get('reason'), 300)}" for n in g["notes"]]))
+        p.add(
+            "fact",
+            "Context pack notes:\n\n"
+            + bullets([f"{inline(n.get('title'), 120)}: {inline(n.get('reason'), 300)}" for n in g["notes"]]),
+        )
     if g["unverified"]:
-        p.add("assumption", "These paths were supplied for this task but are not confirmed to exist. Do not rely on "
-                            "them until you have checked:\n\n"
-              + bullets([f"{code(str(i['ref']))} — {inline(i.get('reason'), 200)}" for i in g["unverified"]]),
-              title=UNVERIFIED_TITLE)
+        p.add(
+            "assumption",
+            "These paths were supplied for this task but are not confirmed to exist. Do not rely on "
+            "them until you have checked:\n\n"
+            + bullets([f"{code(str(i['ref']))} — {inline(i.get('reason'), 200)}" for i in g["unverified"]]),
+            title=UNVERIFIED_TITLE,
+        )
     if g["excluded"]:
-        p.add("instruction", bullets([f"{code(str(i['ref']))} — {inline(i.get('reason'), 200)}" for i in g["excluded"]]),
-              title=EXCLUDED_TITLE)
+        p.add(
+            "instruction",
+            bullets([f"{code(str(i['ref']))} — {inline(i.get('reason'), 200)}" for i in g["excluded"]]),
+            title=EXCLUDED_TITLE,
+        )
     if not g["verified"]:
         p.add("fact", "No source or test files were verified for this task.")
-    p.add("instruction", "Only the verified references above were confirmed to exist. Find any other code by searching "
-                         "the repository; do not assume file, function or module names that you have not opened.")
+    p.add(
+        "instruction",
+        "Only the verified references above were confirmed to exist. Find any other code by searching "
+        "the repository; do not assume file, function or module names that you have not opened.",
+    )
 
 
 def related_documentation(ctx: BuildContext, p: Parts) -> None:
@@ -123,8 +172,11 @@ def related_documentation(ctx: BuildContext, p: Parts) -> None:
         p.source(f"context_pack:{item.get('key')}")
     for item in g["docs"]:
         if item.get("included") and item.get("excerpt"):
-            p.add("fact", f"#### {code(str(item['ref']))}\n\n" + fence(clean(item["excerpt"], limit=_EXCERPT_LIMIT),
-                                                                          "markdown"))
+            p.add(
+                "fact",
+                f"#### {code(str(item['ref']))}\n\n"
+                + fence(clean(item["excerpt"], limit=_EXCERPT_LIMIT), "markdown"),
+            )
     verified_refs = {str(i.get("ref")) for i in g["docs"]}
     unverified = [f"{code(str(i['ref']))} — {inline(i.get('reason'), 200)}" for i in g["unverified_docs"]]
     for doc in ctx.data.repo_docs:
@@ -141,11 +193,16 @@ def related_documentation(ctx: BuildContext, p: Parts) -> None:
         p.add("assumption", bullets(unverified), title=UNVERIFIED_TITLE)
     instruction_file = ctx.preset.instruction_file
     if instruction_file and instruction_file in verified_refs:
-        p.add("instruction", f"{ctx.preset.label} reads {code(instruction_file)}; its rules apply to this task.")
+        p.add(
+            "instruction", f"{ctx.preset.label} reads {code(instruction_file)}; its rules apply to this task."
+        )
     if not p:
         p.add("fact", "No project documentation was attached to this prompt.")
-        p.add("instruction", "Look for project instruction files in the repository root (for example a README) before "
-                             "starting, and follow them if present.")
+        p.add(
+            "instruction",
+            "Look for project instruction files in the repository root (for example a README) before "
+            "starting, and follow them if present.",
+        )
 
 
 def _doc_entry(doc: Any) -> dict[str, Any] | None:
@@ -155,6 +212,9 @@ def _doc_entry(doc: Any) -> dict[str, Any] | None:
         target = doc.get("path") or doc.get("url") or doc.get("ref")
         if isinstance(target, str) and target.strip():
             is_url = target.startswith(("http://", "https://"))
-            return {"ref": inline(target, 300), "title": inline(doc.get("title") or "", 120),
-                    "verified": bool(doc.get("verified")) and not is_url}
+            return {
+                "ref": inline(target, 300),
+                "title": inline(doc.get("title") or "", 120),
+                "verified": bool(doc.get("verified")) and not is_url,
+            }
     return None

@@ -84,7 +84,9 @@ class SimulationRun(TimestampMixin, OrgScopedMixin, Base):
     id: Mapped[str] = id_column()
     scenario_id: Mapped[str] = mapped_column(String(100), index=True)
     scenario_name: Mapped[str] = mapped_column(String(200))
-    suite_run_id: Mapped[str | None] = mapped_column(String(40), default=None, index=True)  # regression suite grouping
+    suite_run_id: Mapped[str | None] = mapped_column(
+        String(40), default=None, index=True
+    )  # regression suite grouping
     agent_id: Mapped[str | None] = mapped_column(String(40), default=None)
     session_id: Mapped[str | None] = mapped_column(String(40), default=None)
     agent_version: Mapped[str | None] = mapped_column(String(64), default=None)

@@ -32,8 +32,13 @@ def err() -> Console:
 
 
 def _build_client(cfg: Config) -> ContextOSClient:
-    return ContextOSClient(cfg.url, cfg.api_key, timeout=cfg.timeout_s, agent=default_agent_ref(cfg),
-                           spool_max_bytes=cfg.spool_max_bytes)
+    return ContextOSClient(
+        cfg.url,
+        cfg.api_key,
+        timeout=cfg.timeout_s,
+        agent=default_agent_ref(cfg),
+        spool_max_bytes=cfg.spool_max_bytes,
+    )
 
 
 # Tests replace this to inject a mocked transport.
@@ -58,19 +63,26 @@ def cli_errors(url: str | None = None) -> Iterator[None]:
     try:
         yield
     except Unreachable as exc:
-        err().print(f"[red]Cannot reach ContextOS[/red]{f' at {escape(url)}' if url else ''}: {escape(str(exc))}\n"
-                    "Is the server running? Check the URL with [bold]contextos status[/bold] or [bold]contextos doctor[/bold].")
+        err().print(
+            f"[red]Cannot reach ContextOS[/red]{f' at {escape(url)}' if url else ''}: {escape(str(exc))}\n"
+            "Is the server running? Check the URL with [bold]contextos status[/bold] or [bold]contextos doctor[/bold]."
+        )
         raise typer.Exit(EXIT_ERROR) from None
     except AuthError as exc:
-        hint = ("The API key lacks the scope this command needs." if exc.status_code == 403
-                else "Set CONTEXTOS_API_KEY or run [bold]contextos init[/bold].")
+        hint = (
+            "The API key lacks the scope this command needs."
+            if exc.status_code == 403
+            else "Set CONTEXTOS_API_KEY or run [bold]contextos init[/bold]."
+        )
         err().print(f"[red]Not authorised:[/red] {escape(exc.message)}. {hint}")
         raise typer.Exit(EXIT_ERROR) from None
     except APIError as exc:
         if exc.status_code == 404:
             err().print(f"[red]Not found:[/red] {escape(exc.message)}")
         else:
-            err().print(f"[red]ContextOS returned an error:[/red] {escape(exc.message)} (HTTP {exc.status_code})")
+            err().print(
+                f"[red]ContextOS returned an error:[/red] {escape(exc.message)} (HTTP {exc.status_code})"
+            )
         raise typer.Exit(EXIT_ERROR) from None
     except ContextOSError as exc:
         err().print(f"[red]Error:[/red] {escape(str(exc))}")
@@ -120,9 +132,23 @@ def text(value: Any, default: str = "—") -> str:
 
 
 _SEVERITY_STYLE = {"critical": "bold red", "high": "red", "medium": "yellow", "low": "blue", "info": "dim"}
-_DECISION_STYLE = {"ALLOW": "green", "AUDIT": "cyan", "RESTRICT": "yellow", "REQUIRE_APPROVAL": "magenta", "DENY": "bold red"}
-_STATUS_STYLE = {"open": "red", "investigating": "yellow", "contained": "cyan", "resolved": "green",
-                 "false_positive": "dim", "active": "green", "ended": "dim", "quarantined": "red"}
+_DECISION_STYLE = {
+    "ALLOW": "green",
+    "AUDIT": "cyan",
+    "RESTRICT": "yellow",
+    "REQUIRE_APPROVAL": "magenta",
+    "DENY": "bold red",
+}
+_STATUS_STYLE = {
+    "open": "red",
+    "investigating": "yellow",
+    "contained": "cyan",
+    "resolved": "green",
+    "false_positive": "dim",
+    "active": "green",
+    "ended": "dim",
+    "quarantined": "red",
+}
 
 
 def severity(value: Any) -> str:

@@ -29,8 +29,9 @@ def _list(client, headers, **params):
 
 
 def _create_key(client, org, name="ci key"):
-    response = client.post("/api/v1/org/api-keys", headers=org.user_headers,
-                           json={"name": name, "scopes": ["ingest"]})
+    response = client.post(
+        "/api/v1/org/api-keys", headers=org.user_headers, json={"name": name, "scopes": ["ingest"]}
+    )
     assert response.status_code in (200, 201), response.text
     return response.json()
 
@@ -103,7 +104,9 @@ def test_time_window_and_pagination(client, org, db):
 
 
 def test_details_never_expose_secrets(client, org, db):
-    append_audit(db, org.org_id, action="test.secret", details={"token": GITHUB_TOKEN, "note": f"saw {GITHUB_TOKEN}"})
+    append_audit(
+        db, org.org_id, action="test.secret", details={"token": GITHUB_TOKEN, "note": f"saw {GITHUB_TOKEN}"}
+    )
     db.commit()
     raw = client.get(URL, headers=org.user_headers).text
     assert GITHUB_TOKEN not in raw and "[REDACTED" in raw
@@ -130,7 +133,9 @@ def test_verify_intact_chain(client, org):
     assert body["head_hash"] == newest["hash"]
     model = body["threat_model"]
     assert any("server secret" in d for d in model["detects"])
-    assert any("both database write access and the server secret" in d for d in model["does_not_protect_against"])
+    assert any(
+        "both database write access and the server secret" in d for d in model["does_not_protect_against"]
+    )
     assert "external" in model["anchoring"]
 
 
@@ -142,8 +147,11 @@ def _three_entries(db, org_id):
 
 def test_verify_detects_modified_entry(client, org, db):
     _three_entries(db, org.org_id)
-    db.execute(update(AuditEvent).where(AuditEvent.organization_id == org.org_id, AuditEvent.seq == 2)
-               .values(details={"i": 99}))
+    db.execute(
+        update(AuditEvent)
+        .where(AuditEvent.organization_id == org.org_id, AuditEvent.seq == 2)
+        .values(details={"i": 99})
+    )
     db.commit()
     body = client.get(f"{URL}/verify", headers=org.user_headers).json()
     assert body["valid"] is False and body["first_invalid_seq"] == 2
@@ -201,7 +209,9 @@ def test_export_permissions(client, make_org):
     for ctx in (viewer, analyst):
         denied = client.get(f"{URL}/export", headers=ctx.user_headers)
         assert denied.status_code == 403 and denied.json()["error"]["code"] == "forbidden"
-        assert client.get(f"{URL}/export", headers=ctx.api_headers).status_code == 403  # keys never have admin
+        assert (
+            client.get(f"{URL}/export", headers=ctx.api_headers).status_code == 403
+        )  # keys never have admin
         # Read access still lists and verifies.
         assert client.get(URL, headers=ctx.user_headers).status_code == 200
         assert client.get(f"{URL}/verify", headers=ctx.user_headers).status_code == 200
@@ -276,6 +286,7 @@ def _concurrently(count: int, work) -> list[str]:
 def test_concurrent_appends_form_one_unbroken_chain(org, db):
     """Each writer loads the organisation first (as every request does), then appends: a read-then-write
     counter would hand several of them the same sequence number."""
+
     def work(session, i, barrier):
         session.get(Organization, org.org_id)
         barrier.wait()
@@ -297,13 +308,19 @@ def test_concurrent_ingestion_assigns_distinct_event_sequences(seeded_org, db):
     from tests.integration.ingestion_support import event
 
     def work(session, i, barrier):
-        ctx = IngestContext(org_id=seeded_org.org_id, actor_type="api_key", actor_id=seeded_org.api_key_id,
-                            api_key_id=seeded_org.api_key_id)
+        ctx = IngestContext(
+            org_id=seeded_org.org_id,
+            actor_type="api_key",
+            actor_id=seeded_org.api_key_id,
+            api_key_id=seeded_org.api_key_id,
+        )
         session.get(Organization, seeded_org.org_id)
         barrier.wait()
         ingest_batch(session, ctx, [EventEnvelope.model_validate(event("session.started", session=f"s-{i}"))])
 
     assert _concurrently(5, work) == []
     db.rollback()
-    sequences = list(db.scalars(select(IngestedEvent.sequence).where(IngestedEvent.organization_id == seeded_org.org_id)))
+    sequences = list(
+        db.scalars(select(IngestedEvent.sequence).where(IngestedEvent.organization_id == seeded_org.org_id))
+    )
     assert sorted(sequences) == list(range(1, 6))

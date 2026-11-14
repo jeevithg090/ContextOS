@@ -74,8 +74,16 @@ log = get_logger(__name__)
 BATCH = 500
 MAX_SESSION_DEPTH = 64
 # Deletion order: rows that cite other rows first, sessions (the FK parent of items/invocations) last.
-TABLES = ("provenance_edges", "approvals", "policy_decisions", "security_findings", "context_items",
-          "tool_invocations", "ingested_events", "agent_sessions")
+TABLES = (
+    "provenance_edges",
+    "approvals",
+    "policy_decisions",
+    "security_findings",
+    "context_items",
+    "tool_invocations",
+    "ingested_events",
+    "agent_sessions",
+)
 PURGEABLE_FINDING_STATUSES = (FindingStatus.RESOLVED.value, FindingStatus.FALSE_POSITIVE.value)
 
 
@@ -92,8 +100,14 @@ class Protected:
     events: set[str] = field(default_factory=set)
 
     def record_ids(self) -> set[str]:
-        return (self.sessions | self.findings | self.context_items | self.tool_invocations
-                | self.policy_decisions | self.events)
+        return (
+            self.sessions
+            | self.findings
+            | self.context_items
+            | self.tool_invocations
+            | self.policy_decisions
+            | self.events
+        )
 
 
 @dataclass
@@ -110,17 +124,25 @@ class PurgeResult:
         return sum(self.counts.values())
 
     def as_dict(self) -> dict[str, Any]:
-        return {"org_id": self.org_id, "retention_days": self.retention_days, "cutoff": isoformat(self.cutoff),
-                "dry_run": self.dry_run, "counts": dict(self.counts), "total": self.total,
-                "protected_incidents": self.protected_incidents}
+        return {
+            "org_id": self.org_id,
+            "retention_days": self.retention_days,
+            "cutoff": isoformat(self.cutoff),
+            "dry_run": self.dry_run,
+            "counts": dict(self.counts),
+            "total": self.total,
+            "protected_incidents": self.protected_incidents,
+        }
 
 
 def retention_days(org: Organization) -> int:
     value = effective_org_settings(org).get("retention_days")
     low, high = RETENTION_DAYS_RANGE
     if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
-        raise ValidationFailedError(f"Organisation {org.slug} has an invalid retention_days setting ({value!r}); "
-                                    f"set it to a whole number of days between {low} and {high}.")
+        raise ValidationFailedError(
+            f"Organisation {org.slug} has an invalid retention_days setting ({value!r}); "
+            f"set it to a whole number of days between {low} and {high}."
+        )
     return value
 
 
@@ -130,14 +152,19 @@ def retention_days(org: Organization) -> int:
 def _chunks(values: Iterable[str], size: int = BATCH) -> Iterable[list[str]]:
     items = list(values)
     for i in range(0, len(items), size):
-        yield items[i:i + size]
+        yield items[i : i + size]
 
 
 def _sessions_of(db: Session, org_id: str, model: Any, ids: set[str]) -> set[str]:
     found: set[str] = set()
     for chunk in _chunks(ids):
-        found.update(s for (s,) in db.execute(select(model.session_id).where(
-            model.organization_id == org_id, model.id.in_(chunk))) if s)
+        found.update(
+            s
+            for (s,) in db.execute(
+                select(model.session_id).where(model.organization_id == org_id, model.id.in_(chunk))
+            )
+            if s
+        )
     return found
 
 
@@ -146,9 +173,17 @@ def _with_ancestors(db: Session, org_id: str, sessions: set[str]) -> set[str]:
     for _ in range(MAX_SESSION_DEPTH):
         parents: set[str] = set()
         for chunk in _chunks(frontier):
-            parents.update(p for (p,) in db.execute(select(AgentSession.parent_session_id).where(
-                AgentSession.organization_id == org_id, AgentSession.id.in_(chunk),
-                AgentSession.parent_session_id.is_not(None))) if p)
+            parents.update(
+                p
+                for (p,) in db.execute(
+                    select(AgentSession.parent_session_id).where(
+                        AgentSession.organization_id == org_id,
+                        AgentSession.id.in_(chunk),
+                        AgentSession.parent_session_id.is_not(None),
+                    )
+                )
+                if p
+            )
         frontier = parents - result
         if not frontier:
             break
@@ -159,8 +194,9 @@ def _with_ancestors(db: Session, org_id: str, sessions: set[str]) -> set[str]:
 def protected_records(db: Session, org_id: str) -> Protected:
     """Everything an open incident of ``org_id`` relies on (see the module docstring)."""
     keep = Protected()
-    for incident in db.scalars(select(Incident).where(Incident.organization_id == org_id,
-                                                      Incident.status.in_(ACTIVE_STATUSES))):
+    for incident in db.scalars(
+        select(Incident).where(Incident.organization_id == org_id, Incident.status.in_(ACTIVE_STATUSES))
+    ):
         inv = involvement(db, org_id, incident)
         keep.incidents.add(incident.id)
         keep.findings.update(f.id for f in inv.findings)
@@ -169,12 +205,19 @@ def protected_records(db: Session, org_id: str) -> Protected:
         keep.tool_invocations |= inv.tool_invocations
         keep.policy_decisions |= inv.policy_decisions
         for finding in inv.findings:
-            keep.events.update(str(ev["id"]) for ev in finding.evidence or []
-                               if isinstance(ev, dict) and ev.get("type") == "event" and ev.get("id"))
+            keep.events.update(
+                str(ev["id"])
+                for ev in finding.evidence or []
+                if isinstance(ev, dict) and ev.get("type") == "event" and ev.get("id")
+            )
     # A cited record keeps its whole session (deleting the session would cascade to the record), and a
     # kept session keeps the sessions it was delegated from.
-    for model, ids in ((ContextItem, keep.context_items), (ToolInvocation, keep.tool_invocations),
-                       (PolicyDecision, keep.policy_decisions), (IngestedEvent, keep.events)):
+    for model, ids in (
+        (ContextItem, keep.context_items),
+        (ToolInvocation, keep.tool_invocations),
+        (PolicyDecision, keep.policy_decisions),
+        (IngestedEvent, keep.events),
+    ):
         keep.sessions |= _sessions_of(db, org_id, model, ids)
     keep.sessions = _with_ancestors(db, org_id, keep.sessions)
     return keep
@@ -183,44 +226,78 @@ def protected_records(db: Session, org_id: str) -> Protected:
 # ----------------------------------------------------------------------------- purge
 
 
-def _purge_rows(db: Session, org_id: str, model: Any, conditions: list[ColumnElement[bool]],
-                columns: list[Any], is_protected: Callable[[Any], bool], *, dry_run: bool) -> int:
+def _purge_rows(
+    db: Session,
+    org_id: str,
+    model: Any,
+    conditions: list[ColumnElement[bool]],
+    columns: list[Any],
+    is_protected: Callable[[Any], bool],
+    *,
+    dry_run: bool,
+) -> int:
     """Delete (or count) rows matching ``conditions`` in id-ordered batches, skipping protected ones."""
     count, last = 0, ""
     while True:
-        rows = db.execute(select(model.id, *columns).where(model.organization_id == org_id, model.id > last,
-                                                           *conditions).order_by(model.id).limit(BATCH)).all()
+        rows = db.execute(
+            select(model.id, *columns)
+            .where(model.organization_id == org_id, model.id > last, *conditions)
+            .order_by(model.id)
+            .limit(BATCH)
+        ).all()
         if not rows:
             return count
         last = rows[-1][0]
         doomed = [row[0] for row in rows if not is_protected(row)]
         if doomed and not dry_run:
-            db.execute(delete(model).where(model.organization_id == org_id, model.id.in_(doomed))
-                       .execution_options(synchronize_session=False))
+            db.execute(
+                delete(model)
+                .where(model.organization_id == org_id, model.id.in_(doomed))
+                .execution_options(synchronize_session=False)
+            )
         count += len(doomed)
 
 
 def _purgeable_sessions(db: Session, org_id: str, cutoff: datetime, keep: Protected) -> list[str]:
     newer = [
-        exists().where(ContextItem.organization_id == org_id, ContextItem.session_id == AgentSession.id,
-                       ContextItem.received_at >= cutoff),
-        exists().where(ToolInvocation.organization_id == org_id, ToolInvocation.session_id == AgentSession.id,
-                       or_(ToolInvocation.requested_at >= cutoff, ToolInvocation.completed_at >= cutoff)),
-        exists().where(IngestedEvent.organization_id == org_id, IngestedEvent.session_id == AgentSession.id,
-                       IngestedEvent.received_at >= cutoff),
+        exists().where(
+            ContextItem.organization_id == org_id,
+            ContextItem.session_id == AgentSession.id,
+            ContextItem.received_at >= cutoff,
+        ),
+        exists().where(
+            ToolInvocation.organization_id == org_id,
+            ToolInvocation.session_id == AgentSession.id,
+            or_(ToolInvocation.requested_at >= cutoff, ToolInvocation.completed_at >= cutoff),
+        ),
+        exists().where(
+            IngestedEvent.organization_id == org_id,
+            IngestedEvent.session_id == AgentSession.id,
+            IngestedEvent.received_at >= cutoff,
+        ),
     ]
-    candidates = {sid for (sid,) in db.execute(select(AgentSession.id).where(
-        AgentSession.organization_id == org_id, AgentSession.status == "ended",
-        AgentSession.ended_at.is_not(None), AgentSession.ended_at < cutoff,
-        or_(AgentSession.last_event_at.is_(None), AgentSession.last_event_at < cutoff),
-        *[~clause for clause in newer],
-    ))} - keep.sessions
+    candidates = {
+        sid
+        for (sid,) in db.execute(
+            select(AgentSession.id).where(
+                AgentSession.organization_id == org_id,
+                AgentSession.status == "ended",
+                AgentSession.ended_at.is_not(None),
+                AgentSession.ended_at < cutoff,
+                or_(AgentSession.last_event_at.is_(None), AgentSession.last_event_at < cutoff),
+                *[~clause for clause in newer],
+            )
+        )
+    } - keep.sessions
     # A session stays while any session delegated from it stays (its parent link would be lost).
     while candidates:
         kept_parents: set[str] = set()
         for chunk in _chunks(candidates):
-            for child, parent in db.execute(select(AgentSession.id, AgentSession.parent_session_id).where(
-                    AgentSession.organization_id == org_id, AgentSession.parent_session_id.in_(chunk))):
+            for child, parent in db.execute(
+                select(AgentSession.id, AgentSession.parent_session_id).where(
+                    AgentSession.organization_id == org_id, AgentSession.parent_session_id.in_(chunk)
+                )
+            ):
                 if child not in candidates:
                     kept_parents.add(parent)
         if not kept_parents:
@@ -232,12 +309,17 @@ def _purgeable_sessions(db: Session, org_id: str, cutoff: datetime, keep: Protec
 def _delete_sessions(db: Session, org_id: str, ids: list[str], *, dry_run: bool) -> int:
     if not dry_run:
         for chunk in _chunks(ids):
-            db.execute(delete(AgentSession).where(AgentSession.organization_id == org_id, AgentSession.id.in_(chunk))
-                       .execution_options(synchronize_session=False))
+            db.execute(
+                delete(AgentSession)
+                .where(AgentSession.organization_id == org_id, AgentSession.id.in_(chunk))
+                .execution_options(synchronize_session=False)
+            )
     return len(ids)
 
 
-def purge_expired(db: Session, org_id: str, *, now: datetime | None = None, dry_run: bool = False) -> PurgeResult:
+def purge_expired(
+    db: Session, org_id: str, *, now: datetime | None = None, dry_run: bool = False
+) -> PurgeResult:
     """Delete ``org_id``'s recorded event data older than its retention period. Returns per-table counts.
 
     ``dry_run`` counts what would be deleted, deletes nothing and writes no audit entry. Otherwise one
@@ -254,50 +336,108 @@ def purge_expired(db: Session, org_id: str, *, now: datetime | None = None, dry_
 
     counts: dict[str, int] = {}
     counts["provenance_edges"] = _purge_rows(
-        db, org_id, ProvenanceEdge, [ProvenanceEdge.observed_at < cutoff],
+        db,
+        org_id,
+        ProvenanceEdge,
+        [ProvenanceEdge.observed_at < cutoff],
         [ProvenanceEdge.session_id, ProvenanceEdge.src_id, ProvenanceEdge.dst_id],
-        lambda r: r.session_id in sessions or r.src_id in record_ids or r.dst_id in record_ids, dry_run=dry_run)
+        lambda r: r.session_id in sessions or r.src_id in record_ids or r.dst_id in record_ids,
+        dry_run=dry_run,
+    )
     counts["approvals"] = _purge_rows(
-        db, org_id, Approval,
-        [Approval.status != ApprovalStatus.PENDING.value, Approval.requested_at < cutoff,
-         or_(Approval.decided_at.is_(None), Approval.decided_at < cutoff)],
+        db,
+        org_id,
+        Approval,
+        [
+            Approval.status != ApprovalStatus.PENDING.value,
+            Approval.requested_at < cutoff,
+            or_(Approval.decided_at.is_(None), Approval.decided_at < cutoff),
+        ],
         [Approval.session_id, Approval.policy_decision_id],
-        lambda r: r.session_id in sessions or r.policy_decision_id in keep.policy_decisions, dry_run=dry_run)
+        lambda r: r.session_id in sessions or r.policy_decision_id in keep.policy_decisions,
+        dry_run=dry_run,
+    )
     counts["policy_decisions"] = _purge_rows(
-        db, org_id, PolicyDecision, [PolicyDecision.evaluated_at < cutoff], [PolicyDecision.session_id],
-        lambda r: r.session_id in sessions or r.id in keep.policy_decisions, dry_run=dry_run)
+        db,
+        org_id,
+        PolicyDecision,
+        [PolicyDecision.evaluated_at < cutoff],
+        [PolicyDecision.session_id],
+        lambda r: r.session_id in sessions or r.id in keep.policy_decisions,
+        dry_run=dry_run,
+    )
     counts["security_findings"] = _purge_rows(
-        db, org_id, SecurityFinding,
-        [SecurityFinding.status.in_(PURGEABLE_FINDING_STATUSES), SecurityFinding.last_seen_at < cutoff,
-         SecurityFinding.updated_at < cutoff],
+        db,
+        org_id,
+        SecurityFinding,
+        [
+            SecurityFinding.status.in_(PURGEABLE_FINDING_STATUSES),
+            SecurityFinding.last_seen_at < cutoff,
+            SecurityFinding.updated_at < cutoff,
+        ],
         [SecurityFinding.incident_id],
         lambda r: r.id in keep.findings or (r.incident_id is not None and r.incident_id in keep.incidents),
-        dry_run=dry_run)
+        dry_run=dry_run,
+    )
     counts["context_items"] = _purge_rows(
-        db, org_id, ContextItem, [ContextItem.received_at < cutoff], [ContextItem.session_id],
-        lambda r: r.session_id in sessions or r.id in keep.context_items, dry_run=dry_run)
+        db,
+        org_id,
+        ContextItem,
+        [ContextItem.received_at < cutoff],
+        [ContextItem.session_id],
+        lambda r: r.session_id in sessions or r.id in keep.context_items,
+        dry_run=dry_run,
+    )
     counts["tool_invocations"] = _purge_rows(
-        db, org_id, ToolInvocation,
-        [ToolInvocation.requested_at < cutoff,
-         or_(ToolInvocation.completed_at.is_(None), ToolInvocation.completed_at < cutoff)],
+        db,
+        org_id,
+        ToolInvocation,
+        [
+            ToolInvocation.requested_at < cutoff,
+            or_(ToolInvocation.completed_at.is_(None), ToolInvocation.completed_at < cutoff),
+        ],
         [ToolInvocation.session_id],
-        lambda r: r.session_id in sessions or r.id in keep.tool_invocations, dry_run=dry_run)
+        lambda r: r.session_id in sessions or r.id in keep.tool_invocations,
+        dry_run=dry_run,
+    )
     counts["ingested_events"] = _purge_rows(
-        db, org_id, IngestedEvent, [IngestedEvent.received_at < cutoff], [IngestedEvent.session_id],
-        lambda r: (r.session_id is not None and r.session_id in sessions) or r.id in keep.events, dry_run=dry_run)
-    counts["agent_sessions"] = _delete_sessions(db, org_id, _purgeable_sessions(db, org_id, cutoff, keep),
-                                                dry_run=dry_run)
+        db,
+        org_id,
+        IngestedEvent,
+        [IngestedEvent.received_at < cutoff],
+        [IngestedEvent.session_id],
+        lambda r: (r.session_id is not None and r.session_id in sessions) or r.id in keep.events,
+        dry_run=dry_run,
+    )
+    counts["agent_sessions"] = _delete_sessions(
+        db, org_id, _purgeable_sessions(db, org_id, cutoff, keep), dry_run=dry_run
+    )
 
-    result = PurgeResult(org_id=org_id, retention_days=days, cutoff=cutoff, dry_run=dry_run,
-                         counts={t: counts[t] for t in TABLES}, protected_incidents=len(keep.incidents))
+    result = PurgeResult(
+        org_id=org_id,
+        retention_days=days,
+        cutoff=cutoff,
+        dry_run=dry_run,
+        counts={t: counts[t] for t in TABLES},
+        protected_incidents=len(keep.incidents),
+    )
     if not dry_run:
         db.flush()
-        append_audit(db, org_id, action="retention.purged", actor_type="system", target_type="organization",
-                     target_id=org_id, details={k: v for k, v in result.as_dict().items() if k != "org_id"})
+        append_audit(
+            db,
+            org_id,
+            action="retention.purged",
+            actor_type="system",
+            target_type="organization",
+            target_id=org_id,
+            details={k: v for k, v in result.as_dict().items() if k != "org_id"},
+        )
         if result.total:
             notify(db, org_id, "retention.purged", id=org_id)
-    log.info("retention.purge", extra={"org_id": org_id, "dry_run": dry_run, "total": result.total,
-                                       "retention_days": days})
+    log.info(
+        "retention.purge",
+        extra={"org_id": org_id, "dry_run": dry_run, "total": result.total, "retention_days": days},
+    )
     return result
 
 

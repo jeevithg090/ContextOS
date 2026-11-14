@@ -167,20 +167,28 @@ def load_hook_config(project_dir: Path, *, env: Mapping[str, str] | None = None)
     agent_name = str(values.get("agent_name") or default_agent_name(project)).strip()[:200]
     if not agent_name:
         raise ConfigError(f"{SECTION}.agent_name must not be empty")
-    max_chars = _number("max_result_chars", values.get("max_result_chars", DEFAULT_MAX_RESULT_CHARS),
-                        minimum=1_000, maximum=200_000)
+    max_chars = _number(
+        "max_result_chars",
+        values.get("max_result_chars", DEFAULT_MAX_RESULT_CHARS),
+        minimum=1_000,
+        maximum=200_000,
+    )
     return HookConfig(
         base=base,
         project_dir=project,
         agent_name=agent_name,
         fail_mode=_choice("fail_mode", values.get("fail_mode", DEFAULT_FAIL_MODE), HOOK_FAIL_MODES),
-        approval_wait_s=_number("approval_wait_s", values.get("approval_wait_s", DEFAULT_APPROVAL_WAIT_S),
-                                minimum=0, maximum=3600),
-        on_approval_timeout=_choice("on_approval_timeout",
-                                    values.get("on_approval_timeout", DEFAULT_ON_APPROVAL_TIMEOUT),
-                                    APPROVAL_TIMEOUT_ACTIONS),
-        hook_timeout_s=_number("hook_timeout_s", values.get("hook_timeout_s", DEFAULT_HOOK_TIMEOUT_S),
-                               minimum=5, maximum=600),
+        approval_wait_s=_number(
+            "approval_wait_s", values.get("approval_wait_s", DEFAULT_APPROVAL_WAIT_S), minimum=0, maximum=3600
+        ),
+        on_approval_timeout=_choice(
+            "on_approval_timeout",
+            values.get("on_approval_timeout", DEFAULT_ON_APPROVAL_TIMEOUT),
+            APPROVAL_TIMEOUT_ACTIONS,
+        ),
+        hook_timeout_s=_number(
+            "hook_timeout_s", values.get("hook_timeout_s", DEFAULT_HOOK_TIMEOUT_S), minimum=5, maximum=600
+        ),
         max_result_chars=int(max_chars),
         sources=sources,
     )
