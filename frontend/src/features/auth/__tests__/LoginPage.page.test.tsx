@@ -91,4 +91,40 @@ describe("LoginPage", () => {
     await waitFor(() => expect(currentLocation()).toBe("/"));
     expect(screen.queryByRole("heading", { name: "Sign in" })).not.toBeInTheDocument();
   });
+
+  it("explains what is missing before sending anything", async () => {
+    const api = stubApi(routes({ setup: { body: { needs_setup: false } } }));
+    renderLogin();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(screen.getByLabelText("Email")).toHaveAccessibleDescription("Enter your email address.");
+    expect(screen.getByLabelText("Email")).toHaveFocus();
+    expect(screen.getByLabelText("Password")).toHaveAttribute("aria-invalid", "true");
+    fill("Email", "not-an-email");
+    fill("Password", PASSWORD);
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(screen.getByText("Enter a valid email address, like name@example.com.")).toBeInTheDocument();
+    expect(api.calls.some((c) => c.path === "/auth/login")).toBe(false);
+  });
+
+  it("asks for a 10-character password when creating the organisation", async () => {
+    const api = stubApi(routes({ setup: { body: { needs_setup: true } } }));
+    renderLogin();
+    await screen.findByRole("heading", { name: "Create your organisation" });
+    fill("Organisation name", "Acme Test Org");
+    fill("Your name", "Ada Analyst");
+    fill("Email", EMAIL);
+    fill("Password", "short");
+    fireEvent.click(screen.getByRole("button", { name: "Create organisation" }));
+    expect(screen.getByText("Use at least 10 characters.")).toBeInTheDocument();
+    expect(api.calls.some((c) => c.path === "/auth/setup")).toBe(false);
+  });
+
+  it("can reveal the password", () => {
+    stubApi(routes({ setup: { body: { needs_setup: false } } }));
+    renderLogin();
+    expect(screen.getByLabelText("Password")).toHaveAttribute("type", "password");
+    fireEvent.click(screen.getByRole("button", { name: "Show password" }));
+    expect(screen.getByLabelText("Password")).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "Hide password" })).toHaveAttribute("aria-pressed", "true");
+  });
 });
