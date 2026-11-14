@@ -22,7 +22,6 @@ import json
 import logging
 import os
 import sys
-import threading
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -31,6 +30,8 @@ from typing import IO, Any
 from contextos.client import ContextOSClient
 from contextos.config import ConfigError
 from contextos.errors import ContextOSError
+from contextos.integrations.hookkit import configure_logging, is_debug, run_with_budget
+from contextos.integrations.hookkit import read_stdin as hookkit_read_stdin
 
 from . import mapping, observe
 from .approval import take_host_prompt
@@ -47,28 +48,15 @@ from .mapping import HookInput, PayloadError
 log = logging.getLogger("contextos.claude_code")
 
 ClientFactory = Callable[[HookConfig, float], ContextOSClient]
-_LOGGING_READY = False
 
 
 def _configure_logging(debug: bool) -> None:
     """Silence SDK logging unless CONTEXTOS_DEBUG=1 (stray stderr shows up as hook errors)."""
-    global _LOGGING_READY
-    if _LOGGING_READY:
-        return
-    _LOGGING_READY = True
-    root = logging.getLogger("contextos")
-    if debug:
-        handler = logging.StreamHandler(sys.stderr)
-        handler.setFormatter(logging.Formatter("contextos-hook %(levelname)s %(name)s: %(message)s"))
-        root.addHandler(handler)
-        root.setLevel(logging.DEBUG)
-    else:
-        root.addHandler(logging.NullHandler())
-    root.propagate = False
+    configure_logging(debug, "contextos-hook")
 
 
 def _is_debug(env: Mapping[str, str]) -> bool:
-    return env.get("CONTEXTOS_DEBUG", "").strip().lower() in ("1", "true", "yes")
+    return is_debug(env)
 
 
 def default_client(cfg: HookConfig, budget_s: float) -> ContextOSClient:
@@ -82,10 +70,7 @@ def default_client(cfg: HookConfig, budget_s: float) -> ContextOSClient:
 
 
 def read_stdin(stream: IO[bytes], limit: int = MAX_STDIN_BYTES) -> bytes:
-    data = stream.read(limit + 1)
-    if len(data) > limit:
-        raise PayloadError(f"the hook input is larger than {limit:,} bytes")
-    return data
+    return hookkit_read_stdin(stream, limit, PayloadError)
 
 
 def _project_dir(env: Mapping[str, str], h: HookInput | None) -> Path:
@@ -97,22 +82,7 @@ def _project_dir(env: Mapping[str, str], h: HookInput | None) -> Path:
 
 def _run_with_budget(fn: Callable[[], Any], budget_s: float) -> tuple[bool, Any]:
     """Run ``fn`` in a daemon thread; ``(finished, result)``. Exceptions propagate to the caller."""
-    box: dict[str, Any] = {}
-
-    def target() -> None:
-        try:
-            box["value"] = fn()
-        except BaseException as exc:  # noqa: BLE001 - re-raised in the calling thread
-            box["error"] = exc
-
-    worker = threading.Thread(target=target, name="contextos-hook", daemon=True)
-    worker.start()
-    worker.join(max(0.1, budget_s))
-    if worker.is_alive():
-        return False, None
-    if "error" in box:
-        raise box["error"]
-    return True, box.get("value")
+    return run_with_budget(fn, budget_s, name="contextos-hook")
 
 
 def _write(stdout: IO[str], output: dict[str, Any] | None) -> None:

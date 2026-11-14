@@ -16,6 +16,7 @@ _MAX_COMMAND = 80
 _INTEGRATION_LABELS = {
     "claude_code": "Claude Code hook",
     "mcp_gateway": "MCP gateway",
+    "openai_codex": "Codex hook",
     "python_sdk": "Python SDK guard",
 }
 _LEGS = (

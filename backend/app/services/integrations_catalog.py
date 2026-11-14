@@ -2,7 +2,7 @@
 
 Stated in the platform's enforcement vocabulary (enforced / advisory / observed). Planned
 integrations are listed as planned with the interim path through an existing adapter; nothing is
-claimed for them.
+claimed for them. A supported kind's ``best_enforcement`` must match ``ENFORCING_INTEGRATIONS``.
 """
 
 from __future__ import annotations
@@ -135,14 +135,44 @@ CATALOG: tuple[CatalogSpec, ...] = (
         docs_path="sdk/README.md", api_key_scopes=("ingest", "decide"),
     ),
     CatalogSpec(
-        kind="openai_codex", name="OpenAI Codex", status="planned", best_enforcement=None,
-        summary="Native support for the Codex CLI and agent is planned.",
-        integration_surface="Codex's MCP server configuration and a pre-execution hook for its built-in shell and "
-                            "file tools, if Codex exposes one.",
-        available_today="Codex starts MCP servers from its configuration: wrap them with the ContextOS MCP gateway "
-                        "to enforce decisions on those MCP tool calls. Codex's built-in shell and file tools are "
-                        "not covered.",
-        interim_kind="mcp_gateway", limitations=(_PLANNED_LIMITATION,),
+        kind="openai_codex", name="OpenAI Codex", status="supported", best_enforcement="enforced",
+        summary="Codex hooks report each session, prompt and successful tool result, and ask ContextOS for a "
+                "decision before every tool call that reaches Codex's PreToolUse hook: shell commands, apply_patch "
+                "edits, MCP tools and sub-agent launches.",
+        monitoring=(
+            ("SessionStart / SessionEnd", "observed", "Session start, resume and end, with the model, working "
+             "directory and approval mode."),
+            ("UserPromptSubmit", "observed", "Every prompt the user submits; inside a sub-agent, the task its parent "
+             "sent (recorded as a message between agents, not as a person's prompt)."),
+            ("PreToolUse", "observed", "The tool name and full input of each call, recorded with its decision."),
+            ("PostToolUse", "observed",
+             "Each successful tool result as the model reads it (command output, patch results, MCP results), "
+             "classified for trust and scanned for prompt injection and secrets."),
+            ("spawn_agent / SubagentStop", "observed",
+             "Sub-agent delegation with its task; the sub-agent gets a child session linked to the parent."),
+        ),
+        enforcement=(
+            ("PreToolUse block", "enforced",
+             "DENY is returned as exit code 2 with the reason on stderr: Codex does not run the tool and the reason "
+             "reaches the model as the tool output."),
+            ("Approvals and restrictions", "enforced",
+             "REQUIRE_APPROVAL holds the call for a reviewer in the Approval Centre; still pending at the timeout, "
+             "the call is blocked (Codex hooks cannot ask). RESTRICT with secret redaction runs the call with the "
+             "masked input; a restriction the hook cannot apply blocks."),
+        ),
+        limitations=(
+            "Only tool calls that reach Codex's PreToolUse hook are covered. Hosted tools (web search), input "
+            "typed into an already running command (write_stdin) and hooks that are disabled ([features] hooks = "
+            "false), untrusted or modified (not re-trusted in /hooks) are not.",
+            "Codex runs PostToolUse only for calls that produced output: failed calls (an MCP error result, a "
+            "rejected approval, a sandbox or tool error) and apply_patch run inside a shell command report no result.",
+            "ALLOW and AUDIT defer to Codex's own approval policy and sandbox: the hook never grants approval, so "
+            "ContextOS can make Codex stricter but never more permissive.",
+            "Files a shell command touches are not visible in its arguments; path restrictions on such tools fail "
+            "closed (block). Another PreToolUse hook that rewrites a call's input runs after ContextOS decided.",
+            "When ContextOS is unreachable the hook's fail mode applies (default \"closed\": the call is blocked).",
+        ),
+        docs_path="docs/integrations/codex.md", api_key_scopes=("ingest", "decide"),
     ),
     CatalogSpec(
         kind="cursor", name="Cursor", status="planned", best_enforcement=None,

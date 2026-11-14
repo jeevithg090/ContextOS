@@ -144,8 +144,8 @@ two suites. The same scenarios run from the CLI (`contextos simulate`).
 "Which agent frameworks are connected and what can they enforce?" Summary (connected now, can
 enforce, enforced decisions, advisory or observed), connected integrations (connected = an event in
 the last 24 hours, otherwise stale), the **capability matrix** per integration (what is enforced,
-observed or not covered) and setup guides. Supported: Claude Code, MCP gateway, Python SDK.
-Planned (no native adapter yet; interim path shown): OpenAI Codex, Cursor, LangGraph, CrewAI,
+observed or not covered) and setup guides. Supported: Claude Code, OpenAI Codex, MCP gateway,
+Python SDK. Planned (no native adapter yet; interim path shown): Cursor, LangGraph, CrewAI,
 OpenAI Agents SDK, Claude Agent SDK.
 
 ### Audit Log (`/audit`)

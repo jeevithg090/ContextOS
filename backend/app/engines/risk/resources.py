@@ -294,10 +294,28 @@ def _string_value(category: str, key: str, value: str, obj: dict[str, Any], out:
         out.url(value)
 
 
+# Files named in an apply_patch-style patch ("*** Update File: <path>", Codex's patch grammar).
+_PATCH_FILE = re.compile(r"^[ \t]*\*\*\*[ \t]*(?:Add File|Delete File|Update File|Move to):[ \t]*(\S.*?)[ \t]*$",
+                         re.MULTILINE)
+_PATCH_START = "*** Begin Patch"
+
+
+def _patch_files(category: str, arguments: dict[str, Any], out: _Collector) -> None:
+    if category != ToolCategory.FILE_WRITE:
+        return
+    for key in ("command", "patch", "input"):
+        value = arguments.get(key)
+        if isinstance(value, str) and _PATCH_START in value:
+            for match in _PATCH_FILE.finditer(value):
+                out.file(match.group(1))
+            return
+
+
 def extract_resources(category: str, arguments: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(arguments, dict) or not arguments:
         return []
     out = _Collector()
+    _patch_files(category, arguments, out)
     _walk(category, arguments, out, 0)
     return out.result()
 

@@ -27,6 +27,7 @@ const FRAMEWORK_LABELS: Record<string, string> = {
   claude_code: "Claude Code",
   mcp: "MCP",
   mcp_gateway: "MCP gateway",
+  openai_codex: "OpenAI Codex",
   python_sdk: "Python SDK",
   langgraph: "LangGraph",
   langchain: "LangChain",
@@ -65,6 +66,7 @@ export function relationshipLabel(kind: string, direction: "outgoing" | "incomin
 export const INTEGRATION_LABELS: Record<string, string> = {
   claude_code: "Claude Code hooks",
   mcp_gateway: "MCP gateway",
+  openai_codex: "Codex hooks",
   python_sdk: "Python SDK",
   custom: "Custom integration",
 };

@@ -42,8 +42,8 @@ from contextos.errors import (
     ServerError,
     Unreachable,
 )
+from contextos.integrations.hookkit import clip, decision_ref, policies_text
 from contextos.models import ApprovalStatus, Decision, DecisionResponse, EventEnvelope
-from contextos.redact import mask_text
 from contextos.restrictions import apply_restrictions, scan_reports_secrets
 
 from . import mapping
@@ -93,25 +93,11 @@ class Verdict:
 
 
 def _clip(text: str, limit: int = MAX_REASON_CHARS) -> str:
-    masked, _ = mask_text(text)  # server text is already redacted; this is a second, local guard
-    return masked if len(masked) <= limit else masked[: limit - 1] + "…"
+    return clip(text, limit)
 
 
-def _policies(decision: DecisionResponse) -> str:
-    """The enforce-mode policies that produced this decision (an AUDIT match did not block anything)."""
-    enforced = [m for m in decision.matched_policies
-                if isinstance(m, dict) and m.get("name") and m.get("mode", "enforce") == "enforce"]
-    wanted = (decision.decision or "").upper()
-    if any(m.get("outcome") for m in enforced):
-        deciding = [m for m in enforced if str(m.get("outcome") or "").upper() == wanted]
-    else:  # a server that does not report outcomes: cite every enforce-mode match
-        deciding = enforced
-    names = [f"“{m['name']}”" + (f", {m['severity']}" if m.get("severity") else "") for m in deciding]
-    return "; ".join(dict.fromkeys(names)) or "organisation default decision"
-
-
-def _ref(decision: DecisionResponse) -> str:
-    return f"ContextOS decision {decision.policy_decision_id}" if decision.policy_decision_id else "ContextOS"
+_policies = policies_text
+_ref = decision_ref
 
 
 def fail_mode_verdict(cfg_fail_mode: str, tool: str, why: str) -> Verdict:

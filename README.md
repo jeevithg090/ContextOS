@@ -7,7 +7,7 @@ policy *before they run* where the agent host allows it, and gives you the recor
 what happened. An Engineering Workspace turns the findings into tracked fixes.
 
 It runs as one server (FastAPI + SQLite or PostgreSQL) with a web UI, and connects to agents
-through Claude Code hooks, an MCP security gateway and a Python SDK.
+through Claude Code hooks, OpenAI Codex hooks, an MCP security gateway and a Python SDK.
 
 ## The six pillars
 
@@ -29,11 +29,12 @@ AI calls), fix attempts and verification (including re-running a Simulation Lab 
 | Integration | Enforced before the action | Observed only |
 |---|---|---|
 | Claude Code hooks | tool calls through `PreToolUse` (`deny`/`ask`; the hook never answers `allow`) | sessions, prompts, tool results, subagents |
+| OpenAI Codex hooks | tool calls through `PreToolUse` (exit 2 blocks; an undecided approval blocks; never `ask`) | sessions, prompts, successful tool results, sub-agents |
 | MCP gateway | every `tools/call`, before the upstream server is contacted | tool listings (poisoning scan), results, resources, prompts |
 | Python SDK `guard()` | each guarded function call | `AgentSession` events |
 
-Anything that bypasses those boundaries (disabled hooks, an MCP server not behind the gateway, a
-function not wrapped by `guard()`) is not enforced. Details and limits:
+Anything that bypasses those boundaries (disabled or untrusted hooks, an MCP server not behind the
+gateway, a function not wrapped by `guard()`) is not enforced. Details and limits:
 [docs/INTEGRATION_SPECIFICATION.md](docs/INTEGRATION_SPECIFICATION.md).
 
 ## Quick start (local development)
@@ -94,6 +95,9 @@ commands" answers `deny` and Claude Code does not run it.
 The hook's default fail mode is `ask` (if ContextOS is unreachable, Claude Code's own permission
 prompt decides). Full contract, configuration and a recorded live run:
 [docs/integrations/claude-code.md](docs/integrations/claude-code.md).
+
+OpenAI Codex: `contextos init --codex`, then trust the ContextOS hooks in Codex's `/hooks` — see
+[docs/integrations/codex.md](docs/integrations/codex.md).
 
 MCP servers: `contextos mcp-gateway --name <name> -- <server command>` — see
 [docs/integrations/mcp.md](docs/integrations/mcp.md). Python agents: `@guard(...)` — see

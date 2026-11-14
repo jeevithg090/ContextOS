@@ -13,8 +13,9 @@ Where ContextOS goes after 0.1.0. Items are planned, not shipped; the current st
 
 ## Next — 0.2: coverage and scale
 
-- **Integrations**: native adapters for OpenAI Codex and Cursor (today: wrap their MCP servers with
-  the gateway), then LangGraph / OpenAI Agents SDK / Claude Agent SDK callbacks beyond `guard()` [12].
+- **Integrations**: OpenAI Codex shipped (hooks; [integrations/codex.md](integrations/codex.md)).
+  Next a native adapter for Cursor (today: wrap its MCP servers with the gateway), then LangGraph /
+  OpenAI Agents SDK / Claude Agent SDK callbacks beyond `guard()` [12].
   Each ships `advisory` until tests prove an enforcing boundary.
 - **MCP gateway**: remote (streamable HTTP) upstreams [9]; proxy sampling, elicitation and
   subscriptions [10]; decide the default `mcp:<server>` destination question [2].

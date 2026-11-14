@@ -5,12 +5,14 @@ CONTRACT:
     classify_tool(name, provider, *, category_hint=None, server=None, arguments=None) -> ToolClassification
         Server-side tool classification (category + risk level + whether it is an outbound
         channel / reads sensitive data). Knows Claude Code built-in tools (Bash, Read, Write, Edit,
-        WebFetch, WebSearch, Task, NotebookEdit, Glob, Grep, mcp__<server>__<tool>), common MCP
-        tool naming, and generic verbs (send_email, http_request, execute_sql...).
+        WebFetch, WebSearch, Task, NotebookEdit, Glob, Grep, mcp__<server>__<tool>), OpenAI Codex
+        built-ins for provider "openai_codex" (Bash, apply_patch, spawn_agent, view_image ...),
+        common MCP tool naming, and generic verbs (send_email, http_request, execute_sql...).
 
     extract_resources(category, arguments) -> list[dict]
-        Resources touched by a tool call: file paths, URLs, hosts, shell commands; flags sensitive
-        ones via app.engines.redaction.is_sensitive_path.
+        Resources touched by a tool call: file paths (including the files named in an
+        apply_patch-style patch), URLs, hosts, shell commands; flags sensitive ones via
+        app.engines.redaction.is_sensitive_path.
 
     extract_destination(category, arguments, resources) -> dict | None
         Outbound destination ({"kind", "identifier"}) when the call can transmit data.

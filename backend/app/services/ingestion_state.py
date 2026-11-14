@@ -27,7 +27,7 @@ from app.models import Agent, AgentSession, IngestedEvent, Integration, Organiza
 from app.services.ingestion_config import policy_specs, trust_rule_specs
 
 # Integrations that return the decision at a real execution boundary that honours it.
-ENFORCING_INTEGRATIONS = frozenset({"claude_code", "mcp_gateway", "python_sdk"})
+ENFORCING_INTEGRATIONS = frozenset({"claude_code", "mcp_gateway", "openai_codex", "python_sdk"})
 DEFAULT_INTEGRATION = "custom"
 
 _SCRUB_MIN_FRAGMENT = 6

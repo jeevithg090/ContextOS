@@ -21,8 +21,8 @@ from tests.integration.agents_support import exfil_session
 from tests.integration.ingestion_support import decide, event, post_events, tool_requested
 
 URL = "/api/v1/integrations"
-SUPPORTED = {"claude_code", "mcp_gateway", "python_sdk"}
-PLANNED = {"openai_codex", "cursor", "langgraph", "crewai", "openai_agents_sdk", "anthropic_agent_sdk"}
+SUPPORTED = {"claude_code", "mcp_gateway", "openai_codex", "python_sdk"}
+PLANNED = {"cursor", "langgraph", "crewai", "openai_agents_sdk", "anthropic_agent_sdk"}
 
 
 def _get(client, headers):
@@ -73,6 +73,16 @@ def test_capability_matrix_is_honest(client, org):
     assert {e["name"] for e in claude["enforcement"]} == {"PreToolUse deny", "PreToolUse ask"}
     limits = " ".join(claude["limitations"])
     assert "reasoning" in limits and "never answers \"allow\"" in limits and "PreToolUse hook" in limits
+
+    codex = _catalog(body, "openai_codex")
+    monitored = " ".join(m["name"] for m in codex["monitoring"])
+    for hook in ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "SessionEnd", "SubagentStop"):
+        assert hook in monitored
+    assert {e["name"] for e in codex["enforcement"]} == {"PreToolUse block", "Approvals and restrictions"}
+    limits = " ".join(codex["limitations"])
+    for gap in ("web search", "write_stdin", "untrusted", "failed calls", "never grants approval", "fail mode"):
+        assert gap in limits, gap
+    assert codex["docs_path"] == "docs/integrations/codex.md"
 
     gateway = _catalog(body, "mcp_gateway")
     assert any(e["name"] == "tools/call deny" for e in gateway["enforcement"])
@@ -252,13 +262,44 @@ def test_python_sdk_setup_shows_guard_example(client, org):
     compile(python["code"], "agent.py", "exec")  # the example is valid Python
 
 
+def test_codex_setup_installs_hooks_and_asks_for_trust_in_codex(client, org):
+    guide = _setup(client, org, "openai_codex")
+    assert guide["status"] == "supported" and guide["interim_kind"] is None
+    codes = "\n".join(c["code"] for c in _commands(guide))
+    assert "contextos init --url http://testserver --api-key ctxk_your_key --codex" in codes
+    assert org.api_key not in json.dumps(guide)
+    trust = next(s for s in guide["steps"] if s["title"] == "Trust the hooks in Codex")
+    assert "/hooks" in trust["description"] and any(c["code"] == "/hooks" for c in trust["commands"])
+    hooks = json.loads(next(c["code"] for c in _commands(guide) if c["language"] == "json"))["hooks"]
+    assert hooks["PreToolUse"][0]["matcher"] == "*"
+    assert hooks["PreToolUse"][0]["hooks"][0] == {"type": "command", "command": "contextos codex-hook PreToolUse",
+                                                   "timeout": 60}
+    assert hooks["SessionEnd"][0]["hooks"][0]["timeout"] == 3  # Codex clamps SessionEnd hooks to 3 s
+    assert set(hooks) == {"PreToolUse", "PostToolUse", "UserPromptSubmit", "SessionStart", "SubagentStop",
+                          "SessionEnd"}
+    gateway = next(c for c in _commands(guide) if c["language"] == "toml")
+    assert "[mcp_servers.toolbox]" in gateway["code"] and "mcp-gateway" in gateway["code"]
+    assert guide["docs_path"] == "docs/integrations/codex.md"
+    assert "Enforced" in guide["verification"]
+    assert {s["scope"]: s["required"] for s in guide["api_key_scopes"]} == {"ingest": True, "decide": True,
+                                                                             "read": False}
+
+
+def test_codex_setup_explains_that_ask_blocks(client, org, db):
+    org_row = db.get(Organization, org.org_id)
+    org_row.settings = {**(org_row.settings or {}), "fail_mode": "ask"}
+    db.commit()
+    guide = _setup(client, org, "openai_codex")
+    step = next(s for s in guide["steps"] if s["title"].startswith("Apply your organisation's fail mode"))
+    assert "cannot ask" in step["description"] and "'closed'" in step["description"]
+    assert any(c["code"] == "export CONTEXTOS_CODEX_FAIL_MODE=ask" for c in step["commands"])
+
+
 def test_planned_setup_returns_labelled_interim_path(client, org):
     cursor = _setup(client, org, "cursor")
     assert cursor["status"] == "planned" and cursor["interim_kind"] == "mcp_gateway"
     assert "no native ContextOS integration yet" in cursor["notes"][0]
     assert any(c["title"] == ".cursor/mcp.json" for c in _commands(cursor))
-    codex = _setup(client, org, "openai_codex")
-    assert any(c["language"] == "toml" and "[mcp_servers.toolbox]" in c["code"] for c in _commands(codex))
     langgraph = _setup(client, org, "langgraph")
     assert langgraph["interim_kind"] == "python_sdk"
     assert any(c["language"] == "python" for c in _commands(langgraph))
