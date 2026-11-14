@@ -7,7 +7,7 @@ files in `docs/engineering/`; the step-by-step procedures are `docs/engineering/
 
 ## Setup
 
-Requirements: Python 3.12 (3.11+ works), Node.js 22 with npm, `make`.
+Requirements: Python 3.12 (3.11+ works), Node.js 22.12+ with npm, `make`.
 
 ```bash
 make install PYTHON=python3.12   # backend/.venv (backend[dev,postgres] + sdk[mcp], editable) and npm ci in frontend/
