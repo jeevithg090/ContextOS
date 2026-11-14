@@ -1,6 +1,6 @@
 """Tests for smoke.py's building blocks (the full run is exercised by running the script itself).
 
-    backend/.venv/bin/python -m pytest -q -p no:cacheprovider .claude/skills/release-readiness/scripts
+    backend/.venv/bin/python -m pytest -q -p no:cacheprovider scripts
 """
 
 from __future__ import annotations

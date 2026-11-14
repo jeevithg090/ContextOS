@@ -1,8 +1,8 @@
 # Development guide
 
 How to set up ContextOS, run it, and extend it the way the codebase expects. The rules every change
-must follow are in [../CLAUDE.md](../CLAUDE.md) (the ten non-negotiable rules) and the path-scoped
-files in `.claude/rules/`; the step-by-step procedures are `.claude/skills/<name>/SKILL.md`
+must follow are in [../CONTRIBUTING.md](../CONTRIBUTING.md) (the ten non-negotiable rules) and the path-scoped
+files in `docs/engineering/`; the step-by-step procedures are `docs/engineering/checklists/<name>.md`
 (`secure-feature`, `integration-builder`, `test-and-verify`, `code-review`, …).
 
 ## Setup
@@ -56,9 +56,9 @@ cd ../frontend && npm run dev                       # or: make dev-frontend → 
 | Lint and types | `make lint` (`ruff check app tests`, `eslint src`, `tsc -b --noEmit`) |
 | Frontend build | `make build` (`frontend/dist`) |
 | Detection corpus | `cd backend && .venv/bin/python -m tests.corpus.evaluate` |
-| Route auth/isolation audit | `backend/.venv/bin/python .claude/skills/repo-audit/scripts/route_audit.py` |
-| Docs reference missing paths | `backend/.venv/bin/python .claude/skills/repo-audit/scripts/doc_paths.py` |
-| Clean-environment smoke run | `backend/.venv/bin/python .claude/skills/release-readiness/scripts/smoke.py` |
+| Route auth/isolation audit | `backend/.venv/bin/python scripts/audit/route_audit.py` |
+| Docs reference missing paths | `backend/.venv/bin/python scripts/audit/doc_paths.py` |
+| Clean-environment smoke run | `backend/.venv/bin/python scripts/smoke.py` |
 
 ### Why the backend and SDK suites run separately
 
@@ -106,7 +106,7 @@ built-in policies in `engines/policy/builtin.py` (every `conditions` must pass
 `engines/risk/tool_names.py`. Update the engine's `__init__.py` docstring when its public API grows.
 
 ### Add an endpoint
-Follow `.claude/skills/secure-feature/SKILL.md`. In short: schema (`app/schemas/<area>.py`,
+Follow `docs/engineering/checklists/secure-feature.md`. In short: schema (`app/schemas/<area>.py`,
 `*In` with `extra="forbid"`, `*Out`), scoped service with redaction, audit and notify, route with
 `Depends(require(Permission.X.value))` (static paths before `/{id}`), register new modules in
 `app/api/router.py`, tests (happy path, 422, 403 per role/scope, 404, `other_org` isolation), add a
@@ -124,7 +124,7 @@ the row to [API_SPECIFICATION.md](API_SPECIFICATION.md).
    in [PRODUCT_SPECIFICATION.md](PRODUCT_SPECIFICATION.md).
 
 ### Add a migration
-Every schema change ships an Alembic revision (see `.claude/rules/database-migrations.md`).
+Every schema change ships an Alembic revision (see `docs/engineering/database-migrations.md`).
 Generate it against a scratch database, never `backend/data/contextos.db`:
 
 ```bash
@@ -139,7 +139,7 @@ Then read and fix the file (no application imports; `sa.DateTime(timezone=True)`
 `tests/integration/test_migrations.py` green. Update [DATA_MODEL.md](DATA_MODEL.md).
 
 ### Add an integration adapter
-Follow `.claude/skills/integration-builder/SKILL.md` and `.claude/rules/integration-adapters.md`:
+Follow `docs/engineering/checklists/integration-builder.md` and `docs/engineering/integration-adapters.md`:
 pure `mapping.py`, HTTP only via `ContextOSClient`, fail closed, never forward an unrestricted call
 under RESTRICT, spool on failure, tests per hook/message type. A new integration kind is
 `advisory` until it is added to `ENFORCING_INTEGRATIONS` with tests proving the boundary. Document
@@ -157,5 +157,5 @@ cd backend && CONTEXTOS_TEST_DATABASE_URL=postgresql+psycopg://user:pw@127.0.0.1
 
 ## Documentation
 
-Docs describe what the code does today (`.claude/rules/documentation.md`). After significant work,
+Docs describe what the code does today (`docs/engineering/documentation.md`). After significant work,
 update [../CONTEXT.md](../CONTEXT.md) and the area doc in the same change.

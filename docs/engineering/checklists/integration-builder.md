@@ -1,14 +1,10 @@
----
-name: integration-builder
-description: Design, build and verify a ContextOS integration adapter for an agent framework or tool protocol (a new one, or changes to the Claude Code hooks, MCP gateway or Python SDK guard) with honest enforced/advisory/observed claims, fail-closed decision mapping, redaction, spooling, tests and docs. Use when asked to integrate a new framework (Codex, Cursor, LangGraph, …), to change how a hook or gateway maps events or decisions, or to verify an adapter against a real host.
-argument-hint: "<framework or adapter name>"
----
-
 # Integration builder
+
+> Design, build and verify a ContextOS integration adapter for an agent framework or tool protocol (a new one, or changes to the Claude Code hooks, MCP gateway or Python SDK guard) with honest enforced/advisory/observed claims, fail-closed decision mapping, redaction, spooling, tests and docs. Use when asked to integrate a new framework (Codex, Cursor, LangGraph, …), to change how a hook or gateway maps events or decisions, or to verify an adapter against a real host.
 
 Reference implementations: `sdk/contextos/integrations/claude_code/` (hooks) and
 `sdk/contextos/integrations/mcp_gateway/` (protocol proxy); `sdk/contextos/guard.py` (in-process).
-Rules: `.claude/rules/integration-adapters.md`. Docs to mirror: `docs/integrations/claude-code.md`.
+Rules: `docs/engineering/integration-adapters.md`. Docs to mirror: `docs/integrations/claude-code.md`.
 
 ## 1. Research the host (write the findings down with sources and dates)
 - Which interception points exist, and does each run **before** the action and let you stop it?

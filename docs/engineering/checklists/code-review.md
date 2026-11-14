@@ -1,10 +1,6 @@
----
-name: code-review
-description: Review a ContextOS diff, branch or pull request against this repository's security rules and conventions — redaction, org isolation (404), server-side classification, honest enforcement wording, layering, migrations, frontend tokens and states, and test coverage — and report verified findings ranked by severity with a failure scenario and fix for each. Use when asked to review code, a PR or "my changes", before committing a feature, or as the last step of secure-feature / integration-builder work.
-argument-hint: "[PR number | branch | paths]  (default: working tree vs main)"
----
-
 # Code review (ContextOS)
+
+> Review a ContextOS diff, branch or pull request against this repository's security rules and conventions — redaction, org isolation (404), server-side classification, honest enforcement wording, layering, migrations, frontend tokens and states, and test coverage — and report verified findings ranked by severity with a failure scenario and fix for each. Use when asked to review code, a PR or "my changes", before committing a feature, or as the last step of secure-feature / integration-builder work.
 
 Only report what you verified by reading the code (and, where cheap, by running a test). Each
 finding needs a concrete failure scenario. Do not post to GitHub or edit files unless asked.
@@ -21,12 +17,12 @@ unchanged caller.
 ## 2. Route each file to its checklist
 | Paths | Load | Focus |
 |---|---|---|
-| `backend/app/**` | `.claude/rules/backend-architecture.md`, `security-engineering.md` | layers, errors, Page, audit+notify |
-| `backend/app/models/**`, `backend/alembic/**` | `.claude/rules/database-migrations.md` | migration present and correct |
-| `backend/app/services/ingestion*`, `events/**`, `sdk/**` | `.claude/rules/integration-adapters.md` | contract, enforcement, fail closed |
-| `frontend/src/**` | `.claude/rules/frontend-architecture.md` | api.ts hooks, tokens, states |
-| `**/tests/**` | `.claude/rules/testing.md` | isolation + adversarial coverage |
-| `docs/**`, `*.md` | `.claude/rules/documentation.md` | claims match code |
+| `backend/app/**` | `docs/engineering/backend-architecture.md`, `security-engineering.md` | layers, errors, Page, audit+notify |
+| `backend/app/models/**`, `backend/alembic/**` | `docs/engineering/database-migrations.md` | migration present and correct |
+| `backend/app/services/ingestion*`, `events/**`, `sdk/**` | `docs/engineering/integration-adapters.md` | contract, enforcement, fail closed |
+| `frontend/src/**` | `docs/engineering/frontend-architecture.md` | api.ts hooks, tokens, states |
+| `**/tests/**` | `docs/engineering/testing.md` | isolation + adversarial coverage |
+| `docs/**`, `*.md` | `docs/engineering/documentation.md` | claims match code |
 
 ## 3. Blockers — check every one
 - [ ] Agent-derived text or a secret reaches a column, log, audit `details`, `notify`, SSE, export or
@@ -62,8 +58,8 @@ cd backend && .venv/bin/ruff check app tests
 cd backend && .venv/bin/python -m pytest -q -p no:cacheprovider <test files for the changed area>
 cd sdk && ../backend/.venv/bin/python -m pytest -q -p no:cacheprovider tests          # sdk/ or envelope changed
 cd frontend && npx tsc -b --noEmit && npx eslint <changed paths> && npx vitest run <feature dir>
-backend/.venv/bin/python .claude/skills/repo-audit/scripts/route_audit.py --tests <changed test files>   # routes changed
-backend/.venv/bin/python .claude/skills/repo-audit/scripts/doc_paths.py <changed .md files>              # docs changed
+backend/.venv/bin/python scripts/audit/route_audit.py --tests <changed test files>   # routes changed
+backend/.venv/bin/python scripts/audit/doc_paths.py <changed .md files>              # docs changed
 ```
 When you suspect a leak or isolation bug, prove it with a throwaway test in the scratchpad (not in
 the repo) using the `client`/`org`/`other_org` fixtures, and include the result.
@@ -74,7 +70,7 @@ the repo) using the `client`/`org`/`other_org` fixtures, and include the result.
 Verdict: approve | changes requested | blocked
 ## Findings
 1. **[blocker|major|minor|nit] <short title>** — `path:line`
-   Rule: <CLAUDE.md rule # or .claude/rules file>
+   Rule: <CONTRIBUTING.md rule # or docs/engineering file>
    Scenario: <concrete input/state → wrong outcome>
    Fix: <specific change>
 ## Verified

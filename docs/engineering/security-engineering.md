@@ -1,12 +1,6 @@
----
-paths:
-  - "backend/app/**/*.py"
-  - "sdk/contextos/**/*.py"
-  - "frontend/src/**/*.{ts,tsx}"
-  - "examples/**"
----
-
 # Security engineering (ContextOS is a security product — these are release blockers)
+
+Applies to: `backend/app/**/*.py`, `sdk/contextos/**/*.py`, `frontend/src/**/*.{ts,tsx}`, `examples/**`
 
 Redaction
 - Pass any agent-supplied text or structure (context content, tool arguments/results, prompts,

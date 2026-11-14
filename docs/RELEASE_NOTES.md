@@ -85,7 +85,7 @@ The first complete ContextOS: server (`contextos-server` 0.1.0), Python SDK and 
 
 ### Verification for this release
 
-Release-readiness review on 2026-11-11 (`.claude/skills/release-readiness/SKILL.md`), on a clean copy
+Release-readiness review on 2026-11-11 (`docs/engineering/checklists/release-readiness.md`), on a clean copy
 of the working tree (base commit `60765bd` plus the uncommitted wave-2 changes) with a new virtualenv
 (`uv pip install --offline -e "backend[dev,postgres]" -e "sdk[mcp]"`), `npm ci --offline`, an empty
 SQLite database and a scratch port:

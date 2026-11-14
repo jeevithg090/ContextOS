@@ -1,19 +1,15 @@
----
-name: repo-audit
-description: Audit the whole ContextOS repository against its own rules (CLAUDE.md, .claude/rules) and produce a ranked findings report. Use when asked to audit, health-check or assess the repo, before starting a new build wave or milestone, after a large merge, or when you need an evidence-based list of gaps (auth, org isolation, redaction, layering, placeholders, doc drift, failing suites).
-argument-hint: "[area: backend|sdk|frontend|docs|all]"
----
-
 # Repository audit
+
+> Audit the whole ContextOS repository against its own rules (CONTRIBUTING.md, docs/engineering) and produce a ranked findings report. Use when asked to audit, health-check or assess the repo, before starting a new build wave or milestone, after a large merge, or when you need an evidence-based list of gaps (auth, org isolation, redaction, layering, placeholders, doc drift, failing suites).
 
 Goal: an evidence-backed list of violations and gaps, ranked by severity, with a concrete fix for
 each. Every finding cites `file:line` or a command output. Do not fix things during the audit
 unless asked; report them.
 
 ## 0. Orient (read, do not skim)
-1. `CLAUDE.md` (non-negotiable rules), `CONTEXT.md` (claimed state — what you are checking against),
+1. `CONTRIBUTING.md` (non-negotiable rules), `CONTEXT.md` (claimed state — what you are checking against),
    `docs/ARCHITECTURE.md` (layers, pipeline, enforcement model, stable contracts).
-2. `.claude/rules/*.md` for the areas in scope.
+2. `docs/engineering/*.md` for the areas in scope.
 3. `git log --oneline -15` and `git status --short` so you know what is new and what others are editing.
 
 ## 1. Suites (record exact pass/fail counts)
@@ -25,12 +21,12 @@ cd sdk && ../backend/.venv/bin/python -m pytest -q -p no:cacheprovider tests
 cd frontend && npx tsc -b --noEmit && npx eslint src && npx vitest run
 ```
 A red suite is a finding (severity = highest rule the failing test protects). Interpretation guide:
-`.claude/skills/test-and-verify/SKILL.md` §4.
+`docs/engineering/checklists/test-and-verify.md` §4.
 
 ## 2. API surface: auth, permissions, isolation
 ```bash
-backend/.venv/bin/python .claude/skills/repo-audit/scripts/route_audit.py --static   # seconds
-backend/.venv/bin/python .claude/skills/repo-audit/scripts/route_audit.py            # + other_org test run (~1 min)
+backend/.venv/bin/python scripts/audit/route_audit.py --static   # seconds
+backend/.venv/bin/python scripts/audit/route_audit.py            # + other_org test run (~1 min)
 ```
 Interpretation:
 - "Unauthenticated routes not in PUBLIC" → blocker unless it is a deliberate public endpoint
@@ -90,9 +86,9 @@ cd backend && S=$(mktemp -d) && export CONTEXTOS_DATABASE_URL=sqlite:///$S/a.db 
 
 ## 6. Documentation drift
 ```bash
-backend/.venv/bin/python .claude/skills/repo-audit/scripts/doc_paths.py
+backend/.venv/bin/python scripts/audit/doc_paths.py
 ```
-Every missing path/module is a finding (medium; high when it is a doc `CLAUDE.md` tells agents to read).
+Every missing path/module is a finding (medium; high when it is a doc `CONTRIBUTING.md` tells contributors to read).
 Then spot-check 3 claims in `CONTEXT.md` against the code.
 
 ## 7. Report (return this, in this shape)

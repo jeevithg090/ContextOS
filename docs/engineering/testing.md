@@ -1,13 +1,6 @@
----
-paths:
-  - "backend/tests/**"
-  - "sdk/tests/**"
-  - "frontend/src/**/__tests__/**"
-  - "frontend/src/**/*.test.{ts,tsx}"
-  - "frontend/src/test/**"
----
-
 # Testing
+
+Applies to: `backend/tests/**`, `sdk/tests/**`, `frontend/src/**/__tests__/**`, `frontend/src/**/*.test.{ts,tsx}`, `frontend/src/test/**`
 
 Layout and commands
 - Backend: `backend/tests/unit/` (pure engines and workspace logic, no DB), `backend/tests/integration/`
@@ -31,7 +24,7 @@ Required cases
   `make_org(..., scopes=["ingest"])` get 403 on writes/reads they lack), not-found.
 - Every org-owned route: a test that takes `other_org` and asserts 404 for each id route
   (GET/PATCH/DELETE/POST sub-resources), absence from lists/stats, and 404 when a foreign id is
-  referenced in a request body. `backend/.venv/bin/python .claude/skills/repo-audit/scripts/route_audit.py`
+  referenced in a request body. `backend/.venv/bin/python scripts/audit/route_audit.py`
   lists routes no `other_org` test exercises.
 - Security logic (redaction, detection, trust, policy, risk, enforcement mapping): adversarial
   cases — obfuscation (case, unicode, zero-width, base64/URL encoding), boundary sizes, malformed

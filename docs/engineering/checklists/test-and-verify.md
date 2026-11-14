@@ -1,10 +1,6 @@
----
-name: test-and-verify
-description: Run the right ContextOS test suites, linters and type checks for a change, interpret failures correctly, and report verified results with exact counts. Use after any code change and before saying work is done, when a suite is red and you need to know whether it is yours, or when asked to "run the tests", "verify", or "check nothing broke".
-argument-hint: "[changed paths or 'all']"
----
-
 # Test and verify
+
+> Run the right ContextOS test suites, linters and type checks for a change, interpret failures correctly, and report verified results with exact counts. Use after any code change and before saying work is done, when a suite is red and you need to know whether it is yours, or when asked to "run the tests", "verify", or "check nothing broke".
 
 Never report "tests pass" without the command and its count. Never delete, skip, xfail or loosen
 a test to get green; fix the code or the test's wrong assumption and say which.
@@ -22,7 +18,7 @@ a test to get green; fix the code or the test's wrong assumption and say which.
 | `sdk/` | `cd sdk && ../backend/.venv/bin/python -m pytest -q -p no:cacheprovider tests` |
 | `frontend/src/features/<f>/` | `cd frontend && npx vitest run src/features/<f>` + tsc + eslint on the paths |
 | `frontend/src/components/`, `lib/`, `hooks/` | `cd frontend && npx vitest run` (all) + tsc + eslint |
-| `.claude/skills/*/scripts/` | `backend/.venv/bin/python -m pytest -q -p no:cacheprovider .claude/skills/<skill>/scripts` |
+| `scripts/` | `backend/.venv/bin/python -m pytest -q -p no:cacheprovider scripts` |
 
 Always add, for any backend change: `cd backend && .venv/bin/ruff check app tests`.
 
@@ -40,9 +36,9 @@ cd frontend && npx eslint src            # or specific paths
 cd frontend && npx vitest run            # or src/features/<f>
 cd frontend && npm run build             # tsc -b && vite build; needed before the smoke test serves the UI
 # Whole system from a clean database (real server process, real HTTP; random port 18000-18999)
-backend/.venv/bin/python .claude/skills/release-readiness/scripts/smoke.py
+backend/.venv/bin/python scripts/smoke.py
 # Org-isolation coverage of the API
-backend/.venv/bin/python .claude/skills/repo-audit/scripts/route_audit.py
+backend/.venv/bin/python scripts/audit/route_audit.py
 ```
 Use a 10-minute timeout for full suites. Useful flags: `-x` (stop at first failure), `-k <expr>`,
 `--lf` is unavailable with `-p no:cacheprovider` — re-run the failing node ids instead

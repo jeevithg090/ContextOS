@@ -3,9 +3,9 @@
 
 Run from the repository root with the backend virtualenv:
 
-    backend/.venv/bin/python .claude/skills/repo-audit/scripts/route_audit.py           # static + isolation run
-    backend/.venv/bin/python .claude/skills/repo-audit/scripts/route_audit.py --static  # no tests (seconds)
-    backend/.venv/bin/python .claude/skills/repo-audit/scripts/route_audit.py --json    # machine-readable
+    backend/.venv/bin/python scripts/audit/route_audit.py           # static + isolation run
+    backend/.venv/bin/python scripts/audit/route_audit.py --static  # no tests (seconds)
+    backend/.venv/bin/python scripts/audit/route_audit.py --json    # machine-readable
     ... --tests tests/integration/test_findings_api.py   # limit the isolation run (default tests/integration)
     ... --strict                                          # exit 1 when any gap is reported
 
@@ -43,7 +43,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-REPO = Path(__file__).resolve().parents[4]
+REPO = Path(__file__).resolve().parents[2]
 BACKEND = REPO / "backend"
 UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
 PUBLIC = {  # intentionally unauthenticated: liveness, first-run setup and sign-in

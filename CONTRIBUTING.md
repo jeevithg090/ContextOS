@@ -1,16 +1,17 @@
-# ContextOS — instructions for Claude Code
+# Contributing to ContextOS
 
-ContextOS is a security, trust, provenance and observability layer for autonomous AI agents:
-it records what context agents consume (and from where), classifies trust, detects prompt
-injection / credential exfiltration, evaluates tool calls against policy at real enforcement
-boundaries, and supports investigation (incidents, replay, counterfactuals). It also contains an
-Engineering Workspace (Kanban + AI fix-context generation) that turns findings into fixes.
+Thanks for working on ContextOS. This file holds the rules every change must follow; the
+path-specific engineering guides are in [docs/engineering/](docs/engineering/) and step-by-step
+checklists (secure feature, integration adapter, test and verify, code review, architecture review,
+threat model, repository audit, release readiness) are in
+[docs/engineering/checklists/](docs/engineering/checklists/).
 
-Read before major changes: `CONTEXT.md` (current state) → `docs/ARCHITECTURE.md` →
-`docs/SECURITY_MODEL.md` → the doc for the area you touch (`docs/DATA_MODEL.md`,
-`docs/API_SPECIFICATION.md`, `docs/INTEGRATION_SPECIFICATION.md`, `docs/integrations/*.md`).
-Some of these are still being written; when one is missing, the module docstrings and tests are
-authoritative — never guess.
+Read before major changes: [CONTEXT.md](CONTEXT.md) (current state) →
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) → [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) →
+the doc for the area you touch ([docs/DATA_MODEL.md](docs/DATA_MODEL.md),
+[docs/API_SPECIFICATION.md](docs/API_SPECIFICATION.md),
+[docs/INTEGRATION_SPECIFICATION.md](docs/INTEGRATION_SPECIFICATION.md), `docs/integrations/*.md`).
+Where a doc and the code disagree, the module docstrings and tests are authoritative.
 
 ## Repository layout
 - `backend/` FastAPI modular monolith (Python 3.12, SQLAlchemy 2, Pydantic 2, Alembic)
@@ -20,7 +21,8 @@ authoritative — never guess.
   - `app/workspace/*` pure Engineering-Workspace logic (fix context, context packs, templates)
 - `sdk/` Python SDK + `contextos` CLI + integrations (Claude Code hooks, MCP gateway)
 - `frontend/` React 18 + TS + Vite + Tailwind + TanStack Query + React Flow
-- `docs/` authoritative product/architecture/security docs; `.claude/` rules and skills
+- `docs/` authoritative product/architecture/security docs; `docs/engineering/` engineering rules and checklists
+- `scripts/` smoke run and repository audit scripts
 
 ## Commands
 - Backend tests: `cd backend && .venv/bin/python -m pytest -q`
@@ -30,7 +32,7 @@ authoritative — never guess.
 - Migrations: `cd backend && .venv/bin/alembic upgrade head`
 - Frontend: `cd frontend && npm run dev` (proxies /api → :8000), `npm run typecheck`, `npm test`, `npm run build`
 - Lint: `cd backend && .venv/bin/ruff check app tests`; `cd frontend && npm run lint`
-- Whole-system smoke run (fresh DB, real server): `backend/.venv/bin/python .claude/skills/release-readiness/scripts/smoke.py`
+- Whole-system smoke run (fresh DB, real server): `backend/.venv/bin/python scripts/smoke.py`
 
 ## Non-negotiable rules
 1. **Never persist raw secrets or raw context content.** Redact with `app.engines.redaction`
@@ -60,12 +62,13 @@ authoritative — never guess.
   `features/<name>/api.ts`; every view has loading, error and empty states.
 - Keep files focused (< ~500 lines); split by responsibility.
 
-## Rules and skills
-- `.claude/rules/*.md` load automatically for the paths they cover (backend architecture,
-  frontend architecture, security engineering, database & migrations, testing, integration
-  adapters, documentation). They refine the rules above; they never relax them.
-- `.claude/skills/<name>/SKILL.md` are step-by-step procedures: `secure-feature` (build),
-  `integration-builder`, `test-and-verify`, `code-review`, `architecture-review`, `threat-model`,
-  `repo-audit`, `release-readiness`. Use the matching skill instead of improvising the process.
-- `AGENTS.md` points other coding agents at this file; this file is the source of truth.
-- After significant work, update `CONTEXT.md` (what works, what changed, known problems, next steps).
+## Before you open a pull request
+
+```bash
+make lint          # ruff check + ruff format --check, ESLint, TypeScript
+make test          # backend, SDK and frontend suites (three separate processes)
+make build         # production frontend build
+```
+
+CI (`.github/workflows/ci.yml`) runs the same steps. After significant work, update
+[CONTEXT.md](CONTEXT.md) (what works, what changed, known problems, next steps).

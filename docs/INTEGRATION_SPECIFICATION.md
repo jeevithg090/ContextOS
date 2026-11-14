@@ -5,7 +5,7 @@ shipped adapter observes and enforces, how it fails, and its limits. The adapter
 are in [integrations/claude-code.md](integrations/claude-code.md),
 [integrations/codex.md](integrations/codex.md), [integrations/mcp.md](integrations/mcp.md) and
 [../sdk/README.md](../sdk/README.md); this document
-is the cross-adapter contract. Building a new adapter: `.claude/skills/integration-builder/SKILL.md`.
+is the cross-adapter contract. Building a new adapter: `docs/engineering/checklists/integration-builder.md`.
 
 ## Transport and authentication
 

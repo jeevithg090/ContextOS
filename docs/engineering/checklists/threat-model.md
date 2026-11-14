@@ -1,10 +1,6 @@
----
-name: threat-model
-description: Produce or update a threat model for a ContextOS feature, integration or the whole system — assets, actors, entry points, trust boundaries, STRIDE plus agent-specific threats (prompt injection, credential exfiltration, tool misuse, hook bypass, cross-tenant access), each mapped to the control in code, the test that proves it, and the residual risk. Use before building anything that handles agent data, auth, API keys, policy, approvals, exports or a new integration, and when a security review asks "what could go wrong here?".
-argument-hint: "<feature | integration | 'system'>"
----
-
 # Threat model
+
+> Produce or update a threat model for a ContextOS feature, integration or the whole system — assets, actors, entry points, trust boundaries, STRIDE plus agent-specific threats (prompt injection, credential exfiltration, tool misuse, hook bypass, cross-tenant access), each mapped to the control in code, the test that proves it, and the residual risk. Use before building anything that handles agent data, auth, API keys, policy, approvals, exports or a new integration, and when a security review asks "what could go wrong here?".
 
 Output is a table you can defend line by line: every "mitigated" claim names the code that does it
 and the test that proves it. A control without a test is "unverified", not "mitigated".
@@ -13,7 +9,7 @@ and the test that proves it. A control without a test is "unverified", not "miti
 1. State the scope in one sentence and list the files/routes in it (`grep -rn "router\." backend/app/api/routes/<area>.py`).
 2. Read `docs/ARCHITECTURE.md` (pipeline + enforcement model), `backend/app/api/deps.py` (principals,
    CSRF), `backend/app/events/envelope.py` (what clients can send), and the security/threat docs
-   listed in `CLAUDE.md` / `AGENTS.md` if present — update them rather than contradict them.
+   listed in `CONTRIBUTING.md` — update them rather than contradict them.
 
 ## 2. Assets (pick those in scope)
 Raw secrets and raw context content (must never be stored) · secret fingerprints and content hashes ·

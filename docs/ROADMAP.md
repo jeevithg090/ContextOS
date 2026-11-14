@@ -7,7 +7,7 @@ Where ContextOS goes after 0.1.0. Items are planned, not shipped; the current st
 ## Now — finish 0.1.0
 
 - Close the wave-2 security review and the release-readiness report
-  (`.claude/skills/release-readiness/SKILL.md`).
+  (`docs/engineering/checklists/release-readiness.md`).
 - Build and run the Docker image and compose stack; fix whatever that finds [1].
 - Commit the verified state and tag the release.
 

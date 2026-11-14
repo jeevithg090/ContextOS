@@ -42,7 +42,7 @@ threats to these controls and lists what is not covered. Terminology (`enforced`
 - Roles → permissions: `app/domain/enums.py::ROLE_PERMISSIONS` (`owner`, `admin`: all;
   `security_analyst`: read, write, approve, policy:manage, trust:manage; `developer`: read, write;
   `viewer`: read). Routes declare `Depends(require(Permission.X.value))`; a state change is never
-  `read` (`.claude/skills/repo-audit/scripts/route_audit.py` checks every route).
+  `read` (`scripts/audit/route_audit.py` checks every route).
 - API keys carry only `ingest`, `decide`, `read`; they can never approve, write, administer or manage
   policy/trust. Members, API-key management, settings and `GET /auth/me` require a signed-in user.
 - Owner role: only an owner can grant, remove or add the owner role, and the last owner cannot be
