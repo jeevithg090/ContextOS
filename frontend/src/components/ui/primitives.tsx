@@ -3,7 +3,7 @@
  * Style rules: semantic tokens only, 4px spacing grid, 13.5px base, hairline borders,
  * restrained colour (status colour carries meaning — never decoration).
  */
-import { forwardRef, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { cloneElement, forwardRef, isValidElement, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/format";
 import { TONE_CLASSES, type Tone } from "@/lib/domain";
@@ -22,8 +22,8 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
 };
 const BUTTON_SIZES: Record<ButtonSize, string> = {
   xs: "h-6 px-2 text-2xs gap-1",
-  sm: "h-7 px-2.5 text-xs gap-1.5",
-  md: "h-8 px-3 text-[13px] gap-2",
+  sm: "h-7 px-2.5 text-xs gap-1.5 touch:h-9",
+  md: "h-8 px-3 text-[13px] gap-2 touch:h-10",
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -62,7 +62,7 @@ export function IconButton({ label, className, children, ...rest }: ButtonHTMLAt
       type="button"
       aria-label={label}
       title={label}
-      className={cn("inline-flex h-7 w-7 items-center justify-center rounded text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg", className)}
+      className={cn("inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg touch:h-10 touch:w-10", className)}
       {...rest}
     >
       {children}
@@ -183,10 +183,10 @@ export function Spinner({ className }: { className?: string }) {
 // Sizing (h-/w-/px-/py-/text-size) and colours can be overridden through `className`: cn() lets the
 // later class of a conflicting group win, so `<Input className="h-7 text-xs" />` needs no "!".
 
-const CONTROL = "w-full rounded border border-border-strong bg-surface-2 px-2.5 text-[13px] text-fg placeholder:text-fg-faint transition-colors focus:border-accent/60 focus:outline-none focus-visible:outline-none disabled:opacity-60";
+const CONTROL = "w-full rounded border border-border-strong bg-surface-2 px-2.5 text-[13px] text-fg placeholder:text-fg-faint transition-colors focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/25 focus-visible:outline-none aria-[invalid=true]:border-danger/60 disabled:opacity-60 touch:text-base";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input({ className, ...rest }, ref) {
-  return <input ref={ref} className={cn(CONTROL, "h-8", className)} {...rest} />;
+  return <input ref={ref} className={cn(CONTROL, "h-8 touch:h-10", className)} {...rest} />;
 });
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea({ className, ...rest }, ref) {
@@ -197,28 +197,58 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
   return (
     // pr-7 comes after className: the right padding reserves room for the chevron and must survive
     // a caller's px-* override (cn() resolves conflicts so the last class wins).
-    <select ref={ref} className={cn(CONTROL, "h-8 appearance-none bg-[length:12px] bg-[right_8px_center] bg-no-repeat", className, "pr-7")} style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23929bab' stroke-width='1.5'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E\")" }} {...rest}>
+    <select ref={ref} className={cn(CONTROL, "h-8 touch:h-10 appearance-none bg-[length:12px] bg-[right_8px_center] bg-no-repeat", className, "pr-7")} style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23929bab' stroke-width='1.5'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E\")" }} {...rest}>
       {children}
     </select>
   );
 });
 
 export function Field({ label, hint, error, children, htmlFor, className }: { label: string; hint?: ReactNode; error?: string | null; children: ReactNode; htmlFor?: string; className?: string }) {
+  // With an id to anchor on, the hint or error is wired to the control (aria-describedby) and an
+  // error marks it invalid, so screen readers announce the message with the field.
+  const messageId = htmlFor ? `${htmlFor}-${error ? "error" : "hint"}` : undefined;
+  const hasMessage = !!(error || hint);
+  // Layout wrappers (a plain <div> around an input and its button) are left alone; the page wires
+  // the inner control itself with `fieldDescription()`.
+  const isControl = isValidElement(children) && (typeof children.type !== "string" || ["input", "select", "textarea"].includes(children.type));
+  const control =
+    htmlFor && isControl && isValidElement<Record<string, unknown>>(children)
+      ? cloneElement(children, {
+          "aria-describedby": hasMessage ? [children.props["aria-describedby"], messageId].filter(Boolean).join(" ") : children.props["aria-describedby"],
+          "aria-invalid": error ? true : children.props["aria-invalid"],
+        })
+      : children;
   return (
     <div className={cn("space-y-1.5", className)}>
       <label htmlFor={htmlFor} className="block text-xs font-medium text-fg-muted">
         {label}
       </label>
-      {children}
-      {error ? <p className="text-2xs text-danger">{error}</p> : hint ? <p className="text-2xs text-fg-faint">{hint}</p> : null}
+      {control}
+      {error ? (
+        <p id={messageId} className="text-2xs text-danger">
+          {error}
+        </p>
+      ) : hint ? (
+        <p id={messageId} className="text-2xs text-fg-faint">
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
+}
+
+/** aria props for a control nested inside a Field's layout wrapper (ids match what Field renders). */
+export function fieldDescription(htmlFor: string, { hint, error }: { hint?: ReactNode; error?: string | null }) {
+  return {
+    "aria-describedby": error ? `${htmlFor}-error` : hint ? `${htmlFor}-hint` : undefined,
+    "aria-invalid": error ? true : undefined,
+  } as const;
 }
 
 export function Checkbox({ label, checked, onChange, disabled }: { label: ReactNode; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <label className={cn("inline-flex cursor-pointer items-center gap-2 text-[13px] text-fg", disabled && "cursor-not-allowed opacity-60")}>
-      <input type="checkbox" className="h-3.5 w-3.5 rounded border-border-strong bg-surface-2 accent-[rgb(var(--accent))]" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <input type="checkbox" className="h-3.5 w-3.5 touch:h-5 touch:w-5 rounded border-border-strong bg-surface-2 accent-[rgb(var(--accent))]" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
   );
