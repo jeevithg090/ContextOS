@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { LogOut, Menu, PanelLeftClose } from "lucide-react";
 import { NAV, type NavItem } from "@/app/nav";
@@ -8,6 +8,7 @@ import type { NavCounts } from "@/features/overview/types";
 import { useLiveEvents } from "@/hooks/useLiveEvents";
 import { cn } from "@/lib/format";
 import { IconButton, StatusDot, Tooltip } from "@/components/ui";
+import { ThemeMenu } from "./ThemeMenu";
 
 const BADGE_FIELD: Record<NonNullable<NavItem["badgeKey"]>, keyof NavCounts> = {
   pendingApprovals: "pending_approvals",
@@ -48,7 +49,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                     title={item.question}
                     className={({ isActive }) =>
                       cn(
-                        "group flex h-8 items-center gap-2.5 rounded px-3 text-[13px] transition-colors",
+                        "group flex h-8 items-center gap-2.5 rounded px-3 text-[13px] transition-colors touch:h-10",
                         isActive ? "bg-surface-3 text-fg" : "text-fg-muted hover:bg-surface-2 hover:text-fg",
                       )
                     }
@@ -89,10 +90,59 @@ function LiveIndicator({ status }: { status: "connecting" | "live" | "offline" }
   );
 }
 
+/**
+ * Navigation drawer below lg: a modal dialog that takes focus, closes on Escape or a backdrop tap,
+ * keeps Tab inside itself and hands focus back to the menu button when it closes.
+ */
+function MobileNav({ onClose }: { onClose: () => void }) {
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    panel.current?.querySelector<HTMLElement>("button")?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !panel.current) return;
+      const focusable = panel.current.querySelectorAll<HTMLElement>("a[href], button:not([disabled])");
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last?.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      opener?.focus?.();
+    };
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-40 lg:hidden">
+      <div className="absolute inset-0 bg-scrim/60 animate-fade-in" onClick={onClose} aria-hidden />
+      <div ref={panel} role="dialog" aria-modal="true" aria-label="Navigation" className="absolute inset-y-0 left-0 w-64 max-w-[85vw] border-r border-border bg-surface shadow-pop animate-slide-in-right">
+        <div className="flex justify-end p-2">
+          <IconButton label="Close navigation" onClick={onClose}>
+            <PanelLeftClose className="h-4 w-4" />
+          </IconButton>
+        </div>
+        <Sidebar onNavigate={onClose} />
+      </div>
+    </div>
+  );
+}
+
 export function AppShell() {
   const { me, logout } = useAuth();
   const live = useLiveEvents(!!me);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const closeMobileNav = useCallback(() => setMobileOpen(false), []);
   const location = useLocation();
 
   return (
@@ -106,19 +156,7 @@ export function AppShell() {
       <aside className="hidden w-60 shrink-0 border-r border-border bg-surface/60 lg:block">
         <Sidebar />
       </aside>
-      {mobileOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-scrim/60" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-64 border-r border-border bg-surface animate-slide-in-right">
-            <div className="flex justify-end p-2">
-              <IconButton label="Close navigation" onClick={() => setMobileOpen(false)}>
-                <PanelLeftClose className="h-4 w-4" />
-              </IconButton>
-            </div>
-            <Sidebar onNavigate={() => setMobileOpen(false)} />
-          </aside>
-        </div>
-      )}
+      {mobileOpen && <MobileNav onClose={closeMobileNav} />}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
           <IconButton label="Open navigation" className="lg:hidden" onClick={() => setMobileOpen(true)}>
@@ -129,9 +167,10 @@ export function AppShell() {
             <span className="text-fg-faint">/</span>
             <span className="truncate text-fg-muted">{me?.role?.replace("_", " ")}</span>
           </div>
-          <div className="ml-auto flex items-center gap-4">
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <LiveIndicator status={live} />
-            <div className="hidden text-xs text-fg-muted sm:block">{me?.user.email}</div>
+            <div className="hidden text-xs text-fg-muted md:block">{me?.user.email}</div>
+            <ThemeMenu />
             <IconButton label="Sign out" onClick={() => void logout()}>
               <LogOut className="h-4 w-4" />
             </IconButton>
