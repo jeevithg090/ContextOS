@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { FilterSelect } from "@/components/data";
-import { Dialog, Input, Select } from "@/components/ui";
+import { Dialog, Field, Input, Select } from "@/components/ui";
 
 const classes = (el: HTMLElement) => el.className.split(/\s+/);
 
@@ -58,5 +58,30 @@ describe("Dialog", () => {
     const dialog = classes(screen.getByRole("dialog"));
     expect(dialog).toContain("w-[min(860px,calc(100vw-32px))]");
     expect(dialog).not.toContain("w-[min(560px,calc(100vw-32px))]");
+  });
+});
+
+describe("Field", () => {
+  it("describes the control with its hint", () => {
+    render(
+      <Field label="Password" htmlFor="pw" hint="At least 10 characters.">
+        <Input id="pw" />
+      </Field>,
+    );
+    const input = screen.getByLabelText("Password");
+    expect(input).toHaveAccessibleDescription("At least 10 characters.");
+    expect(input).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("marks the control invalid and announces the error instead of the hint", () => {
+    render(
+      <Field label="Email" htmlFor="em" hint="Your login." error="Enter your email address.">
+        <Input id="em" />
+      </Field>,
+    );
+    const input = screen.getByLabelText("Email");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription("Enter your email address.");
+    expect(screen.queryByText("Your login.")).not.toBeInTheDocument();
   });
 });
