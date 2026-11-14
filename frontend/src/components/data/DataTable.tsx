@@ -58,6 +58,14 @@ function toSortValue(value: unknown): SortValue {
 }
 
 /**
+ * Empty and error states span every column, so on a phone a wide table would centre them across its
+ * full scrollable width and cut the message off. Pin the state to the left edge and size it to the
+ * visible area (viewport minus the page gutters, and minus the sidebar from lg up); `max-w-full`
+ * keeps it inside tables that do not overflow.
+ */
+const STATE_VIEWPORT = "sticky left-0 w-[calc(100vw-2rem)] max-w-full sm:w-[calc(100vw-3rem)] lg:w-[calc(100vw-18rem)]";
+
+/**
  * Typed table with client-side sorting, skeleton loading, error and empty states and keyboard
  * row activation. Use `manualSort` when the API orders the rows. The header row stays visible
  * when the table is given a height cap via `className` (e.g. "max-h-[60vh]").
@@ -178,14 +186,18 @@ export function DataTable<T>({
           {showError && (
             <tr>
               <td colSpan={columns.length}>
-                <ErrorState error={error} onRetry={onRetry} />
+                <div className={STATE_VIEWPORT}>
+                  <ErrorState error={error} onRetry={onRetry} />
+                </div>
               </td>
             </tr>
           )}
           {showEmpty && (
             <tr>
               <td colSpan={columns.length}>
-                <EmptyState title={empty?.title ?? "Nothing to show"} description={empty?.description} icon={empty?.icon} action={empty?.action} />
+                <div className={STATE_VIEWPORT}>
+                  <EmptyState title={empty?.title ?? "Nothing to show"} description={empty?.description} icon={empty?.icon} action={empty?.action} />
+                </div>
               </td>
             </tr>
           )}

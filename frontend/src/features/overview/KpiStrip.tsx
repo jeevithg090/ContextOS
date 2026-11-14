@@ -51,7 +51,7 @@ function Tile({ kpi }: { kpi: Kpi }) {
 
 export function KpiStrip({ data }: { data: Overview | undefined }) {
   // gap-px over a border-coloured background draws hairline dividers at every breakpoint.
-  const grid = "grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border shadow-panel sm:grid-cols-3 xl:grid-cols-6";
+  const grid = "grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border shadow-panel sm:grid-cols-3 2xl:grid-cols-6";
   if (!data) {
     return (
       <div className={grid} aria-busy="true" aria-label="Loading security summary">
