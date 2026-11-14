@@ -14,6 +14,7 @@ import {
   type NodeChange,
 } from "@xyflow/react";
 import { toneColor } from "@/components/data";
+import { useTheme } from "@/lib/theme";
 import { edgeTypes, nodeTypes } from "./canvasElements";
 import {
   initialViewport,
@@ -51,6 +52,7 @@ const LARGE_GRAPH = 180;
 const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
 
 function Canvas({ graph, hiddenTypes, selection, path, onSelectNode, onSelectEdge, onClearSelection }: ProvenanceCanvasProps) {
+  const theme = useTheme().resolved;
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const { fitView, setViewport } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -136,7 +138,7 @@ function Canvas({ graph, hiddenTypes, selection, path, onSelectNode, onSelectEdg
         onInit={onInit}
         minZoom={0.08}
         maxZoom={1.8}
-        colorMode="dark"
+        colorMode={theme}
         proOptions={{ hideAttribution: true }}
         aria-label="Provenance graph"
       >

@@ -1,15 +1,25 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en" class="dark" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
     <meta name="description" content="ContextOS: security, trust, provenance and observability for autonomous AI agents." />
     <meta name="theme-color" content="#090b0e" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ContextOS" />
+    <meta property="og:title" content="ContextOS — the security control plane for AI agents" />
+    <meta property="og:description" content="See what your AI agents read, trust and do; enforce policy before tools run; review approvals, incidents and replays." />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="ContextOS — the security control plane for AI agents" />
+    <meta name="twitter:description" content="See what your AI agents read, trust and do; enforce policy before tools run; review approvals, incidents and replays." />
     <title>ContextOS</title>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
+    <noscript><p style="font-family: system-ui, sans-serif; padding: 2rem">ContextOS needs JavaScript enabled to run.</p></noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

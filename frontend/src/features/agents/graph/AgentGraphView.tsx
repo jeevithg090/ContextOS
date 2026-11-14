@@ -11,6 +11,7 @@ import dagre from "dagre";
 import { Network, ShieldAlert } from "lucide-react";
 import { Checkbox, EmptyState, ErrorState, Skeleton } from "@/components/ui";
 import { toneColor } from "@/components/data";
+import { useTheme } from "@/lib/theme";
 import { useAgentGraph } from "../api";
 import type { GraphEdge, GraphNode } from "../types";
 import { AgentNodeCard, NODE_HEIGHT, NODE_WIDTH, type AgentFlowNode } from "./AgentNodeCard";
@@ -48,6 +49,7 @@ function toFlowEdge(e: GraphEdge, selected: boolean): Edge {
 }
 
 export function AgentGraphView({ includeSimulated }: { includeSimulated: boolean }) {
+  const theme = useTheme().resolved;
   const graph = useAgentGraph(includeSimulated);
   const navigate = useNavigate();
   const [showIsolated, setShowIsolated] = useState(false);
@@ -110,6 +112,7 @@ export function AgentGraphView({ includeSimulated }: { includeSimulated: boolean
             onNodeClick={(_, node) => navigate(`/agents/${encodeURIComponent(node.id)}`)}
             onEdgeClick={(_, e) => setSelectedEdge((cur) => (cur === e.id ? null : e.id))}
             onPaneClick={() => setSelectedEdge(null)}
+            colorMode={theme}
             proOptions={{ hideAttribution: true }}
           >
             <Background color="rgb(var(--border))" gap={20} size={1} />

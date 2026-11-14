@@ -12,7 +12,8 @@
   --border-strong: 48 56 70;
   --fg: 229 232 238;
   --fg-muted: 146 155 171;
-  --fg-faint: 98 107 122;
+  /* Raised from 98 107 122 so captions and labels meet WCAG AA (4.5:1) on every dark surface. */
+  --fg-faint: 134 143 159;
 
   /* Accent: periwinkle "signal" — used for primary actions, focus and selection only. */
   --accent: 139 156 255;
@@ -47,6 +48,60 @@
 
   /* Modal backdrop */
   --scrim: 0 0 0;
+
+  /* Elevation */
+  --shadow-panel: 0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 8px 24px -12px rgb(0 0 0 / 0.6);
+  --shadow-pop: 0 12px 40px -8px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(var(--border-strong));
+
+  color-scheme: dark;
+}
+
+/* Light theme. Applied by the theme toggle (src/lib/theme.ts) through `data-theme="light"` on <html>.
+   Status colours are the darker 600–700 shades so text and tinted badges keep 4.5:1 contrast on white. */
+:root[data-theme="light"] {
+  --bg: 246 247 249;
+  --surface: 255 255 255;
+  --surface-2: 241 243 246;
+  --surface-3: 230 233 238;
+  --border: 222 226 232;
+  --border-strong: 200 206 215;
+  --fg: 17 20 26;
+  --fg-muted: 71 80 96;
+  --fg-faint: 92 101 117;
+
+  --accent: 67 80 204;
+  --accent-strong: 52 64 186;
+  --accent-fg: 255 255 255;
+
+  --trust-trusted: 4 108 78;
+  --trust-approved: 13 106 98;
+  --trust-external: 3 105 161;
+  --trust-unknown: 71 85 105;
+  --trust-suspicious: 158 70 8;
+  --trust-blocked: 190 18 60;
+
+  --sev-critical: 190 18 60;
+  --sev-high: 170 50 8;
+  --sev-medium: 138 82 6;
+  --sev-low: 29 78 216;
+  --sev-info: 71 85 105;
+
+  --dec-allow: 4 108 78;
+  --dec-deny: 190 18 60;
+  --dec-approval: 158 70 8;
+  --dec-restrict: 162 28 175;
+  --dec-audit: 3 105 161;
+
+  --ok: 4 108 78;
+  --warn: 158 70 8;
+  --danger: 190 18 60;
+
+  --scrim: 15 18 25;
+
+  --shadow-panel: 0 1px 2px 0 rgb(15 18 25 / 0.05);
+  --shadow-pop: 0 12px 32px -8px rgb(15 18 25 / 0.18), 0 0 0 1px rgb(var(--border-strong));
+
+  color-scheme: light;
 }
 
 @layer base {
@@ -99,6 +154,16 @@
     grid-template-columns: minmax(0, 1fr);
   }
   /* Scrollbars */
+  /* Theme switches cross-fade instead of flashing. Scoped to colour properties so layout and the
+     entrance animations are unaffected; `theme-switching` is only present for the switch itself. */
+  .theme-switching,
+  .theme-switching * {
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease,
+      fill 160ms ease !important;
+  }
   * {
     scrollbar-width: thin;
     scrollbar-color: rgb(var(--border-strong)) transparent;

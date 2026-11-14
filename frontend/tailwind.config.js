@@ -51,8 +51,8 @@ export default {
       },
       borderRadius: { DEFAULT: "6px", md: "8px", lg: "10px", xl: "14px" },
       boxShadow: {
-        panel: "0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 8px 24px -12px rgb(0 0 0 / 0.6)",
-        pop: "0 12px 40px -8px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(var(--border-strong))",
+        panel: "var(--shadow-panel)",
+        pop: "var(--shadow-pop)",
       },
       keyframes: {
         "fade-in": { from: { opacity: 0 }, to: { opacity: 1 } },
@@ -72,5 +72,9 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // `touch:` applies on coarse pointers (phones, tablets) — used to grow small controls to a
+    // comfortable tap size without changing the dense desktop layout.
+    ({ addVariant }) => addVariant("touch", "@media (pointer: coarse)"),
+  ],
 };
