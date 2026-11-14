@@ -204,7 +204,7 @@ export function TaskProperties({ task, canWrite, report }: { task: TaskDetail; c
             value={dueValue}
             disabled={!canWrite}
             onChange={(e) => void save({ due_date: e.target.value ? dueIso(e.target.value) : null }, "Due date").catch(() => undefined)}
-            className={`h-7 rounded border border-border-strong bg-surface-2 px-2 text-xs focus:border-accent/60 focus:outline-none [color-scheme:dark] ${task.is_overdue ? "text-danger" : "text-fg"}`}
+            className={`h-7 rounded border border-border-strong bg-surface-2 px-2 text-xs focus:border-accent/60 focus:outline-none ${task.is_overdue ? "text-danger" : "text-fg"}`}
           />
           {task.due_date && canWrite && (
             <button type="button" onClick={() => void save({ due_date: null }, "Due date").catch(() => undefined)} className="rounded p-1 text-fg-faint hover:bg-surface-2 hover:text-fg" aria-label="Clear due date">
