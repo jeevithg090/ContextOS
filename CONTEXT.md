@@ -59,6 +59,19 @@ Verification on 2026-11-11 (release review) and 2026-11-13 (after the follow-up 
 
 ## Changes since 0.1.0
 
+**Repository tooling (2026-11-14)**
+
+- CI: `.github/workflows/ci.yml` runs Ruff lint + format check, `alembic check`, the backend, SDK and
+  script suites, `scripts/smoke.py`, the frontend lint/typecheck/tests/build and a Docker build.
+- Python code is formatted with `ruff format` (`make format`; `make lint` checks it). The SDK is now
+  linted with the backend rule set.
+- Frontend: vitest 2 → 5 and react-router-dom 6 → 7 (npm audit: critical tinypool, moderate
+  react-router/esbuild advisories). Remaining: one moderate `minimatch` advisory in ESLint's
+  dependency tree (dev-only).
+- Contribution rules moved to `CONTRIBUTING.md`, engineering guides to `docs/engineering/`,
+  checklists to `docs/engineering/checklists/`, the smoke and audit scripts to `scripts/`
+  (`make smoke`, `make test-scripts`).
+
 **OpenAI Codex integration (2026-11-13)** — [docs/integrations/codex.md](docs/integrations/codex.md).
 
 - `sdk/contextos/integrations/codex/` + `contextos codex-hook <Event>`: PreToolUse → `POST /decide`;
