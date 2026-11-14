@@ -8,7 +8,7 @@ import { useDocumentTitle } from "@/hooks";
 import { NAV } from "../nav";
 import { describeRouteError, RouteError } from "../RouteError";
 import { RouteTitle } from "../RouteTitle";
-import { ROUTER_FUTURE, routeTree } from "../routeTree";
+import { routeTree } from "../routeTree";
 import { PAGE_MANIFEST } from "../routes";
 
 const ME = {
@@ -33,7 +33,7 @@ function stubApi(routes: Record<string, { status?: number; body: unknown }>) {
 
 function renderApp(path: string, routes: RouteObject[] = routeTree) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const router = createMemoryRouter(routes, { initialEntries: [path], future: ROUTER_FUTURE });
+  const router = createMemoryRouter(routes, { initialEntries: [path] });
   const ui = (children: ReactNode) => (
     <QueryClientProvider client={client}>
       <TooltipProvider>
@@ -43,7 +43,7 @@ function renderApp(path: string, routes: RouteObject[] = routeTree) {
       </TooltipProvider>
     </QueryClientProvider>
   );
-  render(ui(<RouterProvider router={router} future={{ v7_startTransition: true }} />));
+  render(ui(<RouterProvider router={router} />));
   return router;
 }
 

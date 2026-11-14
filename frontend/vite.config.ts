@@ -10,7 +10,7 @@ import path from "node:path";
  * making one group import the other.
  */
 const VENDOR_CHUNKS: Array<[name: string, packages: string[]]> = [
-  ["vendor-react", ["react", "react-dom", "scheduler", "react-router", "react-router-dom", "@remix-run/router"]],
+  ["vendor-react", ["react", "react-dom", "scheduler", "react-router", "react-router-dom", "cookie", "set-cookie-parser"]],
   ["vendor-query", ["@tanstack/react-query", "@tanstack/query-core"]],
   [
     "vendor-radix",
