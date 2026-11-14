@@ -3,7 +3,7 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { ToastProvider, TooltipProvider } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { AuthProvider } from "@/features/auth/AuthProvider";
-import { ROUTER_FUTURE, routeTree } from "./routeTree";
+import { routeTree } from "./routeTree";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,7 +15,7 @@ const queryClient = new QueryClient({
   },
 });
 
-const router = createBrowserRouter(routeTree, { future: ROUTER_FUTURE });
+const router = createBrowserRouter(routeTree);
 
 export function App() {
   return (
@@ -23,7 +23,7 @@ export function App() {
       <TooltipProvider>
         <ToastProvider>
           <AuthProvider>
-            <RouterProvider router={router} future={{ v7_startTransition: true }} />
+            <RouterProvider router={router} />
           </AuthProvider>
         </ToastProvider>
       </TooltipProvider>
