@@ -39,8 +39,11 @@ def test_session_start_and_end() -> None:
     data = wire(started)
     assert data["event_type"] == "session.started" and data["session_id"] == P.SESSION
     assert data["integration"] == "openai_codex" and data["collected_via"] == "openai_codex:SessionStart"
-    assert data["agent"] == {"name": "codex@payments-service", "framework": "openai_codex",
-                             "environment": "development"}
+    assert data["agent"] == {
+        "name": "codex@payments-service",
+        "framework": "openai_codex",
+        "environment": "development",
+    }
     assert data["metadata"]["source"] == "startup" and data["metadata"]["model"] == P.MODEL
     assert "transcript_path" not in json.dumps(data)  # never read or forwarded
     [ended] = observe.observation_events(h(P.SESSION_END), AGENT, max_result_chars=1000)
@@ -61,7 +64,9 @@ def test_a_sub_agent_task_is_a_message_between_agents_not_a_persons_prompt() -> 
     data = wire(event)
     assert data["event_type"] == "agent.message"
     assert data["message"]["from_agent"] == AGENT.name and data["message"]["content"] == "say hi"
-    assert data["metadata"]["subagent_id"] == P.SUBAGENT and data["metadata"]["codex_turn"] == "subagent_input"
+    assert (
+        data["metadata"]["subagent_id"] == P.SUBAGENT and data["metadata"]["codex_turn"] == "subagent_input"
+    )
     [root] = observe.observation_events(h(P.USER_PROMPT), AGENT, max_result_chars=1000)
     assert root.event_id != event.event_id
 
@@ -70,10 +75,15 @@ def test_tool_request_carries_the_full_input_and_the_tool_use_id() -> None:
     envelope = mapping.tool_request(h(P.PRE_BASH), AGENT)
     data = wire(envelope)
     assert data["event_type"] == "tool.requested"
-    assert data["tool"] == {"name": "Bash", "provider": "openai_codex"}  # no category hint: the server classifies
+    assert data["tool"] == {
+        "name": "Bash",
+        "provider": "openai_codex",
+    }  # no category hint: the server classifies
     assert data["arguments"] == {"command": "cat README.md"}
     assert data["correlation_id"] == "call_0" and data["collected_via"] == "openai_codex:PreToolUse:Bash"
-    long_patch = P.with_input(P.PRE_PATCH, {"command": "*** Begin Patch\n" + "+x\n" * 50_000 + "*** End Patch\n"})
+    long_patch = P.with_input(
+        P.PRE_PATCH, {"command": "*** Begin Patch\n" + "+x\n" * 50_000 + "*** End Patch\n"}
+    )
     assert mapping.tool_request(h(long_patch), AGENT).arguments == long_patch["tool_input"]  # never truncated
 
 
@@ -89,11 +99,14 @@ def test_non_object_tool_input_is_wrapped() -> None:
     assert data["arguments"] == {"input": "not json"}
 
 
-@pytest.mark.parametrize(("payload", "expected"), [
-    (P.POST_BASH, P.POST_BASH["tool_response"]),
-    (P.POST_PATCH, P.POST_PATCH["tool_response"]),
-    (P.POST_MCP, "5.0"),
-])
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        (P.POST_BASH, P.POST_BASH["tool_response"]),
+        (P.POST_PATCH, P.POST_PATCH["tool_response"]),
+        (P.POST_MCP, "5.0"),
+    ],
+)
 def test_tool_results_are_the_text_the_model_reads(payload: dict, expected: str) -> None:
     [event] = observe.observation_events(h(payload), AGENT, max_result_chars=60_000)
     data = wire(event)
@@ -110,7 +123,10 @@ def test_a_sub_agent_result_read_through_wait_agent_is_tool_output() -> None:
 
 
 def test_result_shapes_and_limits() -> None:
-    items = [{"type": "input_text", "text": "first"}, {"type": "input_image", "image_url": "data:image/png;base64," + "A" * 400}]
+    items = [
+        {"type": "input_text", "text": "first"},
+        {"type": "input_image", "image_url": "data:image/png;base64," + "A" * 400},
+    ]
     assert extract_result("view_image", items, 1000) == "first\n[input_image content omitted]"
     structured = extract_result("mcp__db__query", {"content": [], "structuredContent": {"rows": 3}}, 1000)
     assert structured == {"content": [], "structuredContent": {"rows": 3}}
@@ -128,6 +144,7 @@ def test_spawn_agent_delegates_and_sub_agent_stop_closes_the_child_session() -> 
     assert delegated["delegation"]["child_agent"]["name"] == "codex@payments-service/explorer"
     assert delegated["delegation"]["task"] == "say hi" and child_session == f"{P.SESSION}.agent.call_5"
     from contextos.integrations.codex.enforce import remember_delegation
+
     remember_delegation(pre, AGENT)
 
     post = observe.observation_events(h(P.POST_SPAWN), AGENT, max_result_chars=1000)
@@ -139,7 +156,9 @@ def test_spawn_agent_delegates_and_sub_agent_stop_closes_the_child_session() -> 
     [ended] = observe.observation_events(h(P.SUBAGENT_STOP), AGENT, max_result_chars=1000)
     data = wire(ended)
     assert data["event_type"] == "session.ended" and data["session_id"] == child_session
-    assert data["parent_session_id"] == P.SESSION and data["agent"]["name"] == "codex@payments-service/explorer"
+    assert (
+        data["parent_session_id"] == P.SESSION and data["agent"]["name"] == "codex@payments-service/explorer"
+    )
     assert observe.observation_events(h(P.SUBAGENT_STOP), AGENT, max_result_chars=1000) == []  # closed once
 
 

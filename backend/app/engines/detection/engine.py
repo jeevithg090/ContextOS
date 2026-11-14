@@ -34,7 +34,15 @@ __all__ = [
 ]
 
 # Techniques where the mere fact of concealment raises severity.
-_OBFUSCATION = {"zero_width", "homoglyph", "base64", "url_encoded", "html_comment", "hidden_text", "leetspeak"}
+_OBFUSCATION = {
+    "zero_width",
+    "homoglyph",
+    "base64",
+    "url_encoded",
+    "html_comment",
+    "hidden_text",
+    "leetspeak",
+}
 _SEV_ORDER = [Severity.INFO, Severity.LOW, Severity.MEDIUM, Severity.HIGH, Severity.CRITICAL]
 
 MAX_CONTENT_CHARS = 1_000_000  # hard cap to bound worst-case scan time
@@ -85,7 +93,7 @@ def _is_benign(text: str, start: int, end: int, benign_ranges: list[tuple[int, i
         if start >= lo and end <= hi:
             return True
     # Bounded window around the match (never the whole line, which may be 100 KB with no newline).
-    window = text[max(0, start - 200):end + 40]
+    window = text[max(0, start - 200) : end + 40]
     return bool(_DESCRIPTIVE.search(window))
 
 
@@ -151,8 +159,10 @@ def _match_rule(
         # Describing an attack is not committing one: keep the hit visible but at low severity.
         severity = Severity.LOW.value if SEVERITY_RANK.get(severity, 0) > 1 else severity
         confidence = round(min(confidence, 0.35), 3)
-        explanation = "Appears to be describing an attack rather than issuing it (code block, quote, or " \
-                      "explanatory text). Reported at low severity so it is visible but not alarming."
+        explanation = (
+            "Appears to be describing an attack rather than issuing it (code block, quote, or "
+            "explanatory text). Reported at low severity so it is visible but not alarming."
+        )
         title = f"{rule.title}{DESCRIBED_SUFFIX}"
 
     return [
@@ -177,14 +187,19 @@ def _apply_obfuscation_bump(hits: list[DetectionHit]) -> list[DetectionHit]:
     plain_rules = {h.rule_id for h in hits if h.technique == "plain"}
     out: list[DetectionHit] = []
     for h in hits:
-        if (h.rule_id not in plain_rules and h.technique in _OBFUSCATION and not h.technique.startswith("multilingual")
-                and not h.title.endswith(DESCRIBED_SUFFIX)):
+        if (
+            h.rule_id not in plain_rules
+            and h.technique in _OBFUSCATION
+            and not h.technique.startswith("multilingual")
+            and not h.title.endswith(DESCRIBED_SUFFIX)
+        ):
             out.append(
                 replace(
                     h,
                     severity=_bump(h.severity),
                     confidence=round(min(1.0, h.confidence + 0.05), 3),
-                    explanation=h.explanation + f" This was hidden via {h.technique.replace('_', ' ')}, which "
+                    explanation=h.explanation
+                    + f" This was hidden via {h.technique.replace('_', ' ')}, which "
                     "indicates deliberate concealment rather than incidental content.",
                 )
             )
@@ -193,7 +208,9 @@ def _apply_obfuscation_bump(hits: list[DetectionHit]) -> list[DetectionHit]:
     return out
 
 
-def analyze_content(text: str, *, source_type: str | None = None, content_type: str | None = None) -> DetectionResult:
+def analyze_content(
+    text: str, *, source_type: str | None = None, content_type: str | None = None
+) -> DetectionResult:
     if not text:
         return DetectionResult()
     truncated = text[:MAX_CONTENT_CHARS]
@@ -225,9 +242,10 @@ def _run_classifier(text: str, hits: list[DetectionHit]) -> float | None:
         raw = clf.score(text)
     except Exception as exc:  # noqa: BLE001 — a classifier failure must never break deterministic detection
         # Recorded (type only, never the content) and the classifier score is reported as absent.
-        logging.getLogger(__name__).warning("detection.classifier_failed",
-                                            extra={"classifier": getattr(clf, "name", "model"),
-                                                   "error_type": type(exc).__name__})
+        logging.getLogger(__name__).warning(
+            "detection.classifier_failed",
+            extra={"classifier": getattr(clf, "name", "model"), "error_type": type(exc).__name__},
+        )
         return None
     cls_score = max(0.0, min(1.0, float(raw)))
     if cls_score > CLASSIFIER_THRESHOLD:
@@ -302,7 +320,11 @@ def analyze_tool_request(
     strings = _collect_strings(arguments)
     # Zero-width / homoglyph tricks in commands are normalised away before matching.
     plain_blob = "\n".join([tool_name or ""] + strings + resources)
-    normalized = normalize.fold_homoglyphs(normalize._strip_invisible(plain_blob)[0]) if not plain_blob.isascii() else plain_blob
+    normalized = (
+        normalize.fold_homoglyphs(normalize._strip_invisible(plain_blob)[0])
+        if not plain_blob.isascii()
+        else plain_blob
+    )
 
     views = [normalize.View("plain", plain_blob, has_offsets=True)]
     if normalized != plain_blob:

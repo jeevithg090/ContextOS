@@ -92,13 +92,21 @@ def _options(template: TemplateSpec | None, requested: dict[str, Any] | None) ->
 # ----------------------------------------------------------------------------- generate
 
 
-def _resolve_pack(db: Session, actor: Actor, task: Task, bundle: TaskBundle, body: FixContextRequest, mode: str,
-                  ) -> tuple[ContextPack | None, list[dict[str, Any]], str]:
+def _resolve_pack(
+    db: Session,
+    actor: Actor,
+    task: Task,
+    bundle: TaskBundle,
+    body: FixContextRequest,
+    mode: str,
+) -> tuple[ContextPack | None, list[dict[str, Any]], str]:
     if body.context_pack_id:
         pack = get_scoped(db, ContextPack, body.context_pack_id, actor.org_id, label="Context pack")
         if pack.task_id != task.id:
-            raise ValidationFailedError(f"Context pack '{pack.id}' was built for a different task.",
-                                        details={"errors": ["context_pack_id: belongs to another task"]})
+            raise ValidationFailedError(
+                f"Context pack '{pack.id}' was built for a different task.",
+                details={"errors": ["context_pack_id: belongs to another task"]},
+            )
         return pack, list(pack.items or []), pack.profile
     profile = body.profile or default_profile(task, mode)
     if body.save:
@@ -120,13 +128,28 @@ def generate(db: Session, actor: Actor, body: FixContextRequest) -> Generation:
     bundle = collect(db, task)
     pack, items, profile = _resolve_pack(db, actor, task, bundle, body, mode)
     try:
-        sections = generate_sections(to_input(bundle, items), mode, preset, options,
-                                     section_overrides=template.section_overrides if template else None)
+        sections = generate_sections(
+            to_input(bundle, items),
+            mode,
+            preset,
+            options,
+            section_overrides=template.section_overrides if template else None,
+        )
     except ValueError as exc:
         raise _invalid(exc) from exc
     content = render_markdown(sections, mode, preset, options, title=prompt_title(task))
-    result = Generation(task=task, mode=mode, preset=preset, options=options, template=template, profile=profile,
-                        pack=pack, sections=sections, content=content, notes=[*bundle.notes, *_pack_notes(items)])
+    result = Generation(
+        task=task,
+        mode=mode,
+        preset=preset,
+        options=options,
+        template=template,
+        profile=profile,
+        pack=pack,
+        sections=sections,
+        content=content,
+        notes=[*bundle.notes, *_pack_notes(items)],
+    )
     if body.save:
         result.prompt = _save(db, actor, result)
     return result
@@ -135,18 +158,39 @@ def generate(db: Session, actor: Actor, body: FixContextRequest) -> Generation:
 def _save(db: Session, actor: Actor, gen: Generation) -> GeneratedPrompt:
     now = utcnow()
     prompt = GeneratedPrompt(
-        id=new_id("generated_prompt"), organization_id=actor.org_id, task_id=gen.task.id, mode=gen.mode,
-        preset=gen.preset, options=gen.options.to_dict(), sections=[s.to_dict() for s in gen.sections],
-        content=gen.content, context_pack_id=gen.pack.id if gen.pack else None,
-        template_id=gen.template.id if gen.template else None, version=1, created_by=actor.user_id,
-        created_at=now, updated_at=now,
+        id=new_id("generated_prompt"),
+        organization_id=actor.org_id,
+        task_id=gen.task.id,
+        mode=gen.mode,
+        preset=gen.preset,
+        options=gen.options.to_dict(),
+        sections=[s.to_dict() for s in gen.sections],
+        content=gen.content,
+        context_pack_id=gen.pack.id if gen.pack else None,
+        template_id=gen.template.id if gen.template else None,
+        version=1,
+        created_by=actor.user_id,
+        created_at=now,
+        updated_at=now,
     )
     db.add(prompt)
     db.flush()
-    details = {"prompt_id": prompt.id, "mode": gen.mode, "preset": gen.preset, "version": 1,
-               "context_pack_id": prompt.context_pack_id, "template_id": prompt.template_id}
-    record_activity(db, gen.task, actor.user_id, "prompt_generated", to_value=f"{get_mode(gen.mode).label} prompt",
-                    details=details)
+    details = {
+        "prompt_id": prompt.id,
+        "mode": gen.mode,
+        "preset": gen.preset,
+        "version": 1,
+        "context_pack_id": prompt.context_pack_id,
+        "template_id": prompt.template_id,
+    }
+    record_activity(
+        db,
+        gen.task,
+        actor.user_id,
+        "prompt_generated",
+        to_value=f"{get_mode(gen.mode).label} prompt",
+        details=details,
+    )
     audit_task(db, actor, gen.task, "prompt_generated", details)
     return prompt
 
@@ -166,13 +210,23 @@ def _sections(prompt: GeneratedPrompt) -> list[Section]:
 def _summary_fields(prompt: GeneratedPrompt, task: Task | None) -> dict[str, Any]:
     sections = [s for s in prompt.sections or [] if isinstance(s, dict)]
     return {
-        "id": prompt.id, "task_id": prompt.task_id, "task_key": task_key(task) if task else None,
-        "task_title": task.title if task else None, "mode": prompt.mode, "mode_label": get_mode(prompt.mode).label,
-        "preset": prompt.preset, "preset_label": get_preset(prompt.preset).label, "version": prompt.version,
-        "template_id": prompt.template_id, "context_pack_id": prompt.context_pack_id,
-        "section_count": len(sections), "edited_sections": [str(s.get("key")) for s in sections if s.get("edited")],
-        "token_estimate": estimate_tokens(prompt.content), "created_by": prompt.created_by,
-        "created_at": prompt.created_at, "updated_at": prompt.updated_at,
+        "id": prompt.id,
+        "task_id": prompt.task_id,
+        "task_key": task_key(task) if task else None,
+        "task_title": task.title if task else None,
+        "mode": prompt.mode,
+        "mode_label": get_mode(prompt.mode).label,
+        "preset": prompt.preset,
+        "preset_label": get_preset(prompt.preset).label,
+        "version": prompt.version,
+        "template_id": prompt.template_id,
+        "context_pack_id": prompt.context_pack_id,
+        "section_count": len(sections),
+        "edited_sections": [str(s.get("key")) for s in sections if s.get("edited")],
+        "token_estimate": estimate_tokens(prompt.content),
+        "created_by": prompt.created_by,
+        "created_at": prompt.created_at,
+        "updated_at": prompt.updated_at,
     }
 
 
@@ -184,10 +238,14 @@ def prompt_out(prompt: GeneratedPrompt, task: Task | None, notes: list[str] | No
     sections = _sections(prompt)
     options = GenerationOptions.from_dict(prompt.options or {})
     return PromptOut(
-        **_summary_fields(prompt, task), may_modify_files=may_modify_files(get_mode(prompt.mode), options),
-        options=options.to_dict(), sections=[section_out(s) for s in sections], content=prompt.content,
+        **_summary_fields(prompt, task),
+        may_modify_files=may_modify_files(get_mode(prompt.mode), options),
+        options=options.to_dict(),
+        sections=[section_out(s) for s in sections],
+        content=prompt.content,
         sources=list(dict.fromkeys(src for s in sections for src in s.sources)),
-        problems=validate_sections(sections, prompt.mode), notes=list(notes or []),
+        problems=validate_sections(sections, prompt.mode),
+        notes=list(notes or []),
     )
 
 
@@ -203,7 +261,9 @@ def tasks_by_id(db: Session, org_id: str, ids: set[str | None]) -> dict[str, Tas
     wanted = [i for i in ids if i]
     if not wanted:
         return {}
-    return {t.id: t for t in db.scalars(select(Task).where(Task.organization_id == org_id, Task.id.in_(wanted)))}
+    return {
+        t.id: t for t in db.scalars(select(Task).where(Task.organization_id == org_id, Task.id.in_(wanted)))
+    }
 
 
 def prompt_query(org_id: str, task_id: str | None):
@@ -219,8 +279,10 @@ def prompt_query(org_id: str, task_id: str | None):
 def _fresh_input(db: Session, prompt: GeneratedPrompt, task: Task | None):
     """Current records + the prompt's context pack (or a fresh, unsaved one) and template overrides."""
     if task is None:
-        raise ConflictError("The task this prompt was generated for no longer exists, so its sections cannot be "
-                            "rebuilt from records. Edit the sections directly instead.")
+        raise ConflictError(
+            "The task this prompt was generated for no longer exists, so its sections cannot be "
+            "rebuilt from records. Edit the sections directly instead."
+        )
     bundle = collect(db, task)
     notes = list(bundle.notes)
     pack = find_scoped(db, ContextPack, prompt.context_pack_id, prompt.organization_id)
@@ -229,22 +291,34 @@ def _fresh_input(db: Session, prompt: GeneratedPrompt, task: Task | None):
     else:
         profile = default_profile(task, prompt.mode)
         items, _ = build_items(task, bundle, profile)
-        notes.append(f"The context pack this prompt was built from is no longer available; a fresh '{profile}' pack "
-                     "was used for rebuilt sections and was not saved.")
+        notes.append(
+            f"The context pack this prompt was built from is no longer available; a fresh '{profile}' pack "
+            "was used for rebuilt sections and was not saved."
+        )
     notes.extend(_pack_notes(items))
     overrides: dict[str, str] = {}
     if prompt.template_id:
         template = find_template(db, prompt.organization_id, prompt.template_id)
         if template is None:
-            notes.append("The template this prompt used has been deleted; its extra section instructions were not "
-                         "applied to rebuilt sections.")
+            notes.append(
+                "The template this prompt used has been deleted; its extra section instructions were not "
+                "applied to rebuilt sections."
+            )
         else:
             overrides = template.section_overrides
     return to_input(bundle, items), notes, overrides
 
 
-def _store(db: Session, actor: Actor, prompt: GeneratedPrompt, task: Task | None, sections: list[Section],
-           options: GenerationOptions, kind: str, details: dict[str, Any]) -> None:
+def _store(
+    db: Session,
+    actor: Actor,
+    prompt: GeneratedPrompt,
+    task: Task | None,
+    sections: list[Section],
+    options: GenerationOptions,
+    kind: str,
+    details: dict[str, Any],
+) -> None:
     prompt.sections = [s.to_dict() for s in sections]
     prompt.options = options.to_dict()
     prompt.content = render_markdown(sections, prompt.mode, prompt.preset, options, title=prompt_title(task))
@@ -272,8 +346,12 @@ def _apply_edits(sections: list[Section], edits: list[Any]) -> tuple[list[str], 
         if section is None:
             if edit.removed:
                 continue
-            raise _invalid(ValueError(f"Section '{SECTION_TITLES[edit.key]}' is not part of this prompt; regenerate "
-                                      "it to add it back."))
+            raise _invalid(
+                ValueError(
+                    f"Section '{SECTION_TITLES[edit.key]}' is not part of this prompt; regenerate "
+                    "it to add it back."
+                )
+            )
         if edit.removed:
             sections.remove(section)
             removed.append(edit.key)
@@ -298,8 +376,10 @@ def update_prompt(db: Session, actor: Actor, prompt: GeneratedPrompt, patch: Pro
     refreshed: list[str] = []
     if new.to_dict() != old.to_dict():
         data, fresh_notes, overrides = _fresh_input(db, prompt, task)
-        fresh = {s.key: s for s in generate_sections(data, prompt.mode, prompt.preset, new,
-                                                     section_overrides=overrides)}
+        fresh = {
+            s.key: s
+            for s in generate_sections(data, prompt.mode, prompt.preset, new, section_overrides=overrides)
+        }
         for index, section in enumerate(sections):
             if not section.edited and section.key in fresh:
                 sections[index] = fresh[section.key]
@@ -309,13 +389,26 @@ def update_prompt(db: Session, actor: Actor, prompt: GeneratedPrompt, patch: Pro
     edited, removed = _apply_edits(sections, patch.sections or [])
     problems = validate_sections(sections, prompt.mode)
     if problems:
-        raise ValidationFailedError("The edited prompt is not valid: " + " ".join(problems),
-                                    details={"errors": problems})
+        raise ValidationFailedError(
+            "The edited prompt is not valid: " + " ".join(problems), details={"errors": problems}
+        )
     if not (edited or removed or new.to_dict() != old.to_dict()):
         return notes
-    _store(db, actor, prompt, task, sections, new, "prompt_edited",
-           {"edited": edited, "removed": removed, "refreshed": refreshed,
-            "options_changed": new.to_dict() != old.to_dict()})
+    _store(
+        db,
+        actor,
+        prompt,
+        task,
+        sections,
+        new,
+        "prompt_edited",
+        {
+            "edited": edited,
+            "removed": removed,
+            "refreshed": refreshed,
+            "options_changed": new.to_dict() != old.to_dict(),
+        },
+    )
     return notes
 
 
@@ -347,9 +440,16 @@ def export_prompt(db: Session, actor: Actor, prompt: GeneratedPrompt, fmt: str) 
     if fmt not in ("markdown", "json"):
         raise NotFoundError(f"Unknown export format '{fmt}'")
     task = prompt_task(db, prompt)
-    append_audit(db, prompt.organization_id, action="prompt.exported", actor_type=actor.type, actor_id=actor.id,
-                 target_type="generated_prompt", target_id=prompt.id,
-                 details={"format": fmt, "task_id": prompt.task_id, "version": prompt.version})
+    append_audit(
+        db,
+        prompt.organization_id,
+        action="prompt.exported",
+        actor_type=actor.type,
+        actor_id=actor.id,
+        target_type="generated_prompt",
+        target_id=prompt.id,
+        details={"format": fmt, "task_id": prompt.task_id, "version": prompt.version},
+    )
     if fmt == "markdown":
         return prompt.content, "text/markdown; charset=utf-8", _filename(prompt, task, "md")
     sections = _sections(prompt)
@@ -357,13 +457,20 @@ def export_prompt(db: Session, actor: Actor, prompt: GeneratedPrompt, fmt: str) 
     doc = render_json(sections, prompt.mode, prompt.preset, options, title=prompt_title(task))
     doc["content"] = prompt.content
     pack = find_scoped(db, ContextPack, prompt.context_pack_id, prompt.organization_id)
-    doc.update({
-        "prompt": {"id": prompt.id, "version": prompt.version, "template_id": prompt.template_id,
-                   "created_at": isoformat(prompt.created_at), "updated_at": isoformat(prompt.updated_at)},
-        "task": {"id": task.id, "key": task_key(task), "title": task.title} if task else None,
-        "context_pack": pack_out(pack, task).model_dump(mode="json") if pack is not None else None,
-        "problems": validate_sections(sections, prompt.mode),
-        "generated_by": EXPORTED_BY,
-        "external_transfer": False,
-    })
+    doc.update(
+        {
+            "prompt": {
+                "id": prompt.id,
+                "version": prompt.version,
+                "template_id": prompt.template_id,
+                "created_at": isoformat(prompt.created_at),
+                "updated_at": isoformat(prompt.updated_at),
+            },
+            "task": {"id": task.id, "key": task_key(task), "title": task.title} if task else None,
+            "context_pack": pack_out(pack, task).model_dump(mode="json") if pack is not None else None,
+            "problems": validate_sections(sections, prompt.mode),
+            "generated_by": EXPORTED_BY,
+            "external_transfer": False,
+        }
+    )
     return json.dumps(doc, indent=2, ensure_ascii=False), "application/json", _filename(prompt, task, "json")

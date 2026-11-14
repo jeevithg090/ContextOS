@@ -29,20 +29,26 @@ class ScenarioOut(BaseModel):
 
 class ScenarioList(BaseModel):
     items: list[ScenarioOut]
-    note: str = ("Scenarios submit synthetic, inert events to the real pipeline. Nothing is executed and no "
-                 "network request is made; every row a run creates is flagged as a simulation.")
+    note: str = (
+        "Scenarios submit synthetic, inert events to the real pipeline. Nothing is executed and no "
+        "network request is made; every row a run creates is flagged as a simulation."
+    )
 
 
 class RunIn(BaseModel):
     scenario_id: str = Field(min_length=1, max_length=100)
-    agent_id: str | None = Field(default=None, max_length=40,
-                                 description="Run against a registered agent (regression testing); default: a dedicated simulated agent")
+    agent_id: str | None = Field(
+        default=None,
+        max_length=40,
+        description="Run against a registered agent (regression testing); default: a dedicated simulated agent",
+    )
     agent_version: str | None = Field(default=None, max_length=64)
 
 
 class SuiteIn(BaseModel):
-    scenario_ids: list[str] | None = Field(default=None, max_length=50,
-                                           description="Scenarios to run; omit to run the whole catalogue")
+    scenario_ids: list[str] | None = Field(
+        default=None, max_length=50, description="Scenarios to run; omit to run the whole catalogue"
+    )
     agent_id: str | None = Field(default=None, max_length=40)
     agent_version: str | None = Field(default=None, max_length=64)
 

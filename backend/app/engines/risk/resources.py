@@ -24,15 +24,56 @@ MAX_SENSITIVE_EXTRA = 50
 MAX_LIST_ITEMS = 2000
 MAX_DEPTH = 4
 
-FILE_KEYS = {"file_path", "path", "notebook_path", "filename", "file", "filepath", "file_name", "source_path",
-             "target_path", "directory", "dir", "folder", "local_path"}
+FILE_KEYS = {
+    "file_path",
+    "path",
+    "notebook_path",
+    "filename",
+    "file",
+    "filepath",
+    "file_name",
+    "source_path",
+    "target_path",
+    "directory",
+    "dir",
+    "folder",
+    "local_path",
+}
 LIST_FILE_KEYS = {"paths", "files", "file_paths", "attachments", "attachment", "filenames"}
 MOVE_KEYS = {"source", "destination", "target", "src", "dest"}
-URL_KEYS = {"url", "uri", "endpoint", "href", "link", "webhook", "webhook_url", "base_url", "target_url",
-            "page_url", "image_url", "callback_url", "redirect_uri", "download_url", "upload_url", "repo_url",
-            "remote_url", "website", "urls"}
+URL_KEYS = {
+    "url",
+    "uri",
+    "endpoint",
+    "href",
+    "link",
+    "webhook",
+    "webhook_url",
+    "base_url",
+    "target_url",
+    "page_url",
+    "image_url",
+    "callback_url",
+    "redirect_uri",
+    "download_url",
+    "upload_url",
+    "repo_url",
+    "remote_url",
+    "website",
+    "urls",
+}
 HOST_KEYS = {"host", "hostname", "domain", "ip", "ip_address", "server_address"}
-RECIPIENT_KEYS = {"to", "cc", "bcc", "recipient", "recipients", "to_email", "to_address", "reply_to", "emails"}
+RECIPIENT_KEYS = {
+    "to",
+    "cc",
+    "bcc",
+    "recipient",
+    "recipients",
+    "to_email",
+    "to_address",
+    "reply_to",
+    "emails",
+}
 CHANNEL_KEYS = {"channel", "channel_id", "channel_name", "chat_id", "conversation_id", "room", "room_id"}
 COMMAND_KEYS = {"command", "cmd", "script", "shell_command", "command_line", "commandline"}
 CODE_KEYS = {"code", "source_code", "snippet", "program"}
@@ -40,25 +81,58 @@ SQL_KEYS = {"query", "sql", "statement", "sql_query"}
 PATTERN_KEYS = {"pattern", "glob", "include", "regex", "search_pattern", "file_pattern"}
 AGENT_KEYS = {"subagent_type", "agent", "agent_name", "agent_id"}
 # Free-form payloads: their contents are data being sent/written, not resources being accessed.
-TEXT_KEYS = {"content", "new_string", "old_string", "new_source", "prompt", "description", "body", "text",
-             "message", "html", "subject", "todos", "messages", "data", "json", "payload", "form", "headers",
-             "params", "allowed_domains", "blocked_domains", "plan", "instructions"}
+TEXT_KEYS = {
+    "content",
+    "new_string",
+    "old_string",
+    "new_source",
+    "prompt",
+    "description",
+    "body",
+    "text",
+    "message",
+    "html",
+    "subject",
+    "todos",
+    "messages",
+    "data",
+    "json",
+    "payload",
+    "form",
+    "headers",
+    "params",
+    "allowed_domains",
+    "blocked_domains",
+    "plan",
+    "instructions",
+}
 
 _FILE_CATEGORIES = {ToolCategory.FILE_READ, ToolCategory.FILE_WRITE}
-_COMMAND_CATEGORIES = {ToolCategory.SHELL, ToolCategory.INFRASTRUCTURE, ToolCategory.CODE_EXECUTION,
-                       ToolCategory.MCP, ToolCategory.OTHER}
+_COMMAND_CATEGORIES = {
+    ToolCategory.SHELL,
+    ToolCategory.INFRASTRUCTURE,
+    ToolCategory.CODE_EXECUTION,
+    ToolCategory.MCP,
+    ToolCategory.OTHER,
+}
 _HTTPISH = {ToolCategory.HTTP, ToolCategory.BROWSER}
 _SQL_TABLE = re.compile(r"\b(?:from|join|into|update|table)\s+([`\"\[]?[\w.$]+[`\"\]]?)", re.IGNORECASE)
 _SQL_KEYWORDS = {"select", "where", "set", "values", "lateral", "unnest", "exists", "only"}
 _SENSITIVE_TABLE = re.compile(
-    r"(passw|credential|secret|token|api_?key|session|auth|payment|card|ssn|salary|private|oauth)", re.IGNORECASE
+    r"(passw|credential|secret|token|api_?key|session|auth|payment|card|ssn|salary|private|oauth)",
+    re.IGNORECASE,
 )
 _CREDENTIAL_PATTERN = re.compile(
     r"(passw|secret|token|api[_\-\s]?key|private[_\-\s]?key|BEGIN [A-Z ]*PRIVATE|aws_access|credential|bearer)",
     re.IGNORECASE,
 )
-_ROLE_NOTES = {"upload": "sent over the network", "key": "used as a private key or certificate",
-               "write": "written", "read": None, "arg": None}
+_ROLE_NOTES = {
+    "upload": "sent over the network",
+    "key": "used as a private key or certificate",
+    "write": "written",
+    "read": None,
+    "arg": None,
+}
 _OBJECT_STORAGE_SCHEMES = {"s3", "gs", "az", "abfs", "abfss", "wasb", "wasbs", "r2"}
 
 
@@ -80,7 +154,9 @@ class _Collector:
     def __init__(self) -> None:
         self.items: dict[tuple[str, str], dict[str, Any]] = {}
 
-    def add(self, kind: str, ident: str | None, *, sensitive: bool = False, reason: str | None = None) -> None:
+    def add(
+        self, kind: str, ident: str | None, *, sensitive: bool = False, reason: str | None = None
+    ) -> None:
         if not ident:
             return
         ident = san.truncate(ident)
@@ -122,8 +198,12 @@ class _Collector:
 
     def pattern(self, pattern: str) -> None:
         cred = _CREDENTIAL_PATTERN.search(pattern)
-        self.add("pattern", _mask_token(pattern), sensitive=bool(cred),
-                 reason="search pattern targets credential material" if cred else None)
+        self.add(
+            "pattern",
+            _mask_token(pattern),
+            sensitive=bool(cred),
+            reason="search pattern targets credential material" if cred else None,
+        )
 
     def url(self, raw: str) -> None:
         url = san.sanitize_url(raw)
@@ -144,8 +224,12 @@ class _Collector:
         host = san.normalize_host(raw, allow_single_label=single_label)
         if host:
             metadata = san.is_metadata_host(host)
-            self.add("host", host, sensitive=metadata,
-                     reason="cloud instance-metadata endpoint (serves credentials)" if metadata else None)
+            self.add(
+                "host",
+                host,
+                sensitive=metadata,
+                reason="cloud instance-metadata endpoint (serves credentials)" if metadata else None,
+            )
 
     def emails(self, raw: Any) -> None:
         values = raw if isinstance(raw, list) else [raw]
@@ -167,8 +251,12 @@ class _Collector:
             if dump.startswith("/proc/"):
                 self.file(dump, "read")
             else:
-                self.add("command", dump, sensitive=True,
-                         reason="dumps environment variables, which often hold credentials")
+                self.add(
+                    "command",
+                    dump,
+                    sensitive=True,
+                    reason="dumps environment variables, which often hold credentials",
+                )
         for item in analysis.files:
             self.file(item.path, item.role)
         for word in analysis.bare_words:
@@ -197,12 +285,16 @@ def _looks_glob(pattern: str) -> bool:
 
 def _tables(sql: str, out: _Collector) -> None:
     for match in _SQL_TABLE.finditer(sql):
-        name = match.group(1).strip("`\"[]")
+        name = match.group(1).strip('`"[]')
         if not name or name.lower() in _SQL_KEYWORDS or san.REDACTION_MARKER in name:
             continue
         sensitive = bool(_SENSITIVE_TABLE.search(name))
-        out.add("table", name, sensitive=sensitive,
-                reason="table name suggests credentials or personal data" if sensitive else None)
+        out.add(
+            "table",
+            name,
+            sensitive=sensitive,
+            reason="table name suggests credentials or personal data" if sensitive else None,
+        )
 
 
 def command_text(arguments: dict[str, Any], *, include_script: bool = True) -> str | None:
@@ -295,8 +387,9 @@ def _string_value(category: str, key: str, value: str, obj: dict[str, Any], out:
 
 
 # Files named in an apply_patch-style patch ("*** Update File: <path>", Codex's patch grammar).
-_PATCH_FILE = re.compile(r"^[ \t]*\*\*\*[ \t]*(?:Add File|Delete File|Update File|Move to):[ \t]*(\S.*?)[ \t]*$",
-                         re.MULTILINE)
+_PATCH_FILE = re.compile(
+    r"^[ \t]*\*\*\*[ \t]*(?:Add File|Delete File|Update File|Move to):[ \t]*(\S.*?)[ \t]*$", re.MULTILINE
+)
 _PATCH_START = "*** Begin Patch"
 
 
@@ -326,8 +419,15 @@ def _host_destination(host: str) -> dict[str, str]:
     return {"kind": "domain" if san.looks_like_domain(host) else "unknown", "identifier": host}
 
 
-_DESTINATION_CATEGORIES = {ToolCategory.HTTP, ToolCategory.BROWSER, ToolCategory.EMAIL, ToolCategory.MESSAGING,
-                           ToolCategory.CODE_EXECUTION, ToolCategory.INFRASTRUCTURE, ToolCategory.MCP}
+_DESTINATION_CATEGORIES = {
+    ToolCategory.HTTP,
+    ToolCategory.BROWSER,
+    ToolCategory.EMAIL,
+    ToolCategory.MESSAGING,
+    ToolCategory.CODE_EXECUTION,
+    ToolCategory.INFRASTRUCTURE,
+    ToolCategory.MCP,
+}
 
 
 def extract_destination(

@@ -60,8 +60,13 @@ class Chain:
 
 
 @asynccontextmanager
-async def gateway_chain(client: ContextOSClient, settings: GatewaySettings | None = None, *,
-                        example: str = "malicious_server", host_name: str = "test-host") -> AsyncIterator[Chain]:
+async def gateway_chain(
+    client: ContextOSClient,
+    settings: GatewaySettings | None = None,
+    *,
+    example: str = "malicious_server",
+    host_name: str = "test-host",
+) -> AsyncIterator[Chain]:
     module = load_example(example)
     settings = settings or GatewaySettings(server_name="notes", session_id="ses_test")
     async with connected(module.server) as upstream:
@@ -73,8 +78,11 @@ async def gateway_chain(client: ContextOSClient, settings: GatewaySettings | Non
         async def on_message(message: Any) -> None:
             received.append(message)
 
-        async with connected(server, message_handler=on_message,
-                             client_info=types.Implementation(name=host_name, version="1.2.3")) as host:
+        async with connected(
+            server,
+            message_handler=on_message,
+            client_info=types.Implementation(name=host_name, version="1.2.3"),
+        ) as host:
             yield Chain(host, gateway, module, received)
 
 

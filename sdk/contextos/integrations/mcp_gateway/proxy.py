@@ -97,7 +97,9 @@ def host_info(ctx: Any) -> dict[str, str] | None:
 
 def _page(params: types.PaginatedRequestParams | None) -> types.PaginatedRequestParams | None:
     """Forward the cursor only; the host's ``_meta`` belongs to the downstream connection."""
-    return types.PaginatedRequestParams(cursor=params.cursor) if params is not None and params.cursor else None
+    return (
+        types.PaginatedRequestParams(cursor=params.cursor) if params is not None and params.cursor else None
+    )
 
 
 class Gateway:
@@ -116,8 +118,12 @@ class Gateway:
         self.client = client
         self.settings = settings
         self.info = upstream_info
-        self.enforcer = enforcer or Enforcer(client, fail_mode=settings.fail_mode,
-                                             approval_timeout_s=settings.approval_timeout_s, poll_s=settings.poll_s)
+        self.enforcer = enforcer or Enforcer(
+            client,
+            fail_mode=settings.fail_mode,
+            approval_timeout_s=settings.approval_timeout_s,
+            poll_s=settings.poll_s,
+        )
         self._agent = AgentRef(name=settings.agent_name, framework="mcp") if settings.agent_name else None
         self._host: dict[str, str] | None = None
         self._downstream: Any = None  # a ServerSession: its standalone channel relays list_changed
@@ -145,8 +151,11 @@ class Gateway:
             self._host = host_info(ctx)
         if self._agent is None:
             host = self._host or {}
-            self._agent = AgentRef(name=host.get("name") or DEFAULT_AGENT_NAME, framework="mcp",
-                                   version=host.get("version") or None)
+            self._agent = AgentRef(
+                name=host.get("name") or DEFAULT_AGENT_NAME,
+                framework="mcp",
+                version=host.get("version") or None,
+            )
             self.client.agent = self._agent
         return self._agent
 
@@ -165,7 +174,9 @@ class Gateway:
         try:
             result = await anyio.to_thread.run_sync(self.client.send_events, events)
         except (ContextOSError, OSError, ValueError) as exc:
-            log.warning("Could not report %s to ContextOS: %s", events[0].event_type if events else "events", exc)
+            log.warning(
+                "Could not report %s to ContextOS: %s", events[0].event_type if events else "events", exc
+            )
             return None
         self._events_sent += len(events)
         return result
@@ -183,14 +194,19 @@ class Gateway:
         tools: list[types.Tool] = []
         cursor: str | None = None
         for _ in range(MAX_LISTING_PAGES):
-            page = await self.upstream.list_tools(params=types.PaginatedRequestParams(cursor=cursor) if cursor else None)
+            page = await self.upstream.list_tools(
+                params=types.PaginatedRequestParams(cursor=cursor) if cursor else None
+            )
             tools.extend(page.tools)
             cursor = page.next_cursor
             if not cursor:
                 break
         else:
-            log.warning("Upstream MCP server '%s' returned more than %d pages of tools; the rest are not listed",
-                        self.settings.server_name, MAX_LISTING_PAGES)
+            log.warning(
+                "Upstream MCP server '%s' returned more than %d pages of tools; the rest are not listed",
+                self.settings.server_name,
+                MAX_LISTING_PAGES,
+            )
         self._descriptions = {t.name: t.description for t in tools}
         return tools
 
@@ -201,36 +217,53 @@ class Gateway:
             if fingerprint == self._reported_fingerprint:
                 return
             events = server_connected_events(
-                agent=self.agent, session_id=self.settings.session_id, server_name=self.settings.server_name,
-                tools=tools, instructions=instructions, server_info=self._server_info(), host=self._host,
+                agent=self.agent,
+                session_id=self.settings.session_id,
+                server_name=self.settings.server_name,
+                tools=tools,
+                instructions=instructions,
+                server_info=self._server_info(),
+                host=self._host,
             )
             result = await self._send(events)
             if result is None:
                 return  # not recorded: try again on the next listing
             if self._reported_fingerprint is not None:
-                log.warning("Upstream MCP server '%s' changed its tool listing; the new listing was reported to "
-                            "ContextOS for scanning", self.settings.server_name)
+                log.warning(
+                    "Upstream MCP server '%s' changed its tool listing; the new listing was reported to "
+                    "ContextOS for scanning",
+                    self.settings.server_name,
+                )
             self._reported_fingerprint = fingerprint
             poisoned = sum(len(r.refs.get("poisoned_tool_ids") or []) for r in result.results)
             if poisoned:
-                log.warning("ContextOS detected possible tool poisoning in %d tool description(s) of MCP server '%s'",
-                            poisoned, self.settings.server_name)
+                log.warning(
+                    "ContextOS detected possible tool poisoning in %d tool description(s) of MCP server '%s'",
+                    poisoned,
+                    self.settings.server_name,
+                )
             if self.settings.hide_blocked_tools and result.results:
                 self._server_blocked = await self._is_server_blocked(result)
 
     async def _is_server_blocked(self, result: SendResult) -> bool:
         """The server's trust classification of this MCP server after the listing, from the
         ``mcp.server_connected`` result (``refs.source_trust_level``): no extra request, no read scope."""
-        level = next((r.refs.get("source_trust_level") for r in result.results if r.refs.get("source_trust_level")),
-                     None)
+        level = next(
+            (r.refs.get("source_trust_level") for r in result.results if r.refs.get("source_trust_level")),
+            None,
+        )
         if not level:
-            log.debug("ContextOS returned no trust level for MCP server '%s'; its tools stay listed",
-                      self.settings.server_name)
+            log.debug(
+                "ContextOS returned no trust level for MCP server '%s'; its tools stay listed",
+                self.settings.server_name,
+            )
             return self._server_blocked
         blocked = str(level).upper() == "BLOCKED"
         if blocked:
-            log.warning("ContextOS classifies MCP server '%s' as BLOCKED; its tools are hidden from the host",
-                        self.settings.server_name)
+            log.warning(
+                "ContextOS classifies MCP server '%s' as BLOCKED; its tools are hidden from the host",
+                self.settings.server_name,
+            )
         return blocked
 
     async def _ensure_listing(self) -> None:
@@ -242,7 +275,9 @@ class Gateway:
             except MCPError as exc:
                 log.warning("Could not list the upstream tools for ContextOS: %s", exc.message)
 
-    async def list_tools(self, ctx: Any, params: types.PaginatedRequestParams | None) -> types.ListToolsResult:
+    async def list_tools(
+        self, ctx: Any, params: types.PaginatedRequestParams | None
+    ) -> types.ListToolsResult:
         self._observe(ctx)
         tools = await self._fetch_tools()
         await self._report_listing(tools)
@@ -256,15 +291,22 @@ class Gateway:
         name = params.name
         try:
             request = tool_request_event(
-                agent=agent, session_id=self.settings.session_id, server_name=self.settings.server_name,
-                tool_name=name, arguments=params.arguments, correlation_id=new_correlation_id(),
+                agent=agent,
+                session_id=self.settings.session_id,
+                server_name=self.settings.server_name,
+                tool_name=name,
+                arguments=params.arguments,
+                correlation_id=new_correlation_id(),
                 description=self._descriptions.get(name),
                 metadata={"mcp_host": self._host} if self._host else None,
             )
         except ValueError as exc:  # first line only: validation details can echo argument values
             log.warning("tools/call %s blocked: the decision request could not be built", name)
-            return blocked_result(gateway_block_message(
-                f"the decision request could not be built ({str(exc).splitlines()[0]}); failing closed"))
+            return blocked_result(
+                gateway_block_message(
+                    f"the decision request could not be built ({str(exc).splitlines()[0]}); failing closed"
+                )
+            )
         verdict = await self.enforcer.authorize(request, on_wait=self._wait_reporter(ctx))
         log.info("tools/call %s: %s", name, verdict.outcome)
         if not verdict.allowed:
@@ -275,8 +317,9 @@ class Gateway:
         assert request.tool is not None
         started = time.perf_counter()
         try:
-            result = await self.upstream.call_tool(request.tool.name, verdict.arguments,
-                                                   progress_callback=self._progress_relay(ctx))
+            result = await self.upstream.call_tool(
+                request.tool.name, verdict.arguments, progress_callback=self._progress_relay(ctx)
+            )
         except MCPError as exc:
             await self._report_result(request, verdict, f"MCP error {exc.code}: {exc.message}", True, started)
             raise
@@ -284,13 +327,17 @@ class Gateway:
             raise
         except Exception as exc:
             await self._report_result(request, verdict, f"{type(exc).__name__}: {exc}", True, started)
-            raise MCPError(types.INTERNAL_ERROR, f"The upstream MCP server '{self.settings.server_name}' failed "
-                                                 f"to run the tool ({type(exc).__name__})") from None
+            raise MCPError(
+                types.INTERNAL_ERROR,
+                f"The upstream MCP server '{self.settings.server_name}' failed "
+                f"to run the tool ({type(exc).__name__})",
+            ) from None
         await self._report_result(request, verdict, call_result_text(result), result.is_error, started)
         return result
 
-    async def _report_result(self, request: EventEnvelope, verdict: Verdict, text: str, is_error: bool,
-                             started: float) -> None:
+    async def _report_result(
+        self, request: EventEnvelope, verdict: Verdict, text: str, is_error: bool, started: float
+    ) -> None:
         metadata: dict[str, Any] = {"duration_ms": round((time.perf_counter() - started) * 1000, 1)}
         if verdict.decision is not None:
             metadata["decision"] = verdict.decision.decision
@@ -299,8 +346,9 @@ class Gateway:
             metadata["ran_without_decision"] = True
         if verdict.restrictions_applied:
             metadata["restrictions_applied"] = verdict.restrictions_applied
-        event = tool_result_event(request, text=text, is_error=is_error, metadata=metadata,
-                                  max_chars=self.settings.max_result_chars)
+        event = tool_result_event(
+            request, text=text, is_error=is_error, metadata=metadata, max_chars=self.settings.max_result_chars
+        )
         if verdict.fail_open:  # ContextOS was just unreachable: go straight to the spool
             await self._spool([event])
         else:
@@ -333,35 +381,54 @@ class Gateway:
 
     # -- resources and prompts (pass-through, reported as context) -------------------------------
 
-    async def _report_context(self, kind: str, name: str, text: str, content_type: str,
-                              metadata: dict[str, Any]) -> None:
+    async def _report_context(
+        self, kind: str, name: str, text: str, content_type: str, metadata: dict[str, Any]
+    ) -> None:
         if not self.settings.report_context or not text.strip():
             return
-        await self._send([context_event(
-            agent=self.agent, session_id=self.settings.session_id, server_name=self.settings.server_name,
-            kind=kind, name=name, text=text, content_type=content_type, metadata=metadata,
-            max_chars=self.settings.max_result_chars,
-        )])
+        await self._send(
+            [
+                context_event(
+                    agent=self.agent,
+                    session_id=self.settings.session_id,
+                    server_name=self.settings.server_name,
+                    kind=kind,
+                    name=name,
+                    text=text,
+                    content_type=content_type,
+                    metadata=metadata,
+                    max_chars=self.settings.max_result_chars,
+                )
+            ]
+        )
 
-    async def list_resources(self, ctx: Any, params: types.PaginatedRequestParams | None) -> types.ListResourcesResult:
+    async def list_resources(
+        self, ctx: Any, params: types.PaginatedRequestParams | None
+    ) -> types.ListResourcesResult:
         self._observe(ctx)
         await self._ensure_listing()
         return await self.upstream.list_resources(params=_page(params))
 
-    async def list_resource_templates(self, ctx: Any,
-                                      params: types.PaginatedRequestParams | None) -> types.ListResourceTemplatesResult:
+    async def list_resource_templates(
+        self, ctx: Any, params: types.PaginatedRequestParams | None
+    ) -> types.ListResourceTemplatesResult:
         self._observe(ctx)
         return await self.upstream.list_resource_templates(params=_page(params))
 
-    async def read_resource(self, ctx: Any, params: types.ReadResourceRequestParams) -> types.ReadResourceResult:
+    async def read_resource(
+        self, ctx: Any, params: types.ReadResourceRequestParams
+    ) -> types.ReadResourceResult:
         self._observe(ctx)
         result = await self.upstream.read_resource(params.uri)
         mime = next((c.mime_type for c in result.contents if c.mime_type), None) or "text/plain"
-        await self._report_context("resource", params.uri, resource_text(result), mime,
-                                   {"content_blocks": len(result.contents)})
+        await self._report_context(
+            "resource", params.uri, resource_text(result), mime, {"content_blocks": len(result.contents)}
+        )
         return result
 
-    async def list_prompts(self, ctx: Any, params: types.PaginatedRequestParams | None) -> types.ListPromptsResult:
+    async def list_prompts(
+        self, ctx: Any, params: types.PaginatedRequestParams | None
+    ) -> types.ListPromptsResult:
         self._observe(ctx)
         await self._ensure_listing()
         return await self.upstream.list_prompts(params=_page(params))
@@ -370,20 +437,30 @@ class Gateway:
         self._observe(ctx)
         result = await self.upstream.get_prompt(params.name, params.arguments)
         # Argument names only: their values are the user's input and are not needed to scan the prompt.
-        await self._report_context("prompt", params.name, prompt_text(result), "text/plain",
-                                   {"argument_names": sorted(params.arguments or {})})
+        await self._report_context(
+            "prompt",
+            params.name,
+            prompt_text(result),
+            "text/plain",
+            {"argument_names": sorted(params.arguments or {})},
+        )
         return result
 
     async def complete(self, ctx: Any, params: types.CompleteRequestParams) -> types.CompleteResult:
         self._observe(ctx)
         context = params.context.arguments if params.context is not None else None
-        return await self.upstream.complete(params.ref, params.argument.model_dump(), context_arguments=context)
+        return await self.upstream.complete(
+            params.ref, params.argument.model_dump(), context_arguments=context
+        )
 
     # -- upstream notifications -----------------------------------------------------------------
 
     async def on_upstream_message(self, message: Any) -> None:
         if isinstance(message, Exception):
-            log.warning("The upstream MCP server sent a message the gateway could not read (%s)", type(message).__name__)
+            log.warning(
+                "The upstream MCP server sent a message the gateway could not read (%s)",
+                type(message).__name__,
+            )
             return
         downstream = self._downstream
         if downstream is None:
@@ -407,34 +484,45 @@ class Gateway:
         if caps is None or caps.tools is not None:
             handlers.update(on_list_tools=self.list_tools, on_call_tool=self.call_tool)
         if caps is not None and caps.resources is not None:
-            handlers.update(on_list_resources=self.list_resources, on_read_resource=self.read_resource,
-                            on_list_resource_templates=self.list_resource_templates)
+            handlers.update(
+                on_list_resources=self.list_resources,
+                on_read_resource=self.read_resource,
+                on_list_resource_templates=self.list_resource_templates,
+            )
         if caps is not None and caps.prompts is not None:
             handlers.update(on_list_prompts=self.list_prompts, on_get_prompt=self.get_prompt)
         if caps is not None and caps.completions is not None:
             handlers["on_completion"] = self.complete
         info = self.info.server_info if self.info is not None else None
         return Server(
-            self.settings.server_name, version=info.version if info else "", title=info.title if info else None,
+            self.settings.server_name,
+            version=info.version if info else "",
+            title=info.title if info else None,
             description=info.description if info else None,
-            instructions=self.info.instructions if self.info is not None else None, **handlers,
+            instructions=self.info.instructions if self.info is not None else None,
+            **handlers,
         )
 
     def initialization_options(self, server: Server[Any]) -> InitializationOptions:
         caps = self.capabilities
-        return server.create_initialization_options(NotificationOptions(
-            tools_changed=bool(caps and caps.tools and caps.tools.list_changed),
-            resources_changed=bool(caps and caps.resources and caps.resources.list_changed),
-            prompts_changed=bool(caps and caps.prompts and caps.prompts.list_changed),
-        ))
+        return server.create_initialization_options(
+            NotificationOptions(
+                tools_changed=bool(caps and caps.tools and caps.tools.list_changed),
+                resources_changed=bool(caps and caps.resources and caps.resources.list_changed),
+                prompts_changed=bool(caps and caps.prompts and caps.prompts.list_changed),
+            )
+        )
 
     async def close(self) -> None:
         """Report the end of the session (best effort, bounded) if anything was reported."""
         if not self._events_sent:
             return
         event = EventEnvelope(
-            event_type=EventType.SESSION_ENDED, agent=self.agent, session_id=self.settings.session_id,
-            integration=INTEGRATION, collected_via=COLLECTED_VIA,
+            event_type=EventType.SESSION_ENDED,
+            agent=self.agent,
+            session_id=self.settings.session_id,
+            integration=INTEGRATION,
+            collected_via=COLLECTED_VIA,
             metadata={"outcome": "completed", "reason": "mcp_host_disconnected"},
         )
         with anyio.move_on_after(5, shield=True):
@@ -452,23 +540,37 @@ class _Relay:
             await self.target.on_upstream_message(message)
 
 
-async def serve_stdio(settings: GatewaySettings, upstream: StdioServerParameters, client: ContextOSClient, *,
-                      startup_timeout_s: float = 60.0) -> None:
+async def serve_stdio(
+    settings: GatewaySettings,
+    upstream: StdioServerParameters,
+    client: ContextOSClient,
+    *,
+    startup_timeout_s: float = 60.0,
+) -> None:
     """Start the upstream server, then serve the host on this process's stdin/stdout until it disconnects."""
     relay = _Relay()
     async with stdio_client(upstream, errlog=sys.stderr) as (read, write):
-        async with ClientSession(read, write, message_handler=relay,
-                                 client_info=types.Implementation(name="contextos-mcp-gateway",
-                                                                  version=__version__)) as session:
+        async with ClientSession(
+            read,
+            write,
+            message_handler=relay,
+            client_info=types.Implementation(name="contextos-mcp-gateway", version=__version__),
+        ) as session:
             with anyio.fail_after(startup_timeout_s):
                 info = await session.initialize()
             gateway = Gateway(session, client, settings, upstream_info=info)
             relay.target = gateway
             server = gateway.build_server()
             upstream_label = " ".join(p for p in (info.server_info.name, info.server_info.version) if p)
-            log.info("Serving MCP server '%s' (upstream %s) for session %s; tools/call decided by ContextOS at %s "
-                     "(fail mode %s)", settings.server_name, upstream_label or "unnamed", settings.session_id,
-                     client.base_url, settings.fail_mode)
+            log.info(
+                "Serving MCP server '%s' (upstream %s) for session %s; tools/call decided by ContextOS at %s "
+                "(fail mode %s)",
+                settings.server_name,
+                upstream_label or "unnamed",
+                settings.session_id,
+                client.base_url,
+                settings.fail_mode,
+            )
             try:
                 async with stdio_server() as (server_read, server_write):
                     await server.run(server_read, server_write, gateway.initialization_options(server))

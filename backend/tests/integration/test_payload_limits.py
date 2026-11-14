@@ -25,9 +25,13 @@ def _big_request(size: int) -> dict:
     return tool_requested("Bash", {"command": "echo " + "a" * size})
 
 
-def test_events_rejects_an_oversized_event_but_keeps_the_rest_of_the_batch(client, seeded_org, small_limit, db):
+def test_events_rejects_an_oversized_event_but_keeps_the_rest_of_the_batch(
+    client, seeded_org, small_limit, db
+):
     small = event("session.started")
-    big = event("context.ingested", source={"type": "file", "identifier": "/work/big.txt"}, content="b" * (LIMIT + 10))
+    big = event(
+        "context.ingested", source={"type": "file", "identifier": "/work/big.txt"}, content="b" * (LIMIT + 10)
+    )
     response = client.post("/api/v1/events", json={"events": [small, big]}, headers=seeded_org.api_headers)
     assert response.status_code == 200, response.text
     by_id = {r["event_id"]: r for r in response.json()["results"]}
@@ -35,7 +39,9 @@ def test_events_rejects_an_oversized_event_but_keeps_the_rest_of_the_batch(clien
     assert by_id[big["event_id"]]["status"] == "rejected"
     assert f"{LIMIT}-byte limit" in by_id[big["event_id"]]["error"]
     db.rollback()
-    assert db.scalar(select(func.count()).select_from(IngestedEvent)) == 1  # the oversized event was not stored
+    assert (
+        db.scalar(select(func.count()).select_from(IngestedEvent)) == 1
+    )  # the oversized event was not stored
 
 
 def test_request_body_over_four_times_the_limit_is_413_before_authentication(client, small_limit):
@@ -60,10 +66,13 @@ def test_decide_without_content_length_is_still_limited(client, seeded_org, smal
 
     def chunks():
         for i in range(0, len(raw), 1024):
-            yield raw[i:i + 1024]
+            yield raw[i : i + 1024]
 
-    response = client.post("/api/v1/decide", content=chunks(),
-                           headers={**seeded_org.api_headers, "Content-Type": "application/json"})
+    response = client.post(
+        "/api/v1/decide",
+        content=chunks(),
+        headers={**seeded_org.api_headers, "Content-Type": "application/json"},
+    )
     assert "content-length" not in {k.lower() for k in response.request.headers}
     assert response.status_code == 413, response.text
 

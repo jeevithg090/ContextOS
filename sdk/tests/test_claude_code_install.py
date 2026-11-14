@@ -20,8 +20,15 @@ from contextos.integrations.claude_code.install import (
     uninstall_hooks,
 )
 
-EVENTS = ["PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "SessionStart", "SubagentStop",
-          "SessionEnd"]
+EVENTS = [
+    "PreToolUse",
+    "PostToolUse",
+    "PostToolUseFailure",
+    "UserPromptSubmit",
+    "SessionStart",
+    "SubagentStop",
+    "SessionEnd",
+]
 USER_HOOK = {"type": "command", "command": "./scripts/lint.sh", "timeout": 30}
 EXISTING = {
     "permissions": {"allow": ["Bash(npm test)"], "deny": ["Read(./.env)"]},
@@ -83,7 +90,10 @@ def test_install_merges_without_clobbering_and_backs_up_the_original(project: Pa
     assert report.backup.read_text() == original
     assert settings["permissions"] == EXISTING["permissions"] and settings["model"] == "opus"
     assert settings["hooks"]["Stop"] == EXISTING["hooks"]["Stop"]
-    assert settings["hooks"]["PreToolUse"][0] == {"matcher": "Bash", "hooks": [USER_HOOK]}  # user's hook kept first
+    assert settings["hooks"]["PreToolUse"][0] == {
+        "matcher": "Bash",
+        "hooks": [USER_HOOK],
+    }  # user's hook kept first
     assert ours(settings, "PreToolUse")[0]["command"] == "/opt/ctx/bin/contextos hook PreToolUse"
 
 
@@ -113,7 +123,10 @@ def test_reinstall_with_a_new_command_replaces_ours_only(project: Path) -> None:
 def test_our_handler_in_a_shared_group_is_moved_out_and_theirs_kept(project: Path) -> None:
     path = settings_path(project)
     path.parent.mkdir()
-    shared = {"matcher": "*", "hooks": [USER_HOOK, {"type": "command", "command": "contextos hook PreToolUse"}]}
+    shared = {
+        "matcher": "*",
+        "hooks": [USER_HOOK, {"type": "command", "command": "contextos hook PreToolUse"}],
+    }
     path.write_text(json.dumps({"hooks": {"PreToolUse": [shared]}}))
     apply_hooks(project, command="contextos")
     groups = read(path)["hooks"]["PreToolUse"]
@@ -138,7 +151,9 @@ def test_uninstall_drops_the_hooks_key_when_only_ours_were_there(project: Path) 
     assert read(settings_path(project)) == {}
 
 
-@pytest.mark.parametrize(("scope", "relative"), [("local", ".claude/settings.local.json"), ("project", ".claude/settings.json")])
+@pytest.mark.parametrize(
+    ("scope", "relative"), [("local", ".claude/settings.local.json"), ("project", ".claude/settings.json")]
+)
 def test_project_scopes(project: Path, scope: str, relative: str) -> None:
     assert install_hooks(project, scope) == project / relative
 
@@ -149,8 +164,9 @@ def test_user_scope_writes_under_the_given_home(project: Path, tmp_path: Path) -
     assert hooks_status(project, home=tmp_path / "fakehome")["scopes"]["user"]["events"] == sorted(EVENTS)
 
 
-def test_claude_config_dir_is_honoured_for_user_scope(project: Path, tmp_path: Path,
-                                                      monkeypatch: pytest.MonkeyPatch) -> None:
+def test_claude_config_dir_is_honoured_for_user_scope(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "cfgdir"))
     assert settings_path(project, "user") == tmp_path / "cfgdir" / "settings.json"
 
@@ -162,7 +178,9 @@ def test_invalid_scope_and_timeout_are_rejected(project: Path) -> None:
         install_hooks(project, timeout=5)
 
 
-@pytest.mark.parametrize("content", ["{not json", json.dumps({"hooks": []}), json.dumps({"hooks": {"PreToolUse": {}}})])
+@pytest.mark.parametrize(
+    "content", ["{not json", json.dumps({"hooks": []}), json.dumps({"hooks": {"PreToolUse": {}}})]
+)
 def test_malformed_settings_are_never_overwritten(project: Path, content: str) -> None:
     path = settings_path(project)
     path.parent.mkdir()
@@ -174,8 +192,14 @@ def test_malformed_settings_are_never_overwritten(project: Path, content: str) -
 
 def test_recognises_contextos_commands_only() -> None:
     assert is_contextos_hook({"type": "command", "command": "contextos hook PreToolUse"}) == "PreToolUse"
-    assert is_contextos_hook({"type": "command", "command": "/usr/bin/python3 -m contextos hook SessionEnd"}) == "SessionEnd"
-    assert is_contextos_hook({"type": "command", "command": "'/a b/contextos' hook PostToolUse"}) == "PostToolUse"
+    assert (
+        is_contextos_hook({"type": "command", "command": "/usr/bin/python3 -m contextos hook SessionEnd"})
+        == "SessionEnd"
+    )
+    assert (
+        is_contextos_hook({"type": "command", "command": "'/a b/contextos' hook PostToolUse"})
+        == "PostToolUse"
+    )
     assert is_contextos_hook({"type": "command", "command": "./scripts/mycontextos hook PreToolUse"}) is None
     assert is_contextos_hook({"type": "command", "command": "echo contextos hook PreToolUse && rm x"}) is None
     assert is_contextos_hook({"type": "prompt", "prompt": "contextos hook PreToolUse"}) is None
@@ -235,9 +259,20 @@ def test_module_cli_install_status_uninstall(project: Path, capsys: pytest.Captu
 
 
 def test_contextos_init_claude_code_installs_the_hooks(project: Path) -> None:
-    result = CliRunner().invoke(app, ["init", "--url", "http://localhost:18999", "--api-key",
-                                      "ctxk_test_0123456789abcdefghijklmnop", "--skip-verify", "--claude-code",
-                                      "--project-dir", str(project)])
+    result = CliRunner().invoke(
+        app,
+        [
+            "init",
+            "--url",
+            "http://localhost:18999",
+            "--api-key",
+            "ctxk_test_0123456789abcdefghijklmnop",
+            "--skip-verify",
+            "--claude-code",
+            "--project-dir",
+            str(project),
+        ],
+    )
     assert result.exit_code == 0, result.output
     assert "Claude Code hooks installed" in result.output
     assert ours(read(settings_path(project)), "PreToolUse")

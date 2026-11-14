@@ -40,10 +40,21 @@ from app.services.scoping import get_scoped, paginate, scoped
 
 STATS_WINDOW_DAYS = 7
 EDITABLE_FIELDS = (
-    "name", "description", "outcome", "mode", "enabled", "priority", "severity", "conditions", "restrictions", "tags",
+    "name",
+    "description",
+    "outcome",
+    "mode",
+    "enabled",
+    "priority",
+    "severity",
+    "conditions",
+    "restrictions",
+    "tags",
 )
 # Every PolicySpec field that can change an evaluation result (or the recorded match).
-EVALUATION_FIELDS = frozenset({"conditions", "outcome", "mode", "enabled", "restrictions", "priority", "severity"})
+EVALUATION_FIELDS = frozenset(
+    {"conditions", "outcome", "mode", "enabled", "restrictions", "priority", "severity"}
+)
 _NOT_NULLABLE = frozenset(EDITABLE_FIELDS) - {"description"}
 
 
@@ -62,8 +73,10 @@ def _secret_errors(value: Any, loc: str) -> list[str]:
         if not matches:
             return []
         kinds = ", ".join(sorted({m.secret_type for m in matches}))
-        return [f"{loc}: looks like a credential ({kinds}). Policies are stored and shown in plain text, so they "
-                "must not contain secrets; match on secrets_in_arguments[*].type instead"]
+        return [
+            f"{loc}: looks like a credential ({kinds}). Policies are stored and shown in plain text, so they "
+            "must not contain secrets; match on secrets_in_arguments[*].type instead"
+        ]
     if isinstance(value, dict):
         return [e for k, v in value.items() for e in _secret_errors(v, f"{loc}.{k}")]
     if isinstance(value, list):
@@ -72,7 +85,12 @@ def _secret_errors(value: Any, loc: str) -> list[str]:
 
 
 def definition_errors(
-    *, outcome: str | None, conditions: Any, restrictions: Any, name: str | None = None, description: str | None = None
+    *,
+    outcome: str | None,
+    conditions: Any,
+    restrictions: Any,
+    name: str | None = None,
+    description: str | None = None,
 ) -> list[str]:
     """Every reason this policy definition cannot be saved (``[]`` = valid)."""
     errors = list(validate_conditions(conditions))
@@ -82,7 +100,9 @@ def definition_errors(
     return errors
 
 
-def validate_draft(conditions: Any, *, outcome: str | None = None, restrictions: Any = None) -> dict[str, Any]:
+def validate_draft(
+    conditions: Any, *, outcome: str | None = None, restrictions: Any = None
+) -> dict[str, Any]:
     errors = list(validate_conditions(conditions)) + _secret_errors(conditions, "conditions")
     if outcome is not None or restrictions is not None:
         errors += validate_restrictions(restrictions if restrictions is not None else {}, outcome=outcome)
@@ -127,7 +147,10 @@ def list_policies(
     if q and q.strip():
         needle = f"%{q.strip().lower()}%"
         stmt = stmt.where(
-            or_(func.lower(SecurityPolicy.name).like(needle), func.lower(SecurityPolicy.description).like(needle))
+            or_(
+                func.lower(SecurityPolicy.name).like(needle),
+                func.lower(SecurityPolicy.description).like(needle),
+            )
         )
     return sorted(db.scalars(stmt), key=_sort_key)
 
@@ -143,8 +166,14 @@ def _policy_ids(entries: Any) -> set[str]:
 
 
 def empty_stats(days: int = STATS_WINDOW_DAYS) -> dict[str, Any]:
-    return {"window_days": days, "matched": 0, "monitor_matched": 0, "simulated": 0, "last_matched_at": None,
-            "daily": [0] * days}
+    return {
+        "window_days": days,
+        "matched": 0,
+        "monitor_matched": 0,
+        "simulated": 0,
+        "last_matched_at": None,
+        "daily": [0] * days,
+    }
 
 
 def match_stats(
@@ -162,7 +191,9 @@ def match_stats(
         PolicyDecision.is_simulation,
     ).where(PolicyDecision.organization_id == org_id, PolicyDecision.evaluated_at >= start)
     stats: dict[str, dict[str, Any]] = {}
-    for evaluated_at, matched, monitor, is_simulation in db.execute(stmt, execution_options={"yield_per": 2000}):
+    for evaluated_at, matched, monitor, is_simulation in db.execute(
+        stmt, execution_options={"yield_per": 2000}
+    ):
         when = ensure_utc(evaluated_at) or now
         day = min(max((when.date() - start.date()).days, 0), days - 1)
         for key, pids in (("matched", _policy_ids(matched)), ("monitor_matched", _policy_ids(monitor))):
@@ -243,23 +274,33 @@ def decisions_for_policy(
         if entry is not None:
             hits.append((decision_id, mode, entry))
     page = hits[offset : offset + limit]
-    rows = {
-        r.id: r
-        for r in db.scalars(scoped(PolicyDecision, org_id).where(PolicyDecision.id.in_([h[0] for h in page])))
-    } if page else {}
+    rows = (
+        {
+            r.id: r
+            for r in db.scalars(
+                scoped(PolicyDecision, org_id).where(PolicyDecision.id.in_([h[0] for h in page]))
+            )
+        }
+        if page
+        else {}
+    )
     items = []
     for decision_id, mode, entry in page:
         row = rows.get(decision_id)
         if row is None:
             continue
         version = entry.get("version")
-        items.append({
-            **decision_summary(row),
-            "match_mode": mode,
-            "matched_outcome": str(entry.get("outcome") or ""),
-            "matched_version": version if isinstance(version, int) and not isinstance(version, bool) else None,
-            "match_explanation": str(entry.get("explanation") or ""),
-        })
+        items.append(
+            {
+                **decision_summary(row),
+                "match_mode": mode,
+                "matched_outcome": str(entry.get("outcome") or ""),
+                "matched_version": version
+                if isinstance(version, int) and not isinstance(version, bool)
+                else None,
+                "match_explanation": str(entry.get("explanation") or ""),
+            }
+        )
     return items, len(hits)
 
 
@@ -327,9 +368,13 @@ def _summary(row: SecurityPolicy) -> dict[str, Any]:
 
 def create_policy(db: Session, org_id: str, actor: Actor, data: dict[str, Any]) -> SecurityPolicy:
     _raise_if_invalid(
-        definition_errors(outcome=data["outcome"], conditions=data["conditions"],
-                          restrictions=data.get("restrictions") or {}, name=data["name"],
-                          description=data.get("description")),
+        definition_errors(
+            outcome=data["outcome"],
+            conditions=data["conditions"],
+            restrictions=data.get("restrictions") or {},
+            name=data["name"],
+            description=data.get("description"),
+        ),
         "The policy is invalid",
     )
     _ensure_unique_name(db, org_id, data["name"])
@@ -352,8 +397,16 @@ def create_policy(db: Session, org_id: str, actor: Actor, data: dict[str, Any]) 
     )
     db.add(row)
     db.flush()
-    append_audit(db, org_id, action="policy.created", actor_type=actor.type, actor_id=actor.id,
-                 target_type="policy", target_id=row.id, details=_summary(row))
+    append_audit(
+        db,
+        org_id,
+        action="policy.created",
+        actor_type=actor.type,
+        actor_id=actor.id,
+        target_type="policy",
+        target_id=row.id,
+        details=_summary(row),
+    )
     notify(db, org_id, "policy.updated", id=row.id, change="created")
     return row
 
@@ -364,7 +417,9 @@ def update_policy(
     """Apply a partial update. Returns the policy unchanged (and writes no audit) if nothing differs."""
     nulls = sorted(f for f, v in changes.items() if v is None and f in _NOT_NULLABLE)
     if nulls:
-        raise ValidationFailedError("These fields cannot be cleared", details={"errors": [f"{f}: may not be null" for f in nulls]})
+        raise ValidationFailedError(
+            "These fields cannot be cleared", details={"errors": [f"{f}: may not be null" for f in nulls]}
+        )
     changed = {f: v for f, v in changes.items() if f in EDITABLE_FIELDS and getattr(policy, f) != v}
     if not changed:
         return policy
@@ -391,10 +446,19 @@ def update_policy(
         policy.version = (policy.version or 1) + 1
     db.flush()
     append_audit(
-        db, org_id, action="policy.updated", actor_type=actor.type, actor_id=actor.id, target_type="policy",
+        db,
+        org_id,
+        action="policy.updated",
+        actor_type=actor.type,
+        actor_id=actor.id,
+        target_type="policy",
         target_id=policy.id,
-        details={"name": policy.name, "is_builtin": policy.is_builtin,
-                 "version": {"from": old_version, "to": policy.version}, "changes": diff},
+        details={
+            "name": policy.name,
+            "is_builtin": policy.is_builtin,
+            "version": {"from": old_version, "to": policy.version},
+            "changes": diff,
+        },
     )
     notify(db, org_id, "policy.updated", id=policy.id, change="updated")
     return policy
@@ -402,13 +466,23 @@ def update_policy(
 
 def delete_policy(db: Session, org_id: str, actor: Actor, policy: SecurityPolicy) -> None:
     if policy.is_builtin:
-        raise ConflictError("Built-in policies cannot be deleted. Disable it instead; you can re-enable it later.")
+        raise ConflictError(
+            "Built-in policies cannot be deleted. Disable it instead; you can re-enable it later."
+        )
     details = _summary(policy)
     policy_id = policy.id
     db.delete(policy)
     db.flush()
-    append_audit(db, org_id, action="policy.deleted", actor_type=actor.type, actor_id=actor.id,
-                 target_type="policy", target_id=policy_id, details=details)
+    append_audit(
+        db,
+        org_id,
+        action="policy.deleted",
+        actor_type=actor.type,
+        actor_id=actor.id,
+        target_type="policy",
+        target_id=policy_id,
+        details=details,
+    )
     notify(db, org_id, "policy.updated", id=policy_id, change="deleted")
 
 
@@ -420,4 +494,3 @@ def __getattr__(name: str) -> Any:
 
         return getattr(policy_testing, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-

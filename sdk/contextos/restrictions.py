@@ -39,10 +39,24 @@ from contextos.redact import mask_value
 KNOWN_KEYS = frozenset({"redact_secrets", "allowed_path_globs", "deny_path_globs", "max_argument_bytes"})
 OPAQUE_PATH_CATEGORIES = frozenset({"shell", "code_execution", "infrastructure"})
 # Argument names that hold a program: whatever files it touches are not visible as arguments.
-OPAQUE_ARGUMENT_NAMES = frozenset({
-    "command", "commands", "cmd", "script", "code", "shell", "bash", "sh", "powershell", "program",
-    "exec", "argv", "cmdline", "command_line",
-})
+OPAQUE_ARGUMENT_NAMES = frozenset(
+    {
+        "command",
+        "commands",
+        "cmd",
+        "script",
+        "code",
+        "shell",
+        "bash",
+        "sh",
+        "powershell",
+        "program",
+        "exec",
+        "argv",
+        "cmdline",
+        "command_line",
+    }
+)
 
 _PATH_NAME_RE = re.compile(
     r"(?:^|_)(?:path|paths|file|files|filename|filenames|filepath|dir|dirs|directory|folder|dest|src|"
@@ -76,11 +90,17 @@ def extract_paths(arguments: Mapping[str, Any], path_args: Sequence[str] | None 
     def visit(value: Any, key: str | None, depth: int) -> None:
         if depth > 12:
             return
-        named = key is not None and (key in path_args if path_args is not None else bool(_PATH_NAME_RE.search(key)))
+        named = key is not None and (
+            key in path_args if path_args is not None else bool(_PATH_NAME_RE.search(key))
+        )
         if isinstance(value, os.PathLike):
             found.append(os.fspath(value))
         elif isinstance(value, str):
-            if (named and "://" not in value) or value.startswith("file://") or (path_args is None and _looks_like_path(value)):
+            if (
+                (named and "://" not in value)
+                or value.startswith("file://")
+                or (path_args is None and _looks_like_path(value))
+            ):
                 found.append(value)
         elif isinstance(value, Mapping):
             for k, v in value.items():
@@ -97,13 +117,13 @@ def extract_paths(arguments: Mapping[str, Any], path_args: Sequence[str] | None 
 def _home_folded(path: str) -> str | None:
     home = os.path.expanduser("~")
     if home and home != "~" and (path == home or path.startswith(home.rstrip("/") + "/")):
-        return "~" + path[len(home.rstrip("/")):]
+        return "~" + path[len(home.rstrip("/")) :]
     return None
 
 
 def _relative(path: str, cwd: str) -> str | None:
     base = cwd.rstrip("/") + "/"
-    return path[len(base):] if path.startswith(base) else None
+    return path[len(base) :] if path.startswith(base) else None
 
 
 def path_forms(raw: str, cwd: str | None = None) -> tuple[set[str], set[str]]:
@@ -130,8 +150,9 @@ def _matches(forms: Iterable[str], globs: Sequence[str], *, case_insensitive: bo
     return any(fnmatch.fnmatchcase(f, g) for f in forms for g in globs)
 
 
-def check_paths(paths: Sequence[str], allowed: Sequence[str] | None, denied: Sequence[str] | None,
-                cwd: str | None = None) -> str | None:
+def check_paths(
+    paths: Sequence[str], allowed: Sequence[str] | None, denied: Sequence[str] | None, cwd: str | None = None
+) -> str | None:
     """Reason the paths violate the globs, or ``None`` when they comply."""
     for raw in paths:
         if "\x00" in raw:
@@ -160,8 +181,12 @@ def apply_restrictions(
     """Apply a RESTRICT decision to ``arguments``; see the module docstring for the rules."""
 
     def deny(reason: str) -> RestrictionOutcome:
-        return RestrictionOutcome(False, arguments, reason=f"{reason}; the restriction could not be applied, "
-                                  "so the call is treated as denied (fail closed)")
+        return RestrictionOutcome(
+            False,
+            arguments,
+            reason=f"{reason}; the restriction could not be applied, "
+            "so the call is treated as denied (fail closed)",
+        )
 
     if not restrictions:
         return deny("RESTRICT was returned without any restrictions")
@@ -184,18 +209,28 @@ def apply_restrictions(
             return deny("secrets must be redacted but the server could not re-check the masked arguments")
         if verdict is False:
             return deny("the server still detects a secret in the arguments that the SDK could not mask")
-        applied.append(f"redacted {len(redacted)} secret(s) in the arguments" if redacted else "no secrets needed redaction")
+        applied.append(
+            f"redacted {len(redacted)} secret(s) in the arguments"
+            if redacted
+            else "no secrets needed redaction"
+        )
 
     allowed = restrictions.get("allowed_path_globs")
     denied = restrictions.get("deny_path_globs")
     if allowed is not None or denied:
         if (category_hint or "").lower() in OPAQUE_PATH_CATEGORIES:
-            return deny(f"path restrictions cannot be checked for a {category_hint} tool (paths are hidden in the command)")
+            return deny(
+                f"path restrictions cannot be checked for a {category_hint} tool (paths are hidden in the command)"
+            )
         program = opaque_argument(current)
         if program is not None:
-            return deny(f"path restrictions cannot be checked for a call with a '{program}' argument (the files a "
-                        "program touches are not visible in its arguments)")
-        if (allowed is not None and not isinstance(allowed, list)) or (denied is not None and not isinstance(denied, list)):
+            return deny(
+                f"path restrictions cannot be checked for a call with a '{program}' argument (the files a "
+                "program touches are not visible in its arguments)"
+            )
+        if (allowed is not None and not isinstance(allowed, list)) or (
+            denied is not None and not isinstance(denied, list)
+        ):
             return deny("path restrictions are malformed")
         problem = check_paths(extract_paths(current, path_args), allowed, denied, cwd)
         if problem:
@@ -208,7 +243,9 @@ def apply_restrictions(
             return deny("max_argument_bytes is malformed")
         size = len(json.dumps(jsonable(current), ensure_ascii=False, default=str).encode("utf-8"))
         if size > limit:
-            return RestrictionOutcome(False, arguments, reason=f"arguments are {size} bytes; the policy allows at most {limit}")
+            return RestrictionOutcome(
+                False, arguments, reason=f"arguments are {size} bytes; the policy allows at most {limit}"
+            )
         applied.append(f"arguments are {size} bytes (limit {limit})")
 
     return RestrictionOutcome(True, current, applied=applied, redacted_types=sorted(set(redacted)))

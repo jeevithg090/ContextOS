@@ -203,7 +203,9 @@ def load_config(cwd: Path | None = None, *, env: dict[str, str] | None = None) -
         agent_name=str(values["agent_name"]).strip() if values.get("agent_name") else None,
         fail_mode=fail_mode,  # type: ignore[arg-type]
         timeout_s=_as_float("timeout_s", values.get("timeout_s", DEFAULT_TIMEOUT_S)),
-        approval_timeout_s=_as_float("approval_timeout_s", values.get("approval_timeout_s", DEFAULT_APPROVAL_TIMEOUT_S)),
+        approval_timeout_s=_as_float(
+            "approval_timeout_s", values.get("approval_timeout_s", DEFAULT_APPROVAL_TIMEOUT_S)
+        ),
         environment=str(values["environment"]) if values.get("environment") else None,
         spool_max_bytes=spool_max,
         project_file=project_path,

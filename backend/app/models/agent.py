@@ -21,7 +21,9 @@ class Agent(TimestampMixin, OrgScopedMixin, Base):
     description: Mapped[str | None] = mapped_column(Text, default=None)
     framework: Mapped[str] = mapped_column(String(64), default="custom")  # claude_code, mcp, langgraph, ...
     owner: Mapped[str | None] = mapped_column(String(200), default=None)  # team or person responsible
-    environment: Mapped[str] = mapped_column(String(32), default="development")  # development|staging|production
+    environment: Mapped[str] = mapped_column(
+        String(32), default="development"
+    )  # development|staging|production
     labels: Mapped[list[Any]] = mapped_column(default=list)
     status: Mapped[str] = mapped_column(String(32), default="active")  # active|inactive|quarantined
     version: Mapped[str | None] = mapped_column(String(64), default=None)
@@ -64,12 +66,20 @@ class AgentRelationship(TimestampMixin, OrgScopedMixin, Base):
     """Observed delegation / communication between agents."""
 
     __tablename__ = "agent_relationships"
-    __table_args__ = (UniqueConstraint("organization_id", "parent_agent_id", "child_agent_id", "relationship_type"),)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "parent_agent_id", "child_agent_id", "relationship_type"),
+    )
 
     id: Mapped[str] = id_column()
-    parent_agent_id: Mapped[str] = mapped_column(String(40), ForeignKey("agents.id", ondelete="CASCADE"), index=True)
-    child_agent_id: Mapped[str] = mapped_column(String(40), ForeignKey("agents.id", ondelete="CASCADE"), index=True)
-    relationship_type: Mapped[str] = mapped_column(String(32), default="delegates_to")  # delegates_to|messages
+    parent_agent_id: Mapped[str] = mapped_column(
+        String(40), ForeignKey("agents.id", ondelete="CASCADE"), index=True
+    )
+    child_agent_id: Mapped[str] = mapped_column(
+        String(40), ForeignKey("agents.id", ondelete="CASCADE"), index=True
+    )
+    relationship_type: Mapped[str] = mapped_column(
+        String(32), default="delegates_to"
+    )  # delegates_to|messages
     first_seen_at: Mapped[datetime] = mapped_column(default=utcnow)
     last_seen_at: Mapped[datetime] = mapped_column(default=utcnow)
     event_count: Mapped[int] = mapped_column(Integer, default=1)

@@ -55,7 +55,9 @@ class PolicyMatchStats(BaseModel):
 
     window_days: int
     matched: int = Field(description="Real (non-simulated) decisions where it matched in enforce mode")
-    monitor_matched: int = Field(description="Real decisions where it matched in monitor mode (recorded only)")
+    monitor_matched: int = Field(
+        description="Real decisions where it matched in monitor mode (recorded only)"
+    )
     simulated: int = Field(description="Simulation Lab decisions where it matched (either mode)")
     last_matched_at: datetime | None = None
     daily: list[int] = Field(description="Real matches (both modes) per UTC day, oldest first")
@@ -223,7 +225,9 @@ class EvaluatedPolicyOut(BaseModel):
     outcome: str
     mode: str
     draft: bool = Field(description="True for the unsaved draft from the request")
-    forced_enabled: bool = Field(description="Disabled policy evaluated as if enabled because it was targeted")
+    forced_enabled: bool = Field(
+        description="Disabled policy evaluated as if enabled because it was targeted"
+    )
 
 
 class RecordedDecisionOut(BaseModel):

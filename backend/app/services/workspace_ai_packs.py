@@ -49,9 +49,11 @@ from app.workspace.modes import PromptMode
 from app.workspace.text import clean, estimate_tokens, truncate_lines
 
 NO_ROOT_TITLE = "No repository root configured"
-NO_ROOT_REASON = ("No repository root configured — repository files could not be verified. Set "
-                  "CONTEXTOS_WORKSPACE_REPO_ROOT on the server to the repository path to include project documents, "
-                  "source files and related tests.")
+NO_ROOT_REASON = (
+    "No repository root configured — repository files could not be verified. Set "
+    "CONTEXTOS_WORKSPACE_REPO_ROOT on the server to the repository path to include project documents, "
+    "source files and related tests."
+)
 EXPORTED_BY = "ContextOS context-pack builder (deterministic; no external AI provider involved)"
 _FILENAME_SAFE = re.compile(r"[^A-Za-z0-9._-]+")
 FILE_KINDS = ("doc", "source_file", "test_file")
@@ -76,8 +78,14 @@ def suggested_profiles(task: Task) -> dict[str, str]:
 
 def with_suggestions(catalogue: ModesOut, task: Task, mode: str) -> ModesOut:
     """``catalogue`` plus the profile suggested for ``task`` in ``mode`` and in every mode."""
-    return catalogue.model_copy(update={"task_id": task.id, "mode": mode, "suggested_profile": default_profile(task, mode),
-                                        "suggested_profiles": suggested_profiles(task)})
+    return catalogue.model_copy(
+        update={
+            "task_id": task.id,
+            "mode": mode,
+            "suggested_profile": default_profile(task, mode),
+            "suggested_profiles": suggested_profiles(task),
+        }
+    )
 
 
 def _workspace_root() -> str | None:
@@ -91,41 +99,66 @@ def _normal(path: str) -> str:
     return os.path.normpath(text).replace("\\", "/") if text else ""
 
 
-def build_items(task: Task, bundle: TaskBundle, profile: str, extra_paths: list[str] | None = None,
-                ) -> tuple[list[dict[str, Any]], int]:
+def build_items(
+    task: Task,
+    bundle: TaskBundle,
+    profile: str,
+    extra_paths: list[str] | None = None,
+) -> tuple[list[dict[str, Any]], int]:
     """Build pack items for ``task``. Returns ``(items, token_estimate_of_included_items)``."""
     get_profile(profile)
     task_files = [p for p in task.related_files or [] if isinstance(p, str)]
     extras = [clean_text(p, 500) for p in extra_paths or [] if isinstance(p, str) and p.strip()]
     root = _workspace_root()
-    items, total = build_context_pack(repo_root=root, related_files=[*task_files, *extras], profile=profile,
-                                      records=pack_records(bundle))
+    items, total = build_context_pack(
+        repo_root=root, related_files=[*task_files, *extras], profile=profile, records=pack_records(bundle)
+    )
     own = {_normal(p) for p in task_files}
     for item in items:
         if item["kind"] == "note" and item["ref"] == "repository" and root is None:
             item.update(title=NO_ROOT_TITLE, reason=NO_ROOT_REASON)
         elif item.get("origin") == "related_file" and _normal(str(item["ref"])) not in own:
             # Keep origin "related_file" (the generator lists unverified ones by it); only the reason differs.
-            item["reason"] = str(item["reason"]).replace("Listed as a related file on the task.", EXTRA_PATH_REASON)
+            item["reason"] = str(item["reason"]).replace(
+                "Listed as a related file on the task.", EXTRA_PATH_REASON
+            )
     return items, total
 
 
-def create_pack(db: Session, actor: Actor, task: Task, profile: str, extra_paths: list[str] | None = None,
-                *, bundle: TaskBundle | None = None, quiet: bool = False) -> ContextPack:
+def create_pack(
+    db: Session,
+    actor: Actor,
+    task: Task,
+    profile: str,
+    extra_paths: list[str] | None = None,
+    *,
+    bundle: TaskBundle | None = None,
+    quiet: bool = False,
+) -> ContextPack:
     """Build and persist a pack. ``quiet`` skips the task activity (used when a prompt save creates it)."""
     try:
-        items, total = build_items(task, bundle or collect(db, task, with_provenance=False), profile, extra_paths)
+        items, total = build_items(
+            task, bundle or collect(db, task, with_provenance=False), profile, extra_paths
+        )
     except ValueError as exc:
         raise ValidationFailedError(str(exc)) from exc
-    pack = ContextPack(id=new_id("context_pack"), organization_id=task.organization_id, task_id=task.id,
-                       profile=profile, items=items, token_estimate=total, created_by=actor.user_id,
-                       created_at=utcnow())
+    pack = ContextPack(
+        id=new_id("context_pack"),
+        organization_id=task.organization_id,
+        task_id=task.id,
+        profile=profile,
+        items=items,
+        token_estimate=total,
+        created_by=actor.user_id,
+        created_at=utcnow(),
+    )
     db.add(pack)
     db.flush()
     details = {"context_pack_id": pack.id, "profile": profile, "items": len(items), "token_estimate": total}
     if not quiet:
-        record_activity(db, task, actor.user_id, "context_pack_created", to_value=PROFILES[profile].label,
-                        details=details)
+        record_activity(
+            db, task, actor.user_id, "context_pack_created", to_value=PROFILES[profile].label, details=details
+        )
     audit_task(db, actor, task, "context_pack_created", details)
     return pack
 
@@ -137,7 +170,9 @@ def get_pack(db: Session, org_id: str, pack_id: str) -> ContextPack:
 def pack_task(db: Session, pack: ContextPack) -> Task | None:
     if not pack.task_id:
         return None
-    return db.scalar(select(Task).where(Task.organization_id == pack.organization_id, Task.id == pack.task_id))
+    return db.scalar(
+        select(Task).where(Task.organization_id == pack.organization_id, Task.id == pack.task_id)
+    )
 
 
 # ----------------------------------------------------------------------------- output
@@ -156,15 +191,20 @@ def can_include(item: dict[str, Any]) -> bool:
         return True
     if status != "over_budget":
         return False
-    return item.get("kind") in RECORD_KINDS or (item.get("kind") in FILE_KINDS and item.get("verified") is True)
+    return item.get("kind") in RECORD_KINDS or (
+        item.get("kind") in FILE_KINDS and item.get("verified") is True
+    )
 
 
 def _counts(items: list[dict[str, Any]]) -> PackCountsOut:
     content = [i for i in items if i.get("kind") != "note"]
     return PackCountsOut(
-        total=len(content), included=sum(1 for i in content if i.get("included")),
+        total=len(content),
+        included=sum(1 for i in content if i.get("included")),
         verified=sum(1 for i in content if i.get("verified")),
-        unverified=sum(1 for i in content if not i.get("verified") and i.get("status") != "excluded_sensitive"),
+        unverified=sum(
+            1 for i in content if not i.get("verified") and i.get("status") != "excluded_sensitive"
+        ),
         excluded_sensitive=sum(1 for i in content if i.get("status") == "excluded_sensitive"),
         over_budget=sum(1 for i in content if i.get("status") == "over_budget"),
     )
@@ -174,12 +214,20 @@ def _summary_fields(pack: ContextPack, task: Task | None) -> dict[str, Any]:
     spec = PROFILES.get(pack.profile) or get_profile("standard")
     items = [i for i in pack.items or [] if isinstance(i, dict)]
     return {
-        "id": pack.id, "task_id": pack.task_id, "task_key": task_key(task) if task else None,
-        "profile": pack.profile, "profile_label": spec.label, "token_budget": spec.token_budget,
-        "token_estimate": pack.token_estimate, "over_budget": pack.token_estimate > spec.token_budget,
+        "id": pack.id,
+        "task_id": pack.task_id,
+        "task_key": task_key(task) if task else None,
+        "profile": pack.profile,
+        "profile_label": spec.label,
+        "token_budget": spec.token_budget,
+        "token_estimate": pack.token_estimate,
+        "over_budget": pack.token_estimate > spec.token_budget,
         "counts": _counts(items),
-        "repository_verified": not any(i.get("kind") == "note" and i.get("ref") == "repository" for i in items),
-        "created_by": pack.created_by, "created_at": pack.created_at,
+        "repository_verified": not any(
+            i.get("kind") == "note" and i.get("ref") == "repository" for i in items
+        ),
+        "created_by": pack.created_by,
+        "created_at": pack.created_at,
     }
 
 
@@ -191,14 +239,23 @@ def pack_out(pack: ContextPack, task: Task | None) -> ContextPackOut:
     items = [i for i in pack.items or [] if isinstance(i, dict)]
     out = []
     for item in items:
-        out.append(ContextPackItemOut(
-            key=str(item.get("key")), kind=item.get("kind") or "note", ref=str(item.get("ref") or ""),
-            title=str(item.get("title") or ""), category=str(item.get("category") or "fact"),
-            reason=str(item.get("reason") or ""), verified=bool(item.get("verified")),
-            included=bool(item.get("included")), token_estimate=int(item.get("token_estimate") or 0),
-            excerpt=str(item.get("excerpt") or ""), status=str(item.get("status") or ""),
-            origin=str(item.get("origin") or ""), can_include=can_include(item),
-        ))
+        out.append(
+            ContextPackItemOut(
+                key=str(item.get("key")),
+                kind=item.get("kind") or "note",
+                ref=str(item.get("ref") or ""),
+                title=str(item.get("title") or ""),
+                category=str(item.get("category") or "fact"),
+                reason=str(item.get("reason") or ""),
+                verified=bool(item.get("verified")),
+                included=bool(item.get("included")),
+                token_estimate=int(item.get("token_estimate") or 0),
+                excerpt=str(item.get("excerpt") or ""),
+                status=str(item.get("status") or ""),
+                origin=str(item.get("origin") or ""),
+                can_include=can_include(item),
+            )
+        )
     notes = [note_text(i) for i in items if i.get("kind") == "note"]
     return ContextPackOut(**_summary_fields(pack, task), items=out, notes=notes)
 
@@ -215,15 +272,20 @@ def _reread_file(item: dict[str, Any], profile: str) -> str:
     except (OSError, RuntimeError):
         root = None
     if root is None or not root.is_dir():
-        raise ConflictError(f"'{item.get('ref')}' cannot be included: the configured repository root is not "
-                            "accessible.")
+        raise ConflictError(
+            f"'{item.get('ref')}' cannot be included: the configured repository root is not accessible."
+        )
     res = rf.resolve_repo_path(root, item.get("ref"))
     if res.status != "ok" or res.abs_path is None:
-        raise ConflictError(f"'{item.get('ref')}' cannot be included: {res.reason or 'it is no longer a readable file.'}")
+        raise ConflictError(
+            f"'{item.get('ref')}' cannot be included: {res.reason or 'it is no longer a readable file.'}"
+        )
     status, text = rf.read_text_file(res.abs_path)
     if status != "ok" or text is None:
         raise ConflictError(f"'{item.get('ref')}' cannot be included: the file could not be read ({status}).")
-    excerpt, truncated = truncate_lines(clean(text, limit=len(text) + 1), get_profile(profile).max_item_tokens)
+    excerpt, truncated = truncate_lines(
+        clean(text, limit=len(text) + 1), get_profile(profile).max_item_tokens
+    )
     if truncated:
         item["reason"] = MANUAL_REASON + " Excerpt truncated to the profile's per-item limit."
     return excerpt
@@ -231,12 +293,17 @@ def _reread_file(item: dict[str, Any], profile: str) -> str:
 
 def _rederive_record(db: Session, task: Task | None, item: dict[str, Any]) -> str:
     if task is None:
-        raise ConflictError(f"'{item.get('ref')}' cannot be included: the task this pack was built for no longer "
-                            "exists.")
-    record = next((r for r in pack_records(collect(db, task, with_provenance=False)) if r["ref"] == item.get("ref")),
-                  None)
+        raise ConflictError(
+            f"'{item.get('ref')}' cannot be included: the task this pack was built for no longer exists."
+        )
+    record = next(
+        (r for r in pack_records(collect(db, task, with_provenance=False)) if r["ref"] == item.get("ref")),
+        None,
+    )
     if record is None:
-        raise ConflictError(f"'{item.get('ref')}' cannot be included: the record is no longer linked to the task.")
+        raise ConflictError(
+            f"'{item.get('ref')}' cannot be included: the record is no longer linked to the task."
+        )
     return clean(record.get("summary") or "", limit=4000)
 
 
@@ -250,7 +317,11 @@ def _include(db: Session, pack: ContextPack, task: Task | None, item: dict[str, 
         )
     if item.get("status") == "over_budget":
         item["reason"] = MANUAL_REASON
-        excerpt = _reread_file(item, pack.profile) if item.get("kind") in FILE_KINDS else _rederive_record(db, task, item)
+        excerpt = (
+            _reread_file(item, pack.profile)
+            if item.get("kind") in FILE_KINDS
+            else _rederive_record(db, task, item)
+        )
         if not excerpt:
             raise ConflictError(f"'{item.get('ref')}' cannot be included: it has no content.")
         item["excerpt"] = excerpt
@@ -273,8 +344,10 @@ def toggle_items(db: Session, actor: Actor, pack: ContextPack, toggles: list[tup
     by_key = {str(i.get("key")): i for i in items}
     unknown = [k for k, _ in toggles if k not in by_key]
     if unknown:
-        raise ValidationFailedError("Unknown context pack item(s): " + ", ".join(unknown[:10]),
-                                    details={"errors": [f"{k}: not in this pack" for k in unknown[:50]]})
+        raise ValidationFailedError(
+            "Unknown context pack item(s): " + ", ".join(unknown[:10]),
+            details={"errors": [f"{k}: not in this pack" for k in unknown[:50]]},
+        )
     task = pack_task(db, pack)
     changed: list[str] = []
     for key, included in toggles:
@@ -292,8 +365,13 @@ def toggle_items(db: Session, actor: Actor, pack: ContextPack, toggles: list[tup
     pack.token_estimate = sum(int(i.get("token_estimate") or 0) for i in items if i.get("included"))
     db.flush()
     if task is not None:
-        audit_task(db, actor, task, "context_pack_updated",
-                   {"context_pack_id": pack.id, "changed": len(changed), "token_estimate": pack.token_estimate})
+        audit_task(
+            db,
+            actor,
+            task,
+            "context_pack_updated",
+            {"context_pack_id": pack.id, "changed": len(changed), "token_estimate": pack.token_estimate},
+        )
     return changed
 
 
@@ -322,10 +400,21 @@ def export_pack(db: Session, actor: Actor, pack: ContextPack) -> tuple[str, str]
         "external_transfer": False,
     }
     redacted, _ = redact_value(doc)
-    append_audit(db, pack.organization_id, action="context_pack.exported", actor_type=actor.type, actor_id=actor.id,
-                 target_type="context_pack", target_id=pack.id,
-                 details={"task_id": pack.task_id, "profile": pack.profile, "format": "json",
-                          "items": out.counts.total, "included": out.counts.included})
+    append_audit(
+        db,
+        pack.organization_id,
+        action="context_pack.exported",
+        actor_type=actor.type,
+        actor_id=actor.id,
+        target_type="context_pack",
+        target_id=pack.id,
+        details={
+            "task_id": pack.task_id,
+            "profile": pack.profile,
+            "format": "json",
+            "items": out.counts.total,
+            "included": out.counts.included,
+        },
+    )
     stem = f"context-pack-{task_key(task) if task else pack.id}-{pack.profile}"
     return json.dumps(redacted, indent=2, ensure_ascii=False), _FILENAME_SAFE.sub("_", stem) + ".json"
-

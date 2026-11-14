@@ -50,7 +50,9 @@ class OrgSettingsPatch(BaseModel):
     retention_days: int | None = Field(default=None, ge=RETENTION_DAYS_RANGE[0], le=RETENTION_DAYS_RANGE[1])
     fail_mode: FailMode | None = None
     default_decision: DefaultDecision | None = None
-    approval_timeout_s: int | None = Field(default=None, ge=APPROVAL_TIMEOUT_RANGE[0], le=APPROVAL_TIMEOUT_RANGE[1])
+    approval_timeout_s: int | None = Field(
+        default=None, ge=APPROVAL_TIMEOUT_RANGE[0], le=APPROVAL_TIMEOUT_RANGE[1]
+    )
     store_previews: bool | None = None
 
     @field_validator("name")

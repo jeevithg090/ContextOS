@@ -54,11 +54,16 @@ def add_edge(
     db, org = st.db, st.ctx.org_id
     if unique:
         exists = db.scalar(
-            select(ProvenanceEdge.id).where(
-                ProvenanceEdge.organization_id == org, ProvenanceEdge.src_type == src_type,
-                ProvenanceEdge.src_id == src_id, ProvenanceEdge.dst_type == dst_type,
-                ProvenanceEdge.dst_id == dst_id, ProvenanceEdge.relation == relation,
-            ).limit(1)
+            select(ProvenanceEdge.id)
+            .where(
+                ProvenanceEdge.organization_id == org,
+                ProvenanceEdge.src_type == src_type,
+                ProvenanceEdge.src_id == src_id,
+                ProvenanceEdge.dst_type == dst_type,
+                ProvenanceEdge.dst_id == dst_id,
+                ProvenanceEdge.relation == relation,
+            )
+            .limit(1)
         )
         if exists:
             return None
@@ -122,7 +127,9 @@ def resolve_agent(st: PipelineState, ref: AgentRef) -> Agent:
     return agent
 
 
-def find_session_by_external(db: Session, org_id: str, external_id: str, agent_id: str | None = None) -> AgentSession | None:
+def find_session_by_external(
+    db: Session, org_id: str, external_id: str, agent_id: str | None = None
+) -> AgentSession | None:
     query = select(AgentSession).where(
         AgentSession.organization_id == org_id, AgentSession.external_session_id == external_id
     )
@@ -161,11 +168,22 @@ def resolve_session(
 
 def link_delegation(st: PipelineState, parent: AgentSession, child: AgentSession) -> None:
     child.parent_session_id = parent.id
-    add_edge(st, N.SESSION, parent.id, N.SESSION, child.id, R.SESSION_DELEGATED_TO, session_id=child.id, unique=True)
+    add_edge(
+        st,
+        N.SESSION,
+        parent.id,
+        N.SESSION,
+        child.id,
+        R.SESSION_DELEGATED_TO,
+        session_id=child.id,
+        unique=True,
+    )
     upsert_relationship(st, parent, child, "delegates_to")
 
 
-def upsert_relationship(st: PipelineState, parent: AgentSession, child: AgentSession, kind: str) -> AgentRelationship | None:
+def upsert_relationship(
+    st: PipelineState, parent: AgentSession, child: AgentSession, kind: str
+) -> AgentRelationship | None:
     if parent.agent_id == child.agent_id:
         return None
     db, org = st.db, st.ctx.org_id
@@ -179,8 +197,13 @@ def upsert_relationship(st: PipelineState, parent: AgentSession, child: AgentSes
     )
     if rel is None:
         rel = AgentRelationship(
-            id=new_id("agent_relationship"), organization_id=org, parent_agent_id=parent.agent_id,
-            child_agent_id=child.agent_id, relationship_type=kind, first_seen_at=st.now, event_count=0,
+            id=new_id("agent_relationship"),
+            organization_id=org,
+            parent_agent_id=parent.agent_id,
+            child_agent_id=child.agent_id,
+            relationship_type=kind,
+            first_seen_at=st.now,
+            event_count=0,
         )
         db.add(rel)
     rel.event_count = (rel.event_count or 0) + 1
@@ -219,13 +242,21 @@ def touch_integration(st: PipelineState, *, decision: bool) -> Integration | Non
     if integration is None:
         integration = st.db.scalar(
             select(Integration).where(
-                Integration.organization_id == st.ctx.org_id, Integration.kind == kind, Integration.name == kind
+                Integration.organization_id == st.ctx.org_id,
+                Integration.kind == kind,
+                Integration.name == kind,
             )
         )
         if integration is None:
             integration = Integration(
-                id=new_id("integration"), organization_id=st.ctx.org_id, kind=kind, name=kind,
-                status="connected", config={}, event_count=0, decision_count=0,
+                id=new_id("integration"),
+                organization_id=st.ctx.org_id,
+                kind=kind,
+                name=kind,
+                status="connected",
+                config={},
+                event_count=0,
+                decision_count=0,
             )
             st.db.add(integration)
             st.db.flush()
@@ -324,12 +355,20 @@ def upsert_tool(
 ) -> Tool:
     """Tool row with its server-side, argument-independent classification."""
     db, org = st.db, st.ctx.org_id
-    tool = db.scalar(select(Tool).where(Tool.organization_id == org, Tool.provider == provider, Tool.name == name))
+    tool = db.scalar(
+        select(Tool).where(Tool.organization_id == org, Tool.provider == provider, Tool.name == name)
+    )
     inherent = classify_tool(name, provider, category_hint=category_hint, server=server)
     if tool is None:
         tool = Tool(
-            id=new_id("tool"), organization_id=org, provider=provider, name=name, server=server,
-            first_seen_at=st.now, invocation_count=0, tool_metadata={},
+            id=new_id("tool"),
+            organization_id=org,
+            provider=provider,
+            name=name,
+            server=server,
+            first_seen_at=st.now,
+            invocation_count=0,
+            tool_metadata={},
         )
         db.add(tool)
     tool.category = inherent.category

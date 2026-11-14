@@ -14,18 +14,42 @@ from pydantic import BaseModel, ConfigDict
 
 # == domain.enums.TaskType
 TaskTypeName = Literal[
-    "security_vulnerability", "prompt_injection", "agent_misconfiguration", "data_exposure", "integration_bug",
-    "backend", "frontend", "performance", "feature", "tech_debt", "task",
+    "security_vulnerability",
+    "prompt_injection",
+    "agent_misconfiguration",
+    "data_exposure",
+    "integration_bug",
+    "backend",
+    "frontend",
+    "performance",
+    "feature",
+    "tech_debt",
+    "task",
 ]
 PriorityName = Literal["urgent", "high", "medium", "low", "none"]  # == domain.enums.TaskPriority
 SeverityName = Literal["critical", "high", "medium", "low", "info"]  # == domain.enums.Severity
-VerificationStatusName = Literal["unverified", "pending", "passed", "failed"]  # == domain.enums.VerificationStatus
+VerificationStatusName = Literal[
+    "unverified", "pending", "passed", "failed"
+]  # == domain.enums.VerificationStatus
 # == app.workspace.templates.STATUS_KEYS
-StatusKeyName = Literal["backlog", "todo", "investigating", "ready", "in_progress", "review", "testing", "verified", "done"]
-AutomationTriggerName = Literal["pr_linked", "verification_passed", "verification_failed", "fix_attempt_started"]
+StatusKeyName = Literal[
+    "backlog", "todo", "investigating", "ready", "in_progress", "review", "testing", "verified", "done"
+]
+AutomationTriggerName = Literal[
+    "pr_linked", "verification_passed", "verification_failed", "fix_attempt_started"
+]
 RefTypeName = Literal[
-    "finding", "incident", "event", "session", "agent", "tool_invocation", "policy_decision", "context_item",
-    "source", "approval", "destination",
+    "finding",
+    "incident",
+    "event",
+    "session",
+    "agent",
+    "tool_invocation",
+    "policy_decision",
+    "context_item",
+    "source",
+    "approval",
+    "destination",
 ]
 DependencyKindName = Literal["blocks", "relates_to"]
 AssigneeRoleName = Literal["assignee", "reviewer"]

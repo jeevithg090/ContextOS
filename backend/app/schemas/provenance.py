@@ -25,9 +25,13 @@ class GraphNodeOut(BaseModel):
     ref_id: str = Field(description="Id of the underlying record (resource ids are '<kind>:<identifier>')")
     label: str
     subtitle: str | None = Field(default=None, description="Short metadata line shown under the label")
-    session_id: str | None = Field(default=None, description="Owning session, for links to tool calls / decisions")
+    session_id: str | None = Field(
+        default=None, description="Owning session, for links to tool calls / decisions"
+    )
     trust_level: str | None = None
-    severity: str | None = Field(default=None, description="Finding severity or the item's highest detection severity")
+    severity: str | None = Field(
+        default=None, description="Finding severity or the item's highest detection severity"
+    )
     decision: str | None = None
     enforcement: str | None = None
     risk_level: str | None = None
@@ -115,15 +119,28 @@ class NodeFieldOut(BaseModel):
     key: str
     label: str
     value: FieldValue = None
-    kind: Literal["text", "mono", "datetime", "number", "bool", "list", "trust", "severity", "decision",
-                  "enforcement", "risk"] = "text"
+    kind: Literal[
+        "text",
+        "mono",
+        "datetime",
+        "number",
+        "bool",
+        "list",
+        "trust",
+        "severity",
+        "decision",
+        "enforcement",
+        "risk",
+    ] = "text"
 
 
 class NodeLinkOut(BaseModel):
     node: GraphNodeOut
     relation: str
     relation_label: str
-    direction: Literal["in", "out"] = Field(description="out: this node -> linked node; in: linked node -> this node")
+    direction: Literal["in", "out"] = Field(
+        description="out: this node -> linked node; in: linked node -> this node"
+    )
     confidence: str
     basis: EdgeBasis = "provenance_edge"
     observed_at: datetime | None = None
@@ -132,8 +149,12 @@ class NodeLinkOut(BaseModel):
 class NodeDetailOut(BaseModel):
     node: GraphNodeOut
     fields: list[NodeFieldOut]
-    notes: list[str] = Field(default_factory=list, description="Plain-language explanations recorded for this node")
-    preview: str | None = Field(default=None, description="Redacted, truncated content (item text, call arguments)")
+    notes: list[str] = Field(
+        default_factory=list, description="Plain-language explanations recorded for this node"
+    )
+    preview: str | None = Field(
+        default=None, description="Redacted, truncated content (item text, call arguments)"
+    )
     preview_label: str | None = None
     links: list[NodeLinkOut]
     link_total: int

@@ -17,8 +17,14 @@ from app.schemas.workspace_boards import TaskCardOut
 
 # == app.workspace.modes.PromptMode
 PromptModeName = Literal[
-    "investigate_only", "root_cause_analysis", "implementation_plan", "implement_fix", "security_harden",
-    "refactor", "test_and_verify", "full_autonomous_remediation",
+    "investigate_only",
+    "root_cause_analysis",
+    "implementation_plan",
+    "implement_fix",
+    "security_harden",
+    "refactor",
+    "test_and_verify",
+    "full_autonomous_remediation",
 ]
 PresetName = Literal["claude_code", "codex", "cursor", "generic"]  # == app.workspace.modes.Preset
 ProfileName = Literal["minimal", "standard", "deep", "security_critical", "full"]  # == context_pack.PROFILES
@@ -41,8 +47,11 @@ MAX_DRAFTS = 20
 class ContextPackCreate(Strict):
     task_id: str
     profile: ProfileName = "standard"
-    extra_paths: list[str] = Field(default_factory=list, max_length=MAX_EXTRA_PATHS,
-                                   description="Additional repository-relative paths to verify and include.")
+    extra_paths: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_EXTRA_PATHS,
+        description="Additional repository-relative paths to verify and include.",
+    )
 
 
 class PackItemToggle(Strict):
@@ -117,11 +126,17 @@ class SectionOut(BaseModel):
 
 class FixContextRequest(Strict):
     task_id: str
-    mode: PromptModeName | None = Field(None, description="Defaults to the template's mode, else implement_fix.")
+    mode: PromptModeName | None = Field(
+        None, description="Defaults to the template's mode, else implement_fix."
+    )
     preset: PresetName | None = Field(None, description="Defaults to the template's preset, else generic.")
-    options: dict[str, Any] = Field(default_factory=dict, description="GenerationOptions; overrides the template's.")
+    options: dict[str, Any] = Field(
+        default_factory=dict, description="GenerationOptions; overrides the template's."
+    )
     context_pack_id: str | None = None
-    profile: ProfileName | None = Field(None, description="Profile for a fresh pack when no context_pack_id is given.")
+    profile: ProfileName | None = Field(
+        None, description="Profile for a fresh pack when no context_pack_id is given."
+    )
     template_id: str | None = None
     save: bool = False
 
@@ -276,7 +291,9 @@ class BreakdownOut(BaseModel):
 class BreakdownApplyIn(Strict):
     task_id: str
     drafts: list[SubtaskDraftIn] = Field(min_length=1, max_length=MAX_DRAFTS)
-    priority: PriorityName | None = Field(None, description="Priority for the subtasks; defaults to the parent's.")
+    priority: PriorityName | None = Field(
+        None, description="Priority for the subtasks; defaults to the parent's."
+    )
     override_wip: bool = False
 
 

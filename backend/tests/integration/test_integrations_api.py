@@ -68,19 +68,40 @@ def test_capability_matrix_is_honest(client, org):
 
     claude = _catalog(body, "claude_code")
     monitored = " ".join(m["name"] for m in claude["monitoring"])
-    for hook in ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "SessionEnd", "SubagentStop"):
+    for hook in (
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "SessionEnd",
+        "SubagentStop",
+    ):
         assert hook in monitored
     assert {e["name"] for e in claude["enforcement"]} == {"PreToolUse deny", "PreToolUse ask"}
     limits = " ".join(claude["limitations"])
-    assert "reasoning" in limits and "never answers \"allow\"" in limits and "PreToolUse hook" in limits
+    assert "reasoning" in limits and 'never answers "allow"' in limits and "PreToolUse hook" in limits
 
     codex = _catalog(body, "openai_codex")
     monitored = " ".join(m["name"] for m in codex["monitoring"])
-    for hook in ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "SessionEnd", "SubagentStop"):
+    for hook in (
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "SessionEnd",
+        "SubagentStop",
+    ):
         assert hook in monitored
     assert {e["name"] for e in codex["enforcement"]} == {"PreToolUse block", "Approvals and restrictions"}
     limits = " ".join(codex["limitations"])
-    for gap in ("web search", "write_stdin", "untrusted", "failed calls", "never grants approval", "fail mode"):
+    for gap in (
+        "web search",
+        "write_stdin",
+        "untrusted",
+        "failed calls",
+        "never grants approval",
+        "fail mode",
+    ):
         assert gap in limits, gap
     assert codex["docs_path"] == "docs/integrations/codex.md"
 
@@ -123,15 +144,22 @@ def test_claude_code_traffic_marks_integration_connected_with_counts(client, see
 
 
 def test_observed_tool_requests_count_as_observed_decisions(client, seeded_org):
-    post_events(client, seeded_org.api_headers,
-                tool_requested("Read", {"file_path": "/work/app/src/a.py"}, integration="mcp_gateway"))
+    post_events(
+        client,
+        seeded_org.api_headers,
+        tool_requested("Read", {"file_path": "/work/app/src/a.py"}, integration="mcp_gateway"),
+    )
     row = _connected(_get(client, seeded_org.user_headers), "mcp_gateway")
     assert row["decisions"] == {"enforced": 0, "advisory": 0, "observed": 1}
     assert row["decision_count"] == 0  # only /decide requests count as decisions asked before the tool ran
 
 
 def test_uncatalogued_integration_is_listed_as_advisory(client, seeded_org):
-    decide(client, seeded_org.api_headers, tool_requested("Read", {"file_path": "/tmp/x"}, integration="homegrown"))
+    decide(
+        client,
+        seeded_org.api_headers,
+        tool_requested("Read", {"file_path": "/tmp/x"}, integration="homegrown"),
+    )
     decide(client, seeded_org.api_headers, tool_requested("Read", {"file_path": "/tmp/y"}, integration=""))
     body = _get(client, seeded_org.user_headers)
     home = _connected(body, "homegrown")
@@ -144,8 +172,9 @@ def test_uncatalogued_integration_is_listed_as_advisory(client, seeded_org):
 
 def test_stale_and_never_seen_health(client, org, db):
     post_events(client, org.api_headers, event("session.started", integration="python_sdk"))
-    row = db.scalar(select(Integration).where(Integration.organization_id == org.org_id,
-                                              Integration.kind == "python_sdk"))
+    row = db.scalar(
+        select(Integration).where(Integration.organization_id == org.org_id, Integration.kind == "python_sdk")
+    )
     row.last_event_at = utcnow() - timedelta(hours=25)
     db.commit()
     entry = _connected(_get(client, org.user_headers), "python_sdk")
@@ -161,8 +190,9 @@ def test_stale_and_never_seen_health(client, org, db):
 
 def test_integrations_page_and_overview_share_one_staleness_rule(client, org, db):
     post_events(client, org.api_headers, event("session.started", integration="python_sdk"))
-    row = db.scalar(select(Integration).where(Integration.organization_id == org.org_id,
-                                              Integration.kind == "python_sdk"))
+    row = db.scalar(
+        select(Integration).where(Integration.organization_id == org.org_id, Integration.kind == "python_sdk")
+    )
     for age, expected in ((timedelta(hours=2), "connected"), (timedelta(hours=30), "stale")):
         row.last_event_at = utcnow() - age
         db.commit()
@@ -175,8 +205,11 @@ def test_integrations_page_and_overview_share_one_staleness_rule(client, org, db
 def test_connected_sorted_by_health_then_recency(client, org, db):
     post_events(client, org.api_headers, event("session.started", integration="python_sdk", session="a"))
     post_events(client, org.api_headers, event("session.started", integration="mcp_gateway", session="b"))
-    row = db.scalar(select(Integration).where(Integration.organization_id == org.org_id,
-                                              Integration.kind == "mcp_gateway"))
+    row = db.scalar(
+        select(Integration).where(
+            Integration.organization_id == org.org_id, Integration.kind == "mcp_gateway"
+        )
+    )
     row.last_event_at = utcnow() - timedelta(hours=2)
     db.commit()
     kinds = [i["kind"] for i in _get(client, org.user_headers)["connected"]]
@@ -272,17 +305,29 @@ def test_codex_setup_installs_hooks_and_asks_for_trust_in_codex(client, org):
     assert "/hooks" in trust["description"] and any(c["code"] == "/hooks" for c in trust["commands"])
     hooks = json.loads(next(c["code"] for c in _commands(guide) if c["language"] == "json"))["hooks"]
     assert hooks["PreToolUse"][0]["matcher"] == "*"
-    assert hooks["PreToolUse"][0]["hooks"][0] == {"type": "command", "command": "contextos codex-hook PreToolUse",
-                                                   "timeout": 60}
+    assert hooks["PreToolUse"][0]["hooks"][0] == {
+        "type": "command",
+        "command": "contextos codex-hook PreToolUse",
+        "timeout": 60,
+    }
     assert hooks["SessionEnd"][0]["hooks"][0]["timeout"] == 3  # Codex clamps SessionEnd hooks to 3 s
-    assert set(hooks) == {"PreToolUse", "PostToolUse", "UserPromptSubmit", "SessionStart", "SubagentStop",
-                          "SessionEnd"}
+    assert set(hooks) == {
+        "PreToolUse",
+        "PostToolUse",
+        "UserPromptSubmit",
+        "SessionStart",
+        "SubagentStop",
+        "SessionEnd",
+    }
     gateway = next(c for c in _commands(guide) if c["language"] == "toml")
     assert "[mcp_servers.toolbox]" in gateway["code"] and "mcp-gateway" in gateway["code"]
     assert guide["docs_path"] == "docs/integrations/codex.md"
     assert "Enforced" in guide["verification"]
-    assert {s["scope"]: s["required"] for s in guide["api_key_scopes"]} == {"ingest": True, "decide": True,
-                                                                             "read": False}
+    assert {s["scope"]: s["required"] for s in guide["api_key_scopes"]} == {
+        "ingest": True,
+        "decide": True,
+        "read": False,
+    }
 
 
 def test_codex_setup_explains_that_ask_blocks(client, org, db):
@@ -325,18 +370,24 @@ def test_setup_guides_use_the_organisations_fail_mode(client, org, db):
     db.commit()
     sdk = _setup(client, org, "python_sdk")
     assert sdk["fail_mode"] == "closed"
-    assert any("contextos init --url http://testserver --api-key ctxk_your_key --fail-mode closed" in c["code"]
-               for c in _commands(sdk))
+    assert any(
+        "contextos init --url http://testserver --api-key ctxk_your_key --fail-mode closed" in c["code"]
+        for c in _commands(sdk)
+    )
     hook = _setup(client, org, "claude_code")
     codes = [c["code"] for c in _commands(hook)]
     assert "export CONTEXTOS_HOOK_FAIL_MODE=closed" in codes
-    assert json.loads(next(c["code"] for c in _commands(hook) if c["language"] == "json"))["hooks"]  # hooks first
+    assert json.loads(next(c["code"] for c in _commands(hook) if c["language"] == "json"))[
+        "hooks"
+    ]  # hooks first
 
     org_row.settings = {**org_row.settings, "fail_mode": "ask"}
     db.commit()
     gateway = _setup(client, org, "mcp_gateway")
     init = next(s for s in gateway["steps"] if s["title"].startswith("Connect the project"))
-    assert "--fail-mode ask" in init["commands"][0]["code"] and "treats 'ask' as 'closed'" in init["description"]
+    assert (
+        "--fail-mode ask" in init["commands"][0]["code"] and "treats 'ask' as 'closed'" in init["description"]
+    )
 
 
 def test_setup_guide_defaults_to_the_server_default_fail_mode(client, org):

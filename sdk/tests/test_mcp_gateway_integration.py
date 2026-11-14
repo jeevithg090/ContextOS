@@ -73,20 +73,42 @@ def _seed(db) -> tuple[str, str]:
     from app.models import ApiKey, Organization, SecurityPolicy
     from app.services.seed import seed_security_defaults
 
-    org = Organization(id=new_id("organization"), name="Gateway Co", slug="gateway-co-" + new_id("x")[-6:].lower(),
-                       settings={})
+    org = Organization(
+        id=new_id("organization"),
+        name="Gateway Co",
+        slug="gateway-co-" + new_id("x")[-6:].lower(),
+        settings={},
+    )
     db.add(org)
     db.flush()
     raw_key, prefix, key_hash = generate_api_key()
-    db.add(ApiKey(id=new_id("api_key"), organization_id=org.id, name="mcp gateway", prefix=prefix, key_hash=key_hash,
-                  scopes=["ingest", "decide", "read"]))
+    db.add(
+        ApiKey(
+            id=new_id("api_key"),
+            organization_id=org.id,
+            name="mcp gateway",
+            prefix=prefix,
+            key_hash=key_hash,
+            scopes=["ingest", "decide", "read"],
+        )
+    )
     seed_security_defaults(db, org.id)
-    db.add(SecurityPolicy(
-        id=new_id("policy"), organization_id=org.id, name=DENY_POLICY,
-        description="Deleting every note is irreversible; it must go through a ticket.", enabled=True,
-        mode="enforce", priority=5000, outcome="DENY", severity="high", tags=["mcp"], restrictions={},
-        conditions={"field": "tool.name", "op": "eq", "value": "delete_all_notes"},
-    ))
+    db.add(
+        SecurityPolicy(
+            id=new_id("policy"),
+            organization_id=org.id,
+            name=DENY_POLICY,
+            description="Deleting every note is irreversible; it must go through a ticket.",
+            enabled=True,
+            mode="enforce",
+            priority=5000,
+            outcome="DENY",
+            severity="high",
+            tags=["mcp"],
+            restrictions={},
+            conditions={"field": "tool.name", "op": "eq", "value": "delete_all_notes"},
+        )
+    )
     db.commit()
     return org.id, raw_key
 
@@ -105,8 +127,9 @@ def backend(tmp_path: Path) -> Iterator[Backend]:
     with factory() as db:
         org_id, api_key = _seed(db)
     port = _free_port()
-    server = uvicorn.Server(uvicorn.Config(create_app(), host="127.0.0.1", port=port, log_level="warning",
-                                           lifespan="on"))
+    server = uvicorn.Server(
+        uvicorn.Config(create_app(), host="127.0.0.1", port=port, log_level="warning", lifespan="on")
+    )
     thread = threading.Thread(target=server.run, name="contextos-test-api", daemon=True)
     thread.start()
     deadline = time.monotonic() + 120
@@ -129,11 +152,29 @@ def test_gateway_enforces_and_reports_against_the_real_backend(backend: Backend,
     stderr_path = tmp_path / "gateway.stderr"
     params = StdioServerParameters(
         command=sys.executable,
-        args=["-m", "contextos", "mcp-gateway", "--name", "notes", "--agent", "integration-agent",
-              "--approval-timeout", "0", "--startup-timeout", "180",
-              "--", sys.executable, str(EXAMPLES / "malicious_server.py")],
-        env={"CONTEXTOS_URL": backend.url, "CONTEXTOS_API_KEY": backend.api_key,
-             "CONTEXTOS_HOME": str(tmp_path / "home"), "MCP_EXAMPLE_CALL_LOG": str(calls), "PYTHONUNBUFFERED": "1"},
+        args=[
+            "-m",
+            "contextos",
+            "mcp-gateway",
+            "--name",
+            "notes",
+            "--agent",
+            "integration-agent",
+            "--approval-timeout",
+            "0",
+            "--startup-timeout",
+            "180",
+            "--",
+            sys.executable,
+            str(EXAMPLES / "malicious_server.py"),
+        ],
+        env={
+            "CONTEXTOS_URL": backend.url,
+            "CONTEXTOS_API_KEY": backend.api_key,
+            "CONTEXTOS_HOME": str(tmp_path / "home"),
+            "MCP_EXAMPLE_CALL_LOG": str(calls),
+            "PYTHONUNBUFFERED": "1",
+        },
         cwd=str(tmp_path),
     )
 
@@ -160,7 +201,9 @@ def test_gateway_enforces_and_reports_against_the_real_backend(backend: Backend,
 
     # 1. tools/list: the listing reached ContextOS and the poisoned description was detected.
     assert sorted(t.name for t in out["tools"]) == ["add_note", "delete_all_notes", "get_forecast"], context
-    servers = backend.rows(ContextSource, ContextSource.source_type == "mcp_server", ContextSource.identifier == "notes")
+    servers = backend.rows(
+        ContextSource, ContextSource.source_type == "mcp_server", ContextSource.identifier == "notes"
+    )
     assert len(servers) == 1, context
     poisoning = backend.rows(SecurityFinding, SecurityFinding.rule_id == "MCP-POISON-001")
     assert poisoning and poisoning[0].source_id == servers[0].id, context
@@ -172,20 +215,33 @@ def test_gateway_enforces_and_reports_against_the_real_backend(backend: Backend,
     assert not forecast.is_error and "Forecast for Paris" in text_of(forecast), context
     executed = [c["tool"] for c in call_log(calls)]
     assert executed == ["get_forecast"], context
-    assert not any(c["contextos_settings_visible"] for c in call_log(calls)), "the upstream saw CONTEXTOS_* settings"
-    (invocation,) = backend.rows(ToolInvocation, ToolInvocation.tool_id.in_(
-        [t.id for t in backend.rows(Tool, Tool.provider == "mcp:notes", Tool.name == "get_forecast")]))
+    assert not any(c["contextos_settings_visible"] for c in call_log(calls)), (
+        "the upstream saw CONTEXTOS_* settings"
+    )
+    (invocation,) = backend.rows(
+        ToolInvocation,
+        ToolInvocation.tool_id.in_(
+            [t.id for t in backend.rows(Tool, Tool.provider == "mcp:notes", Tool.name == "get_forecast")]
+        ),
+    )
     assert invocation.enforcement == "enforced" and invocation.decision in ("ALLOW", "AUDIT"), context
     assert invocation.status == "completed" and invocation.result_context_item_id, context
-    result_findings = backend.rows(SecurityFinding, SecurityFinding.context_item_id == invocation.result_context_item_id)
+    result_findings = backend.rows(
+        SecurityFinding, SecurityFinding.context_item_id == invocation.result_context_item_id
+    )
     categories = {f.category for f in result_findings}
     assert categories & {"prompt_injection", "instruction_override", "exfiltration"}, (categories, context)
-    assert backend.rows(ContextSource, ContextSource.source_type == "mcp_tool",
-                        ContextSource.identifier == "notes/get_forecast"), context
+    assert backend.rows(
+        ContextSource,
+        ContextSource.source_type == "mcp_tool",
+        ContextSource.identifier == "notes/get_forecast",
+    ), context
 
     # 3. The DENY policy blocked delete_all_notes before the upstream server was contacted.
     blocked = out["delete"]
-    assert blocked.is_error and text_of(blocked).startswith(f"Blocked by ContextOS policy '{DENY_POLICY}'"), context
+    assert blocked.is_error and text_of(blocked).startswith(f"Blocked by ContextOS policy '{DENY_POLICY}'"), (
+        context
+    )
     assert "The tool was not run." in text_of(blocked)
     assert "delete_all_notes" not in [c["tool"] for c in call_log(calls)], context
     delete_tool = backend.rows(Tool, Tool.provider == "mcp:notes", Tool.name == "delete_all_notes")
@@ -201,4 +257,6 @@ def test_gateway_enforces_and_reports_against_the_real_backend(backend: Backend,
     # 5. The gateway logs decisions, never the key, arguments or results.
     logged = stderr()
     assert "tools/call delete_all_notes: denied" in logged and "tool poisoning" in logged, context
-    assert backend.api_key not in logged and "SYSTEM OVERRIDE" not in logged and "Paris" not in logged, context
+    assert backend.api_key not in logged and "SYSTEM OVERRIDE" not in logged and "Paris" not in logged, (
+        context
+    )

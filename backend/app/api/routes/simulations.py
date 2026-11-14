@@ -44,13 +44,23 @@ def _runner(principal: Principal = Depends(get_principal)) -> Principal:
 
 def _check_agent(principal: Principal, agent_id: str | None) -> None:
     if principal.bound_agent_id and agent_id != principal.bound_agent_id:
-        raise PermissionDeniedError("This API key is bound to one agent; pass that agent's agent_id to simulate it")
+        raise PermissionDeniedError(
+            "This API key is bound to one agent; pass that agent's agent_id to simulate it"
+        )
 
 
 def _scenario_out(s: Scenario) -> ScenarioOut:
-    return ScenarioOut(id=s.id, name=s.name, description=s.description, category=s.category, use_case=s.use_case,
-                       demo=s.demo, tags=list(s.tags), steps=s.step_labels(),
-                       checks=[ScenarioCheckOut(id=e.id, description=e.description) for e in s.expectations])
+    return ScenarioOut(
+        id=s.id,
+        name=s.name,
+        description=s.description,
+        category=s.category,
+        use_case=s.use_case,
+        demo=s.demo,
+        tags=list(s.tags),
+        steps=s.step_labels(),
+        checks=[ScenarioCheckOut(id=e.id, description=e.description) for e in s.expectations],
+    )
 
 
 def _run_out(run: SimulationRun) -> SimulationRunOut:
@@ -72,11 +82,20 @@ def get_scenario(scenario_id: str, _: Principal = Depends(require(Permission.REA
 
 
 @router.post("/runs", response_model=SimulationRunOut, status_code=201)
-def start_run(body: RunIn, principal: Principal = Depends(_runner), db: Session = Depends(get_db)) -> SimulationRunOut:
+def start_run(
+    body: RunIn, principal: Principal = Depends(_runner), db: Session = Depends(get_db)
+) -> SimulationRunOut:
     _check_agent(principal, body.agent_id)
-    run = sims.run_scenario(db, principal.org_id, body.scenario_id, triggered_by_user_id=principal.user_id,
-                            agent_id=body.agent_id, agent_version=body.agent_version,
-                            actor_type=principal.actor_type, actor_id=principal.actor_id)
+    run = sims.run_scenario(
+        db,
+        principal.org_id,
+        body.scenario_id,
+        triggered_by_user_id=principal.user_id,
+        agent_id=body.agent_id,
+        agent_version=body.agent_version,
+        actor_type=principal.actor_type,
+        actor_id=principal.actor_id,
+    )
     db.commit()
     return _run_out(run)
 
@@ -103,47 +122,71 @@ def list_runs(
         query = query.where(SimulationRun.agent_id == agent_id)
     if passed is not None:
         query = query.where(SimulationRun.passed.is_(passed))
-    items, total = paginate(db, query.order_by(SimulationRun.started_at.desc(), SimulationRun.id.desc()),
-                            limit=limit, offset=offset)
+    items, total = paginate(
+        db,
+        query.order_by(SimulationRun.started_at.desc(), SimulationRun.id.desc()),
+        limit=limit,
+        offset=offset,
+    )
     return Page[SimulationRunOut](items=[_run_out(r) for r in items], total=total, limit=limit, offset=offset)
 
 
 @router.get("/runs/{run_id}", response_model=SimulationRunOut)
-def get_run(run_id: str, principal: Principal = Depends(require(Permission.READ.value)),
-            db: Session = Depends(get_db)) -> SimulationRunOut:
+def get_run(
+    run_id: str, principal: Principal = Depends(require(Permission.READ.value)), db: Session = Depends(get_db)
+) -> SimulationRunOut:
     run = get_scoped(db, SimulationRun, run_id, principal.org_id, label="Simulation run")
     check_bound_agent(principal, run.agent_id, label="Simulation run", obj_id=run_id)
     return _run_out(run)
 
 
 @router.post("/suites", response_model=SuiteOut, status_code=201)
-def start_suite(body: SuiteIn, principal: Principal = Depends(_runner), db: Session = Depends(get_db)) -> SuiteOut:
+def start_suite(
+    body: SuiteIn, principal: Principal = Depends(_runner), db: Session = Depends(get_db)
+) -> SuiteOut:
     _check_agent(principal, body.agent_id)
-    _, runs = sims.run_suite(db, principal.org_id, body.scenario_ids, agent_id=body.agent_id,
-                             agent_version=body.agent_version, triggered_by_user_id=principal.user_id,
-                             actor_type=principal.actor_type, actor_id=principal.actor_id)
+    _, runs = sims.run_suite(
+        db,
+        principal.org_id,
+        body.scenario_ids,
+        agent_id=body.agent_id,
+        agent_version=body.agent_version,
+        triggered_by_user_id=principal.user_id,
+        actor_type=principal.actor_type,
+        actor_id=principal.actor_id,
+    )
     db.commit()
     return SuiteOut(**suites.suite_summary(runs), runs=[_run_out(r) for r in runs])
 
 
 @router.get("/suites", response_model=Page[SuiteSummaryOut])
-def list_suites(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
-                principal: Principal = Depends(require_org_wide(Permission.READ.value)),
-                db: Session = Depends(get_db)) -> Page[SuiteSummaryOut]:
+def list_suites(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    principal: Principal = Depends(require_org_wide(Permission.READ.value)),
+    db: Session = Depends(get_db),
+) -> Page[SuiteSummaryOut]:
     rows, total = suites.list_suites(db, principal.org_id, limit=limit, offset=offset)
-    return Page[SuiteSummaryOut](items=[SuiteSummaryOut(**r) for r in rows], total=total, limit=limit, offset=offset)
+    return Page[SuiteSummaryOut](
+        items=[SuiteSummaryOut(**r) for r in rows], total=total, limit=limit, offset=offset
+    )
 
 
 @router.get("/suites/compare", response_model=SuiteCompareOut)
-def compare(base: str = Query(..., max_length=40), head: str = Query(..., max_length=40),
-            principal: Principal = Depends(require_org_wide(Permission.READ.value)),
-            db: Session = Depends(get_db)) -> SuiteCompareOut:
+def compare(
+    base: str = Query(..., max_length=40),
+    head: str = Query(..., max_length=40),
+    principal: Principal = Depends(require_org_wide(Permission.READ.value)),
+    db: Session = Depends(get_db),
+) -> SuiteCompareOut:
     return SuiteCompareOut(**suites.compare_suites(db, principal.org_id, base, head))
 
 
 @router.get("/suites/{suite_run_id}", response_model=SuiteOut)
-def get_suite(suite_run_id: str, principal: Principal = Depends(require_org_wide(Permission.READ.value)),
-              db: Session = Depends(get_db)) -> SuiteOut:
+def get_suite(
+    suite_run_id: str,
+    principal: Principal = Depends(require_org_wide(Permission.READ.value)),
+    db: Session = Depends(get_db),
+) -> SuiteOut:
     runs = suites.suite_runs(db, principal.org_id, suite_run_id)
     return SuiteOut(**suites.suite_summary(runs), runs=[_run_out(r) for r in runs])
-

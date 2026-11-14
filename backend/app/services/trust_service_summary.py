@@ -23,9 +23,12 @@ TOP_SOURCES = 8
 _CANDIDATES = 200
 
 
-def _distribution(db: Session, model: type[Any], column: Any, org_id: str, *where: Any) -> tuple[int, dict[str, int]]:
-    rows = db.execute(select(column, func.count()).where(model.organization_id == org_id, *where)
-                      .group_by(column)).all()
+def _distribution(
+    db: Session, model: type[Any], column: Any, org_id: str, *where: Any
+) -> tuple[int, dict[str, int]]:
+    rows = db.execute(
+        select(column, func.count()).where(model.organization_id == org_id, *where).group_by(column)
+    ).all()
     by_level = {level: 0 for level in TRUST_RANK}
     for level, count in rows:
         by_level[str(level)] = by_level.get(str(level), 0) + int(count)
@@ -33,7 +36,9 @@ def _distribution(db: Session, model: type[Any], column: Any, org_id: str, *wher
 
 
 def _count(db: Session, model: type[Any], org_id: str, *where: Any) -> int:
-    return int(db.scalar(select(func.count()).select_from(model).where(model.organization_id == org_id, *where)) or 0)
+    return int(
+        db.scalar(select(func.count()).select_from(model).where(model.organization_id == org_id, *where)) or 0
+    )
 
 
 def summary(db: Session, org_id: str, *, include_simulated: bool = False) -> dict[str, Any]:
@@ -43,13 +48,21 @@ def summary(db: Session, org_id: str, *, include_simulated: bool = False) -> dic
     dst = [] if include_simulated else [real_destination_filter(org_id)]
     total_sources, source_levels = _distribution(db, ContextSource, ContextSource.trust_level, org_id, *src)
     total_dests, dest_levels = _distribution(db, Destination, Destination.classification, org_id, *dst)
-    rules = db.execute(select(TrustRule.applies_to, TrustRule.enabled).where(TrustRule.organization_id == org_id)).all()
+    rules = db.execute(
+        select(TrustRule.applies_to, TrustRule.enabled).where(TrustRule.organization_id == org_id)
+    ).all()
 
-    candidates = list(db.scalars(
-        scoped(ContextSource, org_id).where(ContextSource.finding_count > 0, *src)
-        .order_by(ContextSource.finding_count.desc(), ContextSource.last_seen_at.desc()).limit(_CANDIDATES)
-    ))
-    candidates.sort(key=lambda s: (-SEVERITY_RANK.get(s.max_finding_severity or "", -1), -(s.finding_count or 0)))
+    candidates = list(
+        db.scalars(
+            scoped(ContextSource, org_id)
+            .where(ContextSource.finding_count > 0, *src)
+            .order_by(ContextSource.finding_count.desc(), ContextSource.last_seen_at.desc())
+            .limit(_CANDIDATES)
+        )
+    )
+    candidates.sort(
+        key=lambda s: (-SEVERITY_RANK.get(s.max_finding_severity or "", -1), -(s.finding_count or 0))
+    )
     return {
         "sources": {
             "total": total_sources,
@@ -62,7 +75,9 @@ def summary(db: Session, org_id: str, *, include_simulated: bool = False) -> dic
             "total": total_dests,
             "by_level": dest_levels,
             "with_blocked_calls": _count(db, Destination, org_id, Destination.blocked_count > 0, *dst),
-            "with_sensitive_transfers": _count(db, Destination, org_id, Destination.sensitive_transfer_count > 0, *dst),
+            "with_sensitive_transfers": _count(
+                db, Destination, org_id, Destination.sensitive_transfer_count > 0, *dst
+            ),
         },
         "rules": {
             "total": len(rules),

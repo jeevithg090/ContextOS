@@ -24,8 +24,11 @@ from .mapping import HookInput
 
 
 def _child(record: dict[str, Any], agent: AgentRef) -> AgentRef:
-    return AgentRef(name=str(record.get("child_agent") or f"{agent.name}/subagent")[:200],
-                    framework=mapping.FRAMEWORK, environment=agent.environment)
+    return AgentRef(
+        name=str(record.get("child_agent") or f"{agent.name}/subagent")[:200],
+        framework=mapping.FRAMEWORK,
+        environment=agent.environment,
+    )
 
 
 def observation_events(h: HookInput, agent: AgentRef, *, max_result_chars: int) -> list[EventEnvelope]:
@@ -40,16 +43,23 @@ def observation_events(h: HookInput, agent: AgentRef, *, max_result_chars: int) 
         events = [mapping.tool_result(h, agent, max_result_chars=max_result_chars)]
         if h.is_delegation and (launched := h.launched_agent_id):
             record = RECORDS.get(DELEGATIONS, f"tool:{h.session_id}:{h.correlation_id}") or {
-                "child_agent": mapping.child_agent(agent, h).name, "child_session_id": mapping.child_session_id(h)}
+                "child_agent": mapping.child_agent(agent, h).name,
+                "child_session_id": mapping.child_session_id(h),
+            }
             RECORDS.put(DELEGATIONS, f"agent:{h.session_id}:{launched}", dict(record))
         return events
     if h.event == "SubagentStop":
         agent_id = h.subagent_id
-        record = RECORDS.get(DELEGATIONS, f"agent:{h.session_id}:{agent_id}", remove=True) if agent_id else None
+        record = (
+            RECORDS.get(DELEGATIONS, f"agent:{h.session_id}:{agent_id}", remove=True) if agent_id else None
+        )
         if not record or not record.get("child_session_id"):
             return []  # a sub-agent ContextOS did not see being delegated (or already closed)
-        return [mapping.child_session_closed(h, _child(record, agent), str(record["child_session_id"]),
-                                             "subagent_stopped")]
+        return [
+            mapping.child_session_closed(
+                h, _child(record, agent), str(record["child_session_id"]), "subagent_stopped"
+            )
+        ]
     if h.event == "SessionEnd":
         return [mapping.session_ended(h, agent)]
     return []

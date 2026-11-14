@@ -18,14 +18,24 @@ API = "/api/v1/workspace"
 
 def add_member(db: Session, org_id: str, role: str, name: str = "Member") -> tuple[str, dict[str, str]]:
     """Add a user with ``role`` to an existing organisation. Returns ``(user_id, session headers)``."""
-    user = User(id=new_id("user"), email=f"{new_id('x').lower()}@example.test", name=name,
-                password_hash=hash_password("correct-horse-battery-staple"))
+    user = User(
+        id=new_id("user"),
+        email=f"{new_id('x').lower()}@example.test",
+        name=name,
+        password_hash=hash_password("correct-horse-battery-staple"),
+    )
     db.add(user)
     db.flush()
     db.add(Membership(id=new_id("membership"), organization_id=org_id, user_id=user.id, role=role))
     token, token_hash = generate_session_token()
-    db.add(AuthSession(id=new_id("auth_session"), user_id=user.id, token_hash=token_hash,
-                       expires_at=utcnow() + timedelta(hours=1)))
+    db.add(
+        AuthSession(
+            id=new_id("auth_session"),
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=utcnow() + timedelta(hours=1),
+        )
+    )
     db.commit()
     return user.id, {"Authorization": f"Bearer {token}", "X-Requested-With": "contextos"}
 
@@ -48,7 +58,9 @@ def column(board: dict[str, Any], name: str) -> dict[str, Any]:
     return next(c for c in board["columns"] if c["name"] == name)
 
 
-def create_task(client: TestClient, headers: dict[str, str], title: str = "Fix the thing", **fields: Any) -> dict:
+def create_task(
+    client: TestClient, headers: dict[str, str], title: str = "Fix the thing", **fields: Any
+) -> dict:
     return ok(client.post(f"{API}/tasks", json={"title": title, **fields}, headers=headers), 201)
 
 
@@ -60,7 +72,9 @@ def get_task(client: TestClient, headers: dict[str, str], task_id: str) -> dict[
     return ok(client.get(f"{API}/tasks/{task_id}", headers=headers))
 
 
-def verify(client: TestClient, headers: dict[str, str], task_id: str, status: str = "passed", **kw: Any) -> dict:
+def verify(
+    client: TestClient, headers: dict[str, str], task_id: str, status: str = "passed", **kw: Any
+) -> dict:
     body = {"kind": "test_run", "status": status, "summary": f"pytest {status}", **kw}
     return ok(client.post(f"{API}/tasks/{task_id}/verifications", json=body, headers=headers), 201)
 

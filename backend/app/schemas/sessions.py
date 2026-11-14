@@ -160,7 +160,9 @@ class TimelineEntryOut(BaseModel):
     trust_level: str | None = None
     decision: str | None = None
     enforcement: str | None = None
-    explanation: str | None = Field(default=None, description="The recorded policy decision explanation (tool requests)")
+    explanation: str | None = Field(
+        default=None, description="The recorded policy decision explanation (tool requests)"
+    )
     severity: str | None = None
     processing_status: str
     from_other_session: bool = Field(

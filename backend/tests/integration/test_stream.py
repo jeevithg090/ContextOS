@@ -32,7 +32,9 @@ async def bound_bus():
 
 
 def _ctx(org) -> IngestContext:
-    return IngestContext(org_id=org.org_id, actor_type="api_key", actor_id=org.api_key_id, api_key_id=org.api_key_id)
+    return IngestContext(
+        org_id=org.org_id, actor_type="api_key", actor_id=org.api_key_id, api_key_id=org.api_key_id
+    )
 
 
 def _ingest(db, org, content: str) -> None:
@@ -119,8 +121,14 @@ def _session_principal(db, org) -> Principal:
     from app.models import AuthSession
 
     auth = db.scalar(select(AuthSession).where(AuthSession.token_hash == hash_token(org.session_token)))
-    return Principal(org_id=org.org_id, kind="user", permissions={"read"}, user_id=org.user_id, role="owner",
-                     auth_session_id=auth.id)
+    return Principal(
+        org_id=org.org_id,
+        kind="user",
+        permissions={"read"},
+        user_id=org.user_id,
+        role="owner",
+        auth_session_id=auth.id,
+    )
 
 
 async def _drain(stream: AsyncIterator[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -149,11 +157,15 @@ async def test_stream_ends_when_its_credential_stops_being_valid(bound_bus, db, 
     async def connected() -> bool:
         return False
 
-    stream = events_route.live_messages(org.org_id, connected, idle_check_s=0.05, still_authorized=still_authorized)
+    stream = events_route.live_messages(
+        org.org_id, connected, idle_check_s=0.05, still_authorized=still_authorized
+    )
     assert await _next(stream) == {"type": "stream.connected"}
     with pytest.raises(TimeoutError):  # still valid: the stream stays open
         await _next(stream, timeout=0.3)
-    stream = events_route.live_messages(org.org_id, connected, idle_check_s=0.05, still_authorized=still_authorized)
+    stream = events_route.live_messages(
+        org.org_id, connected, idle_check_s=0.05, still_authorized=still_authorized
+    )
     assert await _next(stream) == {"type": "stream.connected"}
 
     if revoke == "logout":
@@ -183,7 +195,9 @@ async def test_stream_ends_when_its_api_key_is_revoked(bound_bus, db, org):
     async def connected() -> bool:
         return False
 
-    stream = events_route.live_messages(org.org_id, connected, idle_check_s=0.05, still_authorized=still_authorized)
+    stream = events_route.live_messages(
+        org.org_id, connected, idle_check_s=0.05, still_authorized=still_authorized
+    )
     assert await _next(stream) == {"type": "stream.connected"}
     db.get(ApiKey, org.api_key_id).revoked_at = utcnow()
     db.commit()

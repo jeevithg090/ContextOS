@@ -31,8 +31,13 @@ SDK_ROOT = Path(__file__).resolve().parents[1]
 def env(tmp_path: Path) -> dict[str, str]:
     project = tmp_path / "shop-api"
     project.mkdir()
-    return {"CONTEXTOS_HOME": str(tmp_path / "ctxhome"), "CONTEXTOS_URL": BASE_URL, "CONTEXTOS_API_KEY": API_KEY,
-            "CLAUDE_PROJECT_DIR": str(project), "HOME": str(tmp_path / "home")}
+    return {
+        "CONTEXTOS_HOME": str(tmp_path / "ctxhome"),
+        "CONTEXTOS_URL": BASE_URL,
+        "CONTEXTOS_API_KEY": API_KEY,
+        "CLAUDE_PROJECT_DIR": str(project),
+        "HOME": str(tmp_path / "home"),
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -48,16 +53,23 @@ def server() -> FakeServer:
 
 def factory(server: FakeServer):
     """Hook client bound to the in-process fake server (spool under the isolated CONTEXTOS_HOME)."""
+
     def make(cfg: HookConfig, budget: float):
         return server.client(Path(os.environ["CONTEXTOS_HOME"]), agent=mapping.agent_ref(cfg.agent_name))
+
     return make
 
 
 def call(event: str, payload: Any, env: dict[str, str], server: FakeServer, **kw: Any) -> tuple[int, str]:
     raw = payload if isinstance(payload, bytes) else P.as_bytes(payload)
     out = io.StringIO()
-    code = hook.main(event, stdin=io.BytesIO(raw), stdout=out, env=kw.pop("env_override", env),
-                     client_factory=kw.pop("client_factory", factory(server)))
+    code = hook.main(
+        event,
+        stdin=io.BytesIO(raw),
+        stdout=out,
+        env=kw.pop("env_override", env),
+        client_factory=kw.pop("client_factory", factory(server)),
+    )
     return code, out.getvalue()
 
 
@@ -80,7 +92,12 @@ def test_observation_hooks_print_nothing_and_report(env: dict[str, str], server:
     for payload in (P.SESSION_START, P.USER_PROMPT, P.POST_READ, P.POST_FAILURE, P.SESSION_END):
         assert call(payload["hook_event_name"], payload, env, server) == (0, "")
     assert [e["event_type"] for e in server.events()] == [
-        "session.started", "prompt.submitted", "tool.completed", "tool.failed", "session.ended"]
+        "session.started",
+        "prompt.submitted",
+        "tool.completed",
+        "tool.failed",
+        "session.ended",
+    ]
 
 
 def test_post_tool_use_after_an_ask_carries_the_host_prompt(env: dict[str, str], server: FakeServer) -> None:
@@ -99,8 +116,9 @@ def test_post_tool_use_after_an_ask_carries_the_host_prompt(env: dict[str, str],
 def test_configured_agent_name_and_fail_mode(env: dict[str, str], server: FakeServer) -> None:
     project = Path(env["CLAUDE_PROJECT_DIR"])
     (project / ".contextos").mkdir()
-    (project / ".contextos" / "config.json").write_text(json.dumps(
-        {"claude_code": {"agent_name": "shop-assistant", "fail_mode": "closed"}}))
+    (project / ".contextos" / "config.json").write_text(
+        json.dumps({"claude_code": {"agent_name": "shop-assistant", "fail_mode": "closed"}})
+    )
     server.down = True
     _, out = call("PreToolUse", P.PRE_BASH, env, server)
     assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -120,13 +138,19 @@ def test_unusable_input_follows_the_fail_mode(env: dict[str, str], server: FakeS
     assert call("PostToolUse", b"{truncated", env, server) == (0, "")
 
 
-def test_invalid_configuration_never_lets_a_tool_through_silently(env: dict[str, str], server: FakeServer) -> None:
+def test_invalid_configuration_never_lets_a_tool_through_silently(
+    env: dict[str, str], server: FakeServer
+) -> None:
     project = Path(env["CLAUDE_PROJECT_DIR"])
     (project / ".contextos").mkdir()
-    (project / ".contextos" / "config.json").write_text(json.dumps({"claude_code": {"fail_mode": "sometimes"}}))
+    (project / ".contextos" / "config.json").write_text(
+        json.dumps({"claude_code": {"fail_mode": "sometimes"}})
+    )
     _, out = call("PreToolUse", P.PRE_BASH, env, server)
     data = json.loads(out)["hookSpecificOutput"]
-    assert data["permissionDecision"] == "ask" and "configuration is invalid" in data["permissionDecisionReason"]
+    assert (
+        data["permissionDecision"] == "ask" and "configuration is invalid" in data["permissionDecisionReason"]
+    )
     assert call("SessionStart", P.SESSION_START, env, server) == (0, "")
     assert server.requests == []
 
@@ -143,11 +167,16 @@ def test_a_crash_inside_the_hook_follows_the_fail_mode(env: dict[str, str], serv
     closed = {**env, "CONTEXTOS_HOOK_FAIL_MODE": "closed"}
     _, out = call("PreToolUse", P.PRE_BASH, env, server, client_factory=broken, env_override=closed)
     data = json.loads(out)["hookSpecificOutput"]
-    assert data["permissionDecision"] == "deny" and "hook failed (RuntimeError)" in data["permissionDecisionReason"]
+    assert (
+        data["permissionDecision"] == "deny"
+        and "hook failed (RuntimeError)" in data["permissionDecisionReason"]
+    )
     assert call("PostToolUse", P.POST_READ, env, server, client_factory=broken) == (0, "")
 
 
-def test_pre_tool_use_answers_within_its_budget_when_the_server_hangs(env: dict[str, str], server: FakeServer) -> None:
+def test_pre_tool_use_answers_within_its_budget_when_the_server_hangs(
+    env: dict[str, str], server: FakeServer
+) -> None:
     release = threading.Event()
 
     def hang(request: httpx.Request) -> httpx.Response:
@@ -175,11 +204,17 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
-        type(self).received.append({"path": self.path, "auth": self.headers.get("Authorization"), "body": body})
+        type(self).received.append(
+            {"path": self.path, "auth": self.headers.get("Authorization"), "body": body}
+        )
         if self.path == "/api/v1/decide":
-            payload = decision_body(type(self).decision, reason="Credential exfiltration to webhook.site",
-                                    matched_policies=[{"name": "Block credential exfiltration", "mode": "enforce",
-                                                       "severity": "critical"}])
+            payload = decision_body(
+                type(self).decision,
+                reason="Credential exfiltration to webhook.site",
+                matched_policies=[
+                    {"name": "Block credential exfiltration", "mode": "enforce", "severity": "critical"}
+                ],
+            )
         elif self.path == "/api/v1/events":
             payload = {"results": [{"event_id": e["event_id"], "status": "accepted"} for e in body["events"]]}
         else:
@@ -210,10 +245,24 @@ def http_server() -> Iterator[str]:
         httpd.server_close()
 
 
-def run_hook(event: str, payload: dict, env: dict[str, str], url: str, **extra: str) -> subprocess.CompletedProcess:
-    child_env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(SDK_ROOT), **env, "CONTEXTOS_URL": url, **extra}
-    return subprocess.run([sys.executable, "-m", "contextos", "hook", event], input=P.as_bytes(payload),
-                          capture_output=True, env=child_env, timeout=60, check=False)
+def run_hook(
+    event: str, payload: dict, env: dict[str, str], url: str, **extra: str
+) -> subprocess.CompletedProcess:
+    child_env = {
+        "PATH": os.environ.get("PATH", ""),
+        "PYTHONPATH": str(SDK_ROOT),
+        **env,
+        "CONTEXTOS_URL": url,
+        **extra,
+    }
+    return subprocess.run(
+        [sys.executable, "-m", "contextos", "hook", event],
+        input=P.as_bytes(payload),
+        capture_output=True,
+        env=child_env,
+        timeout=60,
+        check=False,
+    )
 
 
 def test_subprocess_pre_tool_use_prints_deny_json(env: dict[str, str], http_server: str) -> None:

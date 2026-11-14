@@ -68,7 +68,9 @@ def ingest_context(principal: Principal) -> IngestContext:
 
 
 @router.post("/events", response_model=EventBatchOut)
-def post_events(batch: EventBatch, principal: Principal = INGEST, db: Session = Depends(get_db)) -> EventBatchOut:
+def post_events(
+    batch: EventBatch, principal: Principal = INGEST, db: Session = Depends(get_db)
+) -> EventBatchOut:
     """Record events as observed. Per-event results: ``accepted`` | ``duplicate`` | ``rejected``."""
     results = ingestion.ingest_batch(db, ingest_context(principal), batch.events)
     db.commit()
@@ -94,35 +96,57 @@ def decide(
 
 
 @router.get("/decide/approvals/{approval_id}", response_model=ApprovalPollOut)
-def poll_approval(approval_id: str, principal: Principal = DECIDE, db: Session = Depends(get_db)) -> ApprovalPollOut:
-    approval = ingestion_queries.poll_approval(db, principal.org_id, approval_id,
-                                               bound_agent_id=principal.bound_agent_id)
+def poll_approval(
+    approval_id: str, principal: Principal = DECIDE, db: Session = Depends(get_db)
+) -> ApprovalPollOut:
+    approval = ingestion_queries.poll_approval(
+        db, principal.org_id, approval_id, bound_agent_id=principal.bound_agent_id
+    )
     db.commit()  # persists a lazy expiry
-    return ApprovalPollOut(approval_id=approval.id, status=approval.status, decided_at=approval.decided_at,
-                           decision_note=approval.decision_note, expires_at=approval.expires_at)
+    return ApprovalPollOut(
+        approval_id=approval.id,
+        status=approval.status,
+        decided_at=approval.decided_at,
+        decision_note=approval.decision_note,
+        expires_at=approval.expires_at,
+    )
 
 
 @router.post("/decide/approvals/{approval_id}/cancel", response_model=ApprovalPollOut)
 def cancel_approval(
-    approval_id: str, body: ApprovalCancelIn | None = None, principal: Principal = DECIDE,
+    approval_id: str,
+    body: ApprovalCancelIn | None = None,
+    principal: Principal = DECIDE,
     db: Session = Depends(get_db),
 ) -> ApprovalPollOut:
     """Withdraw a pending approval the integration is no longer waiting for (idempotent; 409 once a
     person decided it or it expired). The held call is recorded as cancelled."""
     approval = approvals.cancel_approval(
-        db, principal.org_id, approval_id, actor_type=principal.actor_type, actor_id=principal.actor_id,
-        reason=body.reason if body else None, bound_agent_id=principal.bound_agent_id,
+        db,
+        principal.org_id,
+        approval_id,
+        actor_type=principal.actor_type,
+        actor_id=principal.actor_id,
+        reason=body.reason if body else None,
+        bound_agent_id=principal.bound_agent_id,
     )
     db.commit()
-    return ApprovalPollOut(approval_id=approval.id, status=approval.status, decided_at=approval.decided_at,
-                           decision_note=approval.decision_note, expires_at=approval.expires_at)
+    return ApprovalPollOut(
+        approval_id=approval.id,
+        status=approval.status,
+        decided_at=approval.decided_at,
+        decision_note=approval.decision_note,
+        expires_at=approval.expires_at,
+    )
 
 
 @router.post("/scan", response_model=ScanOut)
 def scan(body: ScanIn, principal: Principal = READ) -> ScanOut:
     """Run secret and prompt-injection detection on content without storing anything."""
     result = ingestion_queries.scan_content(
-        body.content, source_type=body.source_type.value if body.source_type else None, content_type=body.content_type
+        body.content,
+        source_type=body.source_type.value if body.source_type else None,
+        content_type=body.content_type,
     )
     return ScanOut.model_validate(result)
 
@@ -130,7 +154,9 @@ def scan(body: ScanIn, principal: Principal = READ) -> ScanOut:
 @router.get("/events", response_model=Page[IngestedEventOut])
 def list_events(
     agent_id: str | None = None,
-    session_id: str | None = Query(default=None, description="Server session id or the integration's session id"),
+    session_id: str | None = Query(
+        default=None, description="Server session id or the integration's session id"
+    ),
     event_type: EventType | None = None,
     since: datetime | None = Query(default=None, description="Only events received at or after this time"),
     processing_status: str | None = Query(default=None, pattern="^(processed|error)$"),
@@ -141,23 +167,37 @@ def list_events(
     db: Session = Depends(get_db),
 ) -> Page[IngestedEventOut]:
     items, total = ingestion_queries.list_events(
-        db, principal.org_id, bound_agent_id=principal.bound_agent_id, agent_id=agent_id, session_id=session_id,
-        event_type=event_type.value if event_type else None, since=since, processing_status=processing_status,
-        is_simulation=None if include_simulated else False, limit=limit, offset=offset,
+        db,
+        principal.org_id,
+        bound_agent_id=principal.bound_agent_id,
+        agent_id=agent_id,
+        session_id=session_id,
+        event_type=event_type.value if event_type else None,
+        since=since,
+        processing_status=processing_status,
+        is_simulation=None if include_simulated else False,
+        limit=limit,
+        offset=offset,
     )
-    return Page[IngestedEventOut](items=[IngestedEventOut.model_validate(i) for i in items], total=total,
-                                  limit=limit, offset=offset)
+    return Page[IngestedEventOut](
+        items=[IngestedEventOut.model_validate(i) for i in items], total=total, limit=limit, offset=offset
+    )
 
 
 @router.get("/events/{event_id}", response_model=IngestedEventDetailOut)
-def get_event(event_id: str, principal: Principal = READ, db: Session = Depends(get_db)) -> IngestedEventDetailOut:
+def get_event(
+    event_id: str, principal: Principal = READ, db: Session = Depends(get_db)
+) -> IngestedEventDetailOut:
     return IngestedEventDetailOut.model_validate(
         ingestion_queries.get_event(db, principal.org_id, event_id, bound_agent_id=principal.bound_agent_id)
     )
 
 
 async def live_messages(
-    org_id: str, is_disconnected: Callable[[], Awaitable[bool]], *, idle_check_s: float = PING_SECONDS,
+    org_id: str,
+    is_disconnected: Callable[[], Awaitable[bool]],
+    *,
+    idle_check_s: float = PING_SECONDS,
     still_authorized: Callable[[], Awaitable[bool]] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """SSE payloads for one subscriber: ``stream.connected`` first, then bus notifications (ids only).
@@ -192,8 +232,9 @@ async def live_messages(
 
 
 @router.get("/stream")
-async def stream(request: Request, principal: Principal = ORG_WIDE_READ,
-                 db: Session = Depends(get_db)) -> EventSourceResponse:
+async def stream(
+    request: Request, principal: Principal = ORG_WIDE_READ, db: Session = Depends(get_db)
+) -> EventSourceResponse:
     """Server-Sent Events: small notifications ({"type", "id", ...}); clients refetch details."""
     org_id = principal.org_id
     await run_in_threadpool(db.commit)  # end the auth transaction; the stream holds no DB connection

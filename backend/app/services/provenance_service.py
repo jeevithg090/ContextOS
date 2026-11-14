@@ -69,8 +69,18 @@ DEFAULT_DEPTH = 2
 MAX_PATHS = 25
 _MAX_PATH_DEPTH = 8
 _MAX_LINKS = 60
-_TYPE_PRIORITY = {"session": 0, "finding": 1, "context_item": 1, "tool_invocation": 1, "source": 2,
-                  "destination": 2, "resource": 3, "policy_decision": 4, "tool": 5, "agent": 5}
+_TYPE_PRIORITY = {
+    "session": 0,
+    "finding": 1,
+    "context_item": 1,
+    "tool_invocation": 1,
+    "source": 2,
+    "destination": 2,
+    "resource": 3,
+    "policy_decision": 4,
+    "tool": 5,
+    "agent": 5,
+}
 RELATION_LABELS = {
     R.SOURCE_PRODUCED_ITEM.value: "produced",
     R.ITEM_ENTERED_SESSION.value: "entered session",
@@ -88,8 +98,17 @@ RELATION_LABELS = {
 }
 
 __all__ = [
-    "DEFAULT_DEPTH", "DEFAULT_NODE_LIMIT", "HIGH_RISK_SCORE", "MAX_EDGES", "RELATION_LABELS", "RawEdge",
-    "build_provenance_graph", "graph_id", "node_detail", "risky_paths_for_session", "scope_options",
+    "DEFAULT_DEPTH",
+    "DEFAULT_NODE_LIMIT",
+    "HIGH_RISK_SCORE",
+    "MAX_EDGES",
+    "RELATION_LABELS",
+    "RawEdge",
+    "build_provenance_graph",
+    "graph_id",
+    "node_detail",
+    "risky_paths_for_session",
+    "scope_options",
 ]
 
 
@@ -115,10 +134,16 @@ def _select(nodes: dict[Key, GraphNodeOut], roots: set[Key], paths: list[Any], l
         path_keys = {by_gid[g] for g in path.node_ids if g in by_gid}
         if len(kept | path_keys) <= limit:
             kept |= path_keys
-    rest = sorted((k for k in nodes if k not in kept), key=lambda k: (
-        _TYPE_PRIORITY.get(k[0], 9), -_importance(nodes[k]),
-        -(nodes[k].observed_at.timestamp() if nodes[k].observed_at else 0), k))
-    kept.update(rest[:max(0, limit - len(kept))])
+    rest = sorted(
+        (k for k in nodes if k not in kept),
+        key=lambda k: (
+            _TYPE_PRIORITY.get(k[0], 9),
+            -_importance(nodes[k]),
+            -(nodes[k].observed_at.timestamp() if nodes[k].observed_at else 0),
+            k,
+        ),
+    )
+    kept.update(rest[: max(0, limit - len(kept))])
     return kept
 
 
@@ -150,55 +175,106 @@ def _assemble(db: Session, org_id: str, col: Collected, limit: int) -> Provenanc
     origins = {p.origin_id for p in paths}
     for n in nodes:
         n.risk_origin = n.id in origins
-    nodes.sort(key=lambda n: (_TYPE_PRIORITY.get(n.type, 9), n.observed_at.timestamp() if n.observed_at else 0, n.id))
+    nodes.sort(
+        key=lambda n: (_TYPE_PRIORITY.get(n.type, 9), n.observed_at.timestamp() if n.observed_at else 0, n.id)
+    )
 
     truncation = col.truncation
     if len(nodes) < len(resolved):
         dropped = len(resolved) - len(nodes)
-        note = (f"{dropped} of {len(resolved)} nodes are hidden to keep the graph readable (limit {limit}). Nodes on "
-                f"risky paths and the scope itself are always kept; narrow the scope to see the rest.")
+        note = (
+            f"{dropped} of {len(resolved)} nodes are hidden to keep the graph readable (limit {limit}). Nodes on "
+            f"risky paths and the scope itself are always kept; narrow the scope to see the rest."
+        )
         truncation = f"{truncation} {note}" if truncation else note
     counts: dict[str, int] = defaultdict(int)
     for n in nodes:
         counts[n.type] += 1
     stats = GraphStatsOut(
-        node_count=len(nodes), edge_count=len(edges), available_node_count=len(resolved), node_counts=dict(counts),
+        node_count=len(nodes),
+        edge_count=len(edges),
+        available_node_count=len(resolved),
+        node_counts=dict(counts),
         session_count=counts.get(N.SESSION.value, 0),
         inferred_edge_count=sum(1 for e in edges if e["confidence"] == "inferred"),
-        dropped_edge_count=int(full.metadata.get("dropped_edge_count", 0)), risky_path_count=len(paths),
-        untrusted_node_count=sum(1 for n in nodes if n.trust_level in ("UNKNOWN", "EXTERNAL", "SUSPICIOUS", "BLOCKED")),
+        dropped_edge_count=int(full.metadata.get("dropped_edge_count", 0)),
+        risky_path_count=len(paths),
+        untrusted_node_count=sum(
+            1 for n in nodes if n.trust_level in ("UNKNOWN", "EXTERNAL", "SUSPICIOUS", "BLOCKED")
+        ),
     )
     return ProvenanceGraphOut(
-        scope=col.scope, nodes=nodes, edges=[_edge_out(e) for e in edges], risky_paths=[_path_out(p) for p in paths],
-        truncated=truncation is not None, truncation_reason=truncation, limit=limit, stats=stats,
+        scope=col.scope,
+        nodes=nodes,
+        edges=[_edge_out(e) for e in edges],
+        risky_paths=[_path_out(p) for p in paths],
+        truncated=truncation is not None,
+        truncation_reason=truncation,
+        limit=limit,
+        stats=stats,
         disclaimer=OBSERVED_RELATIONSHIP_NOTE,
     )
 
 
 def _engine_edge(e: RawEdge) -> dict[str, Any]:
-    return {"id": e.id, "src": graph_id(e.src), "dst": graph_id(e.dst), "relation": e.relation,
-            "confidence": e.confidence, "observed_at": e.observed_at, "session_id": e.session_id, "basis": e.basis}
+    return {
+        "id": e.id,
+        "src": graph_id(e.src),
+        "dst": graph_id(e.dst),
+        "relation": e.relation,
+        "confidence": e.confidence,
+        "observed_at": e.observed_at,
+        "session_id": e.session_id,
+        "basis": e.basis,
+    }
 
 
 def _edge_out(e: dict[str, Any]) -> GraphEdgeOut:
-    return GraphEdgeOut(id=e["id"], src=e["src"], dst=e["dst"], relation=e["relation"],
-                        relation_label=RELATION_LABELS.get(e["relation"], e["relation"].replace("_", " ")),
-                        confidence=e["confidence"], basis=e.get("basis") or "provenance_edge",
-                        observed_at=e.get("observed_at"), session_id=e.get("session_id"))
+    return GraphEdgeOut(
+        id=e["id"],
+        src=e["src"],
+        dst=e["dst"],
+        relation=e["relation"],
+        relation_label=RELATION_LABELS.get(e["relation"], e["relation"].replace("_", " ")),
+        confidence=e["confidence"],
+        basis=e.get("basis") or "provenance_edge",
+        observed_at=e.get("observed_at"),
+        session_id=e.get("session_id"),
+    )
 
 
 def _empty(limit: int) -> ProvenanceGraphOut:
     return ProvenanceGraphOut(
-        scope=GraphScopeOut(kind="none", label="No activity recorded yet"), nodes=[], edges=[], risky_paths=[],
-        truncated=False, limit=limit, disclaimer=OBSERVED_RELATIONSHIP_NOTE,
-        stats=GraphStatsOut(node_count=0, edge_count=0, available_node_count=0, node_counts={}, session_count=0,
-                            inferred_edge_count=0, dropped_edge_count=0, risky_path_count=0, untrusted_node_count=0),
+        scope=GraphScopeOut(kind="none", label="No activity recorded yet"),
+        nodes=[],
+        edges=[],
+        risky_paths=[],
+        truncated=False,
+        limit=limit,
+        disclaimer=OBSERVED_RELATIONSHIP_NOTE,
+        stats=GraphStatsOut(
+            node_count=0,
+            edge_count=0,
+            available_node_count=0,
+            node_counts={},
+            session_count=0,
+            inferred_edge_count=0,
+            dropped_edge_count=0,
+            risky_path_count=0,
+            untrusted_node_count=0,
+        ),
     )
 
 
 def build_provenance_graph(
-    db: Session, org_id: str, *, session_id: str | None = None, agent_id: str | None = None,
-    context_item_id: str | None = None, finding_id: str | None = None, depth: int = DEFAULT_DEPTH,
+    db: Session,
+    org_id: str,
+    *,
+    session_id: str | None = None,
+    agent_id: str | None = None,
+    context_item_id: str | None = None,
+    finding_id: str | None = None,
+    depth: int = DEFAULT_DEPTH,
     limit: int = DEFAULT_NODE_LIMIT,
 ) -> ProvenanceGraphOut:
     """The provenance graph for one scope; without a scope, the most recent high-risk session."""
@@ -207,7 +283,9 @@ def build_provenance_graph(
         raise ValidationFailedError("Choose one scope: session_id, agent_id, context_item_id or finding_id")
     collected: Collected | None
     if session_id:
-        collected = session_scope(db, org_id, get_scoped(db, AgentSession, session_id, org_id, label="Session"))
+        collected = session_scope(
+            db, org_id, get_scoped(db, AgentSession, session_id, org_id, label="Session")
+        )
     elif agent_id:
         collected = agent_scope(db, org_id, get_scoped(db, Agent, agent_id, org_id, label="Agent"))
     elif context_item_id:
@@ -247,12 +325,25 @@ def node_detail(db: Session, org_id: str, node_type: str, ref_id: str) -> NodeDe
     if node_type not in NODE_TYPES:
         raise NotFoundError(f"Unknown provenance node type '{node_type}'")
     key: Key = (node_type, ref_id)
-    cond = or_(and_(PE.src_type == node_type, PE.src_id == ref_id), and_(PE.dst_type == node_type, PE.dst_id == ref_id))
-    rows = [raw_edge(r) for r in db.scalars(scoped(PE, org_id).where(cond).order_by(PE.observed_at.desc(), PE.id).limit(_MAX_LINKS))]
+    cond = or_(
+        and_(PE.src_type == node_type, PE.src_id == ref_id),
+        and_(PE.dst_type == node_type, PE.dst_id == ref_id),
+    )
+    rows = [
+        raw_edge(r)
+        for r in db.scalars(
+            scoped(PE, org_id).where(cond).order_by(PE.observed_at.desc(), PE.id).limit(_MAX_LINKS)
+        )
+    ]
     total = db.scalar(select(func.count()).select_from(scoped(PE, org_id).where(cond).subquery())) or 0
     if node_type in _FINDING_SUBJECT:
-        extra = [e for e in finding_record_edges(db, org_id, findings_where(db, org_id, _FINDING_SUBJECT[node_type](ref_id)))
-                 if key in (e.src, e.dst)]
+        extra = [
+            e
+            for e in finding_record_edges(
+                db, org_id, findings_where(db, org_id, _FINDING_SUBJECT[node_type](ref_id))
+            )
+            if key in (e.src, e.dst)
+        ]
         rows.extend(extra)
         total += len(extra)
     meta = nodes_mod.resource_meta(rows)
@@ -268,11 +359,27 @@ def node_detail(db: Session, org_id: str, node_type: str, ref_id: str) -> NodeDe
         other = resolved.get(e.dst if out else e.src)
         if other is None:
             continue
-        links.append(NodeLinkOut(node=other, relation=e.relation, confidence=e.confidence, basis=e.basis,  # type: ignore[arg-type]
-                                 relation_label=RELATION_LABELS.get(e.relation, e.relation.replace("_", " ")),
-                                 direction="out" if out else "in", observed_at=e.observed_at))
-    return NodeDetailOut(node=node, fields=[NodeFieldOut(**f) for f in fields], notes=notes, preview=preview,
-                         preview_label=preview_label, links=links, link_total=total, disclaimer=OBSERVED_RELATIONSHIP_NOTE)
+        links.append(
+            NodeLinkOut(
+                node=other,
+                relation=e.relation,
+                confidence=e.confidence,
+                basis=e.basis,  # type: ignore[arg-type]
+                relation_label=RELATION_LABELS.get(e.relation, e.relation.replace("_", " ")),
+                direction="out" if out else "in",
+                observed_at=e.observed_at,
+            )
+        )
+    return NodeDetailOut(
+        node=node,
+        fields=[NodeFieldOut(**f) for f in fields],
+        notes=notes,
+        preview=preview,
+        preview_label=preview_label,
+        links=links,
+        link_total=total,
+        disclaimer=OBSERVED_RELATIONSHIP_NOTE,
+    )
 
 
 # -- scope picker ---------------------------------------------------------------------------------
@@ -285,38 +392,85 @@ def _like(q: str) -> str:
 def scope_options(db: Session, org_id: str, *, q: str | None = None, limit: int = 25) -> ScopeOptionsOut:
     """Sessions and findings (most recent first) and agents the graph can be scoped to."""
     text = (q or "").strip()
-    sq = (select(AgentSession, Agent).join(Agent, Agent.id == AgentSession.agent_id)
-          .where(AgentSession.organization_id == org_id, Agent.organization_id == org_id))
-    aq = (select(Agent, func.count(AgentSession.id)).outerjoin(
-        AgentSession, and_(AgentSession.agent_id == Agent.id, AgentSession.organization_id == org_id))
-        .where(Agent.organization_id == org_id).group_by(Agent.id))
+    sq = (
+        select(AgentSession, Agent)
+        .join(Agent, Agent.id == AgentSession.agent_id)
+        .where(AgentSession.organization_id == org_id, Agent.organization_id == org_id)
+    )
+    aq = (
+        select(Agent, func.count(AgentSession.id))
+        .outerjoin(
+            AgentSession, and_(AgentSession.agent_id == Agent.id, AgentSession.organization_id == org_id)
+        )
+        .where(Agent.organization_id == org_id)
+        .group_by(Agent.id)
+    )
     if text:
         pattern = _like(text)
-        sq = sq.where(or_(Agent.name.ilike(pattern, escape="\\"), AgentSession.external_session_id.ilike(pattern, escape="\\"),
-                          AgentSession.id == text))
+        sq = sq.where(
+            or_(
+                Agent.name.ilike(pattern, escape="\\"),
+                AgentSession.external_session_id.ilike(pattern, escape="\\"),
+                AgentSession.id == text,
+            )
+        )
         aq = aq.where(or_(Agent.name.ilike(pattern, escape="\\"), Agent.id == text))
     sessions = [
-        ScopeSessionOut(id=s.id, agent_id=a.id, agent_name=a.name, external_session_id=s.external_session_id,
-                        status=s.status, risk_score=s.risk_score or 0, risk_level=(s.risk_state or {}).get("level"),
-                        started_at=s.started_at, last_event_at=s.last_event_at, is_simulation=s.is_simulation)
+        ScopeSessionOut(
+            id=s.id,
+            agent_id=a.id,
+            agent_name=a.name,
+            external_session_id=s.external_session_id,
+            status=s.status,
+            risk_score=s.risk_score or 0,
+            risk_level=(s.risk_state or {}).get("level"),
+            started_at=s.started_at,
+            last_event_at=s.last_event_at,
+            is_simulation=s.is_simulation,
+        )
         for s, a in db.execute(sq.order_by(recent_activity().desc()).limit(limit))
     ]
     agents = [
-        ScopeAgentOut(id=a.id, name=a.name, framework=a.framework, environment=a.environment, risk_score=a.risk_score or 0,
-                      session_count=int(count), last_seen_at=a.last_seen_at, is_simulation=a.is_simulation)
+        ScopeAgentOut(
+            id=a.id,
+            name=a.name,
+            framework=a.framework,
+            environment=a.environment,
+            risk_score=a.risk_score or 0,
+            session_count=int(count),
+            last_seen_at=a.last_seen_at,
+            is_simulation=a.is_simulation,
+        )
         for a, count in db.execute(aq.order_by(Agent.name).limit(100))
     ]
-    fq = (select(SecurityFinding, Agent.name).outerjoin(
-        Agent, and_(Agent.id == SecurityFinding.agent_id, Agent.organization_id == org_id))
-        .where(SecurityFinding.organization_id == org_id))
+    fq = (
+        select(SecurityFinding, Agent.name)
+        .outerjoin(Agent, and_(Agent.id == SecurityFinding.agent_id, Agent.organization_id == org_id))
+        .where(SecurityFinding.organization_id == org_id)
+    )
     if text:
         pattern = _like(text)
-        fq = fq.where(or_(SecurityFinding.title.ilike(pattern, escape="\\"), SecurityFinding.rule_id.ilike(pattern, escape="\\"),
-                          SecurityFinding.id == text))
+        fq = fq.where(
+            or_(
+                SecurityFinding.title.ilike(pattern, escape="\\"),
+                SecurityFinding.rule_id.ilike(pattern, escape="\\"),
+                SecurityFinding.id == text,
+            )
+        )
     findings = [
-        ScopeFindingOut(id=f.id, title=f.title, severity=f.severity, category=f.category, status=f.status,
-                        session_id=f.session_id, agent_name=agent_name, last_seen_at=f.last_seen_at,
-                        is_simulation=f.is_simulation)
-        for f, agent_name in db.execute(fq.order_by(SecurityFinding.last_seen_at.desc(), SecurityFinding.id).limit(limit))
+        ScopeFindingOut(
+            id=f.id,
+            title=f.title,
+            severity=f.severity,
+            category=f.category,
+            status=f.status,
+            session_id=f.session_id,
+            agent_name=agent_name,
+            last_seen_at=f.last_seen_at,
+            is_simulation=f.is_simulation,
+        )
+        for f, agent_name in db.execute(
+            fq.order_by(SecurityFinding.last_seen_at.desc(), SecurityFinding.id).limit(limit)
+        )
     ]
     return ScopeOptionsOut(sessions=sessions, agents=agents, findings=findings)

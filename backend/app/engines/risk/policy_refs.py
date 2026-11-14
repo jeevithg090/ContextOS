@@ -41,7 +41,11 @@ def condition_refs(conditions: Any, *, negated: bool = False, depth: int = 0) ->
         refs.extend(condition_refs(conditions["not"], negated=not negated, depth=depth + 1))
     if "field" in conditions:
         op = str(conditions.get("op") or "")
-        refs.append(ConditionRef(str(conditions["field"]), op, conditions.get("value"), negated ^ (op in _NEGATIVE_OPS)))
+        refs.append(
+            ConditionRef(
+                str(conditions["field"]), op, conditions.get("value"), negated ^ (op in _NEGATIVE_OPS)
+            )
+        )
     return refs
 
 
@@ -90,11 +94,15 @@ def covered_categories(policy: dict[str, Any], tools: Iterable[dict[str, Any]]) 
         if ref.field == "tool.category":
             covered.update(c for c in _ALL_CATEGORIES if _matches(op, ref, c))
         elif ref.field == "tool.name":
-            covered.update(str(t.get("category")) for t in tools
-                           if t.get("name") and _matches(op, ref, str(t["name"])))
+            covered.update(
+                str(t.get("category")) for t in tools if t.get("name") and _matches(op, ref, str(t["name"]))
+            )
         elif ref.field == "tool.risk_level":
-            covered.update(str(t.get("category")) for t in tools
-                           if t.get("risk_level") and _matches(op, ref, str(t["risk_level"])))
+            covered.update(
+                str(t.get("category"))
+                for t in tools
+                if t.get("risk_level") and _matches(op, ref, str(t["risk_level"]))
+            )
     covered.discard("None")
     return covered
 

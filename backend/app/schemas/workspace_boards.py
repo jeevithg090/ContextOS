@@ -21,11 +21,27 @@ from app.schemas.workspace import (
 )
 
 BoardTemplateName = Literal[
-    "software_development", "security_remediation", "incident_response", "bug_tracking", "feature_development",
-    "technical_debt", "research_experiments",
+    "software_development",
+    "security_remediation",
+    "incident_response",
+    "bug_tracking",
+    "feature_development",
+    "technical_debt",
+    "research_experiments",
 ]
 SwimlaneName = Literal["none", "priority", "assignee"]
-CARD_FIELDS = ("key", "type", "priority", "severity", "labels", "assignees", "due_date", "subtasks", "verification", "finding")
+CARD_FIELDS = (
+    "key",
+    "type",
+    "priority",
+    "severity",
+    "labels",
+    "assignees",
+    "due_date",
+    "subtasks",
+    "verification",
+    "finding",
+)
 
 
 class BoardTemplateOut(BaseModel):
@@ -62,7 +78,9 @@ class ColumnOut(BaseModel):
     requires_verification: bool
     automation: list[dict[str, Any]]
     task_count: int = Field(description="Non-archived tasks currently in the column")
-    wip_exceeded: bool = Field(description="True when a WIP limit is set and the column holds more tasks than it")
+    wip_exceeded: bool = Field(
+        description="True when a WIP limit is set and the column holds more tasks than it"
+    )
 
 
 class TaskCardOut(BaseModel):
@@ -172,11 +190,28 @@ class ColumnDeleteOut(BaseModel):
     deleted_column_id: str
     moved_task_count: int
     moved_to_column_id: str | None
-    removed_automation_rules: int = Field(description="Rules in other columns that targeted the deleted column")
+    removed_automation_rules: int = Field(
+        description="Rules in other columns that targeted the deleted column"
+    )
 
 
 __all__ = [
-    "CARD_FIELDS", "AutomationRule", "BoardConfig", "BoardCreate", "BoardDetailOut", "BoardDuplicate", "BoardPatch",
-    "BoardSummaryOut", "BoardTemplateName", "BoardTemplateOut", "ColumnCreate", "ColumnDeleteOut", "ColumnOut",
-    "ColumnPatch", "ColumnReorder", "ColumnWithTasksOut", "SwimlaneName", "TaskCardOut",
+    "CARD_FIELDS",
+    "AutomationRule",
+    "BoardConfig",
+    "BoardCreate",
+    "BoardDetailOut",
+    "BoardDuplicate",
+    "BoardPatch",
+    "BoardSummaryOut",
+    "BoardTemplateName",
+    "BoardTemplateOut",
+    "ColumnCreate",
+    "ColumnDeleteOut",
+    "ColumnOut",
+    "ColumnPatch",
+    "ColumnReorder",
+    "ColumnWithTasksOut",
+    "SwimlaneName",
+    "TaskCardOut",
 ]

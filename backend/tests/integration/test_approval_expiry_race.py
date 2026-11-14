@@ -49,8 +49,12 @@ def test_poll_after_a_concurrent_decision_keeps_the_decision(client, seeded_org,
     assert approval.status == "pending"  # this session now holds a stale "pending" copy
 
     # A reviewer's decision lands after this request read the row (simulated without refreshing it).
-    db.execute(update(Approval).where(Approval.id == approval_id)
-               .values(status="approved", decided_at=utcnow()).execution_options(synchronize_session=False))
+    db.execute(
+        update(Approval)
+        .where(Approval.id == approval_id)
+        .values(status="approved", decided_at=utcnow())
+        .execution_options(synchronize_session=False)
+    )
     assert approval.status == "pending"
 
     published.clear()

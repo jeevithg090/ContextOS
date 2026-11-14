@@ -34,25 +34,46 @@ from app.services.scoping import get_scoped, paginate, scoped
 _QUERY_KEYS = ("query", "q", "search_query", "search", "keywords")
 _TOOL_EVENTS = {"tool.requested", "tool.completed", "tool.failed"}
 _SOURCE_TITLES = {
-    "file": "Read file {}", "repository": "Read repository file {}", "web": "Fetched web page {}",
-    "browser": "Viewed page {}", "document": "Read document {}", "email": "Read email {}",
-    "api": "Received API response from {}", "mcp_server": "Received content from MCP server {}",
-    "mcp_tool": "Received MCP tool output {}", "database": "Read database result {}",
-    "user_upload": "Received uploaded file {}", "tool_output": "Received tool output {}",
-    "agent_output": "Received output from agent {}", "system": "Loaded system context {}",
+    "file": "Read file {}",
+    "repository": "Read repository file {}",
+    "web": "Fetched web page {}",
+    "browser": "Viewed page {}",
+    "document": "Read document {}",
+    "email": "Read email {}",
+    "api": "Received API response from {}",
+    "mcp_server": "Received content from MCP server {}",
+    "mcp_tool": "Received MCP tool output {}",
+    "database": "Read database result {}",
+    "user_upload": "Received uploaded file {}",
+    "tool_output": "Received tool output {}",
+    "agent_output": "Received output from agent {}",
+    "system": "Loaded system context {}",
 }
 _COMPLETED = {
-    "file_read": "Read file {}", "file_write": "Wrote file {}", "http": "Fetched {}", "browser": "Browsed {}",
-    "shell": "Ran `{}`", "search": "Searched for “{}”",
+    "file_read": "Read file {}",
+    "file_write": "Wrote file {}",
+    "http": "Fetched {}",
+    "browser": "Browsed {}",
+    "shell": "Ran `{}`",
+    "search": "Searched for “{}”",
 }
-_ENFORCED = {"ALLOW": "Allowed {}", "AUDIT": "Allowed {} (audited)", "RESTRICT": "Restricted {}",
-             "DENY": "Denied {}", "REQUIRE_APPROVAL": "Held {} for approval"}
-_ADVISED = {"ALLOW": "Advised to allow {}", "AUDIT": "Advised to allow {} (audit)", "RESTRICT": "Advised to restrict {}",
-            "DENY": "Advised to deny {}", "REQUIRE_APPROVAL": "Advised to require approval for {}"}
+_ENFORCED = {
+    "ALLOW": "Allowed {}",
+    "AUDIT": "Allowed {} (audited)",
+    "RESTRICT": "Restricted {}",
+    "DENY": "Denied {}",
+    "REQUIRE_APPROVAL": "Held {} for approval",
+}
+_ADVISED = {
+    "ALLOW": "Advised to allow {}",
+    "AUDIT": "Advised to allow {} (audit)",
+    "RESTRICT": "Advised to restrict {}",
+    "DENY": "Advised to deny {}",
+    "REQUIRE_APPROVAL": "Advised to require approval for {}",
+}
 _EXPLANATION_CHARS = 1000
 
 __all__ = ["clip", "session_timeline", "timeline_entries", "timeline_query"]
-
 
 
 def timeline_query(org_id: str, session: AgentSession, agent_name: str) -> Select[Any]:
@@ -60,12 +81,14 @@ def timeline_query(org_id: str, session: AgentSession, agent_name: str) -> Selec
     delegation carrying this session's task) and events that failed before the session was resolved
     (matched by the integration's session id and agent name kept in their redacted payload)."""
     delivered = select(ContextItem.event_id).where(
-        ContextItem.organization_id == org_id, ContextItem.session_id == session.id,
+        ContextItem.organization_id == org_id,
+        ContextItem.session_id == session.id,
         ContextItem.origin_session_id.is_not(None),
     )
     payload = IngestedEvent.payload_redacted
     failed = and_(
-        IngestedEvent.session_id.is_(None), IngestedEvent.processing_status == "error",
+        IngestedEvent.session_id.is_(None),
+        IngestedEvent.processing_status == "error",
         payload["session_id"].as_string() == session.external_session_id,
         payload["agent"]["name"].as_string() == agent_name,
     )
@@ -74,8 +97,15 @@ def timeline_query(org_id: str, session: AgentSession, agent_name: str) -> Selec
     )
 
 
-def session_timeline(db: Session, org_id: str, session_id: str, *, limit: int, offset: int,
-                     focus_invocation_id: str | None = None) -> dict[str, Any]:
+def session_timeline(
+    db: Session,
+    org_id: str,
+    session_id: str,
+    *,
+    limit: int,
+    offset: int,
+    focus_invocation_id: str | None = None,
+) -> dict[str, Any]:
     """One page of the timeline in server sequence order. With ``focus_invocation_id`` the page that
     contains that tool call's first event is returned (``offset`` is ignored)."""
     session = get_scoped(db, AgentSession, session_id, org_id, label="Session")
@@ -83,22 +113,42 @@ def session_timeline(db: Session, org_id: str, session_id: str, *, limit: int, o
     query = timeline_query(org_id, session, agent.name)
     focus: list[str] = []
     if focus_invocation_id:
-        inv = db.scalar(scoped(ToolInvocation, org_id).where(ToolInvocation.id == focus_invocation_id,
-                                                             ToolInvocation.session_id == session.id))
+        inv = db.scalar(
+            scoped(ToolInvocation, org_id).where(
+                ToolInvocation.id == focus_invocation_id, ToolInvocation.session_id == session.id
+            )
+        )
         event_ids = [e for e in ((inv.request_event_id, inv.result_event_id) if inv else ()) if e]
-        first = db.scalar(select(func.min(IngestedEvent.sequence)).where(
-            IngestedEvent.organization_id == org_id, IngestedEvent.id.in_(event_ids))) if event_ids else None
+        first = (
+            db.scalar(
+                select(func.min(IngestedEvent.sequence)).where(
+                    IngestedEvent.organization_id == org_id, IngestedEvent.id.in_(event_ids)
+                )
+            )
+            if event_ids
+            else None
+        )
         if first is not None:
-            before = db.scalar(select(func.count()).select_from(
-                query.where(IngestedEvent.sequence < first).subquery())) or 0
+            before = (
+                db.scalar(
+                    select(func.count()).select_from(query.where(IngestedEvent.sequence < first).subquery())
+                )
+                or 0
+            )
             offset, focus = (int(before) // limit) * limit, event_ids
     rows, total = paginate(db, query.order_by(IngestedEvent.sequence), limit=limit, offset=offset)
-    return {"items": timeline_entries(db, org_id, session, rows), "total": total, "limit": limit, "offset": offset,
-            "focus_event_ids": focus}
+    return {
+        "items": timeline_entries(db, org_id, session, rows),
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "focus_event_ids": focus,
+    }
 
 
-def timeline_entries(db: Session, org_id: str, session: AgentSession,
-                     rows: list[IngestedEvent]) -> list[dict[str, Any]]:
+def timeline_entries(
+    db: Session, org_id: str, session: AgentSession, rows: list[IngestedEvent]
+) -> list[dict[str, Any]]:
     """Display entries for ``rows`` (events of ``session``'s timeline, in the order given).
 
     ``explanation`` is the recorded decision explanation for tool requests (``None`` otherwise).
@@ -108,29 +158,86 @@ def timeline_entries(db: Session, org_id: str, session: AgentSession,
     item_ids = {str(i) for r in refs for i in _item_ids(r)}
     dec_ids = {str(r["policy_decision_id"]) for r in refs if r.get("policy_decision_id")}
     fnd_ids = {str(f) for r in refs for f in r.get("finding_ids") or []}
-    invs = {inv.id: (inv, tool) for inv, tool in db.execute(
-        select(ToolInvocation, Tool).join(Tool, Tool.id == ToolInvocation.tool_id)
-        .where(ToolInvocation.organization_id == org_id, ToolInvocation.id.in_(inv_ids)))} if inv_ids else {}
+    invs = (
+        {
+            inv.id: (inv, tool)
+            for inv, tool in db.execute(
+                select(ToolInvocation, Tool)
+                .join(Tool, Tool.id == ToolInvocation.tool_id)
+                .where(ToolInvocation.organization_id == org_id, ToolInvocation.id.in_(inv_ids))
+            )
+        }
+        if inv_ids
+        else {}
+    )
     dest_ids = {inv.destination_id for inv, _t in invs.values() if inv.destination_id}
-    dests = dict(db.execute(select(Destination.id, Destination.identifier).where(
-        Destination.organization_id == org_id, Destination.id.in_(dest_ids))).all()) if dest_ids else {}
-    items = {r.id: r for r in db.execute(
-        select(ContextItem.id, ContextItem.session_id, ContextItem.trust_level, ContextItem.content_length,
-               ContextItem.sensitivity, ContextItem.detection_summary, ContextSource.source_type,
-               ContextSource.identifier, ContextSource.display_name)
-        .join(ContextSource, ContextSource.id == ContextItem.source_id)
-        .where(ContextItem.organization_id == org_id, ContextItem.id.in_(item_ids)))} if item_ids else {}
-    decisions = {r.id: r for r in db.execute(
-        select(PolicyDecision.id, PolicyDecision.decision, PolicyDecision.enforcement, PolicyDecision.explanation)
-        .where(PolicyDecision.organization_id == org_id, PolicyDecision.id.in_(dec_ids)))} if dec_ids else {}
-    severities = dict(db.execute(select(SecurityFinding.id, SecurityFinding.severity).where(
-        SecurityFinding.organization_id == org_id, SecurityFinding.id.in_(fnd_ids))).all()) if fnd_ids else {}
+    dests = (
+        dict(
+            db.execute(
+                select(Destination.id, Destination.identifier).where(
+                    Destination.organization_id == org_id, Destination.id.in_(dest_ids)
+                )
+            ).all()
+        )
+        if dest_ids
+        else {}
+    )
+    items = (
+        {
+            r.id: r
+            for r in db.execute(
+                select(
+                    ContextItem.id,
+                    ContextItem.session_id,
+                    ContextItem.trust_level,
+                    ContextItem.content_length,
+                    ContextItem.sensitivity,
+                    ContextItem.detection_summary,
+                    ContextSource.source_type,
+                    ContextSource.identifier,
+                    ContextSource.display_name,
+                )
+                .join(ContextSource, ContextSource.id == ContextItem.source_id)
+                .where(ContextItem.organization_id == org_id, ContextItem.id.in_(item_ids))
+            )
+        }
+        if item_ids
+        else {}
+    )
+    decisions = (
+        {
+            r.id: r
+            for r in db.execute(
+                select(
+                    PolicyDecision.id,
+                    PolicyDecision.decision,
+                    PolicyDecision.enforcement,
+                    PolicyDecision.explanation,
+                ).where(PolicyDecision.organization_id == org_id, PolicyDecision.id.in_(dec_ids))
+            )
+        }
+        if dec_ids
+        else {}
+    )
+    severities = (
+        dict(
+            db.execute(
+                select(SecurityFinding.id, SecurityFinding.severity).where(
+                    SecurityFinding.organization_id == org_id, SecurityFinding.id.in_(fnd_ids)
+                )
+            ).all()
+        )
+        if fnd_ids
+        else {}
+    )
 
     out = []
     for row, ref in zip(rows, refs, strict=True):
         other = row.session_id is not None and row.session_id != session.id
         candidates = [items[i] for i in _item_ids(ref) if i in items]
-        item = next((c for c in candidates if c.session_id == session.id), candidates[0] if candidates else None)
+        item = next(
+            (c for c in candidates if c.session_id == session.id), candidates[0] if candidates else None
+        )
         inv, tool = invs.get(str(ref.get("tool_invocation_id") or ""), (None, None))
         dec = decisions.get(str(ref.get("policy_decision_id") or ""))
         decision = dec.decision if dec else None
@@ -145,21 +252,37 @@ def timeline_entries(db: Session, org_id: str, session: AgentSession,
             title, summary = _tool_text(row.event_type, payload, ref, inv, tool, item, dec, dest)
         else:
             title, summary = _describe(row.event_type, payload, ref, item, other)
-        out.append({
-            "id": row.id, "sequence": row.sequence, "received_at": row.received_at, "occurred_at": row.occurred_at,
-            "event_type": row.event_type, "title": title, "summary": summary,
-            "trust_level": item.trust_level if item else None, "decision": decision, "enforcement": enforcement,
-            "explanation": clip(dec.explanation, _EXPLANATION_CHARS) if dec else None,
-            "severity": max(sevs, key=lambda s: SEVERITY_RANK.get(s, 0)) if sevs else None,
-            "processing_status": row.processing_status, "from_other_session": other,
-            "tool": {"name": tool.name, "category": tool.category, "status": inv.status if inv else None} if tool else None,
-            "refs": {"context_item_id": item.id if item else None, "tool_invocation_id": inv.id if inv else None,
-                     "policy_decision_id": dec.id if dec else None,
-                     "finding_ids": [str(f) for f in ref.get("finding_ids") or []],
-                     "approval_id": ref.get("approval_id"),
-                     "child_session_id": ref.get("child_session_id") if not other else None,
-                     "source_id": ref.get("source_id"), "destination_id": ref.get("destination_id")},
-        })
+        out.append(
+            {
+                "id": row.id,
+                "sequence": row.sequence,
+                "received_at": row.received_at,
+                "occurred_at": row.occurred_at,
+                "event_type": row.event_type,
+                "title": title,
+                "summary": summary,
+                "trust_level": item.trust_level if item else None,
+                "decision": decision,
+                "enforcement": enforcement,
+                "explanation": clip(dec.explanation, _EXPLANATION_CHARS) if dec else None,
+                "severity": max(sevs, key=lambda s: SEVERITY_RANK.get(s, 0)) if sevs else None,
+                "processing_status": row.processing_status,
+                "from_other_session": other,
+                "tool": {"name": tool.name, "category": tool.category, "status": inv.status if inv else None}
+                if tool
+                else None,
+                "refs": {
+                    "context_item_id": item.id if item else None,
+                    "tool_invocation_id": inv.id if inv else None,
+                    "policy_decision_id": dec.id if dec else None,
+                    "finding_ids": [str(f) for f in ref.get("finding_ids") or []],
+                    "approval_id": ref.get("approval_id"),
+                    "child_session_id": ref.get("child_session_id") if not other else None,
+                    "source_id": ref.get("source_id"),
+                    "destination_id": ref.get("destination_id"),
+                },
+            }
+        )
     return out
 
 
@@ -202,8 +325,11 @@ def _preview(digest: Any) -> str | None:
 def _meta_summary(meta: Any) -> str | None:
     if not isinstance(meta, dict):
         return None
-    parts = [f"{k.replace('_', ' ')}: {clip(meta[k], 60)}" for k in ("model", "cwd", "permission_mode", "reason")
-             if isinstance(meta.get(k), str | int | float) and str(meta[k]).strip()]
+    parts = [
+        f"{k.replace('_', ' ')}: {clip(meta[k], 60)}"
+        for k in ("model", "cwd", "permission_mode", "reason")
+        if isinstance(meta.get(k), str | int | float) and str(meta[k]).strip()
+    ]
     return " · ".join(parts) or None
 
 
@@ -215,7 +341,9 @@ def _arg(args: dict[str, Any], *keys: str) -> str | None:
     return None
 
 
-def _target(category: str, inv: ToolInvocation | None, args: dict[str, Any], dest: str | None) -> tuple[str, str] | None:
+def _target(
+    category: str, inv: ToolInvocation | None, args: dict[str, Any], dest: str | None
+) -> tuple[str, str] | None:
     res = [r for r in ((inv.resources if inv else None) or []) if isinstance(r, dict) and r.get("id")]
 
     def first(*kinds: str) -> str | None:
@@ -250,8 +378,16 @@ def _phrase(name: str, target: tuple[str, str] | None) -> str:
     return f"{name} to {label}" if kind in ("url", "dest") else f"{name} {label}"
 
 
-def _tool_text(event_type: str, payload: dict[str, Any], ref: dict[str, Any], inv: ToolInvocation | None,
-               tool: Tool | None, item: Any, dec: Any, dest: str | None) -> tuple[str, str | None]:
+def _tool_text(
+    event_type: str,
+    payload: dict[str, Any],
+    ref: dict[str, Any],
+    inv: ToolInvocation | None,
+    tool: Tool | None,
+    item: Any,
+    dec: Any,
+    dest: str | None,
+) -> tuple[str, str | None]:
     name = tool.name if tool else str((payload.get("tool") or {}).get("name") or "Tool")
     category = tool.category if tool else "other"
     args = (inv.arguments_redacted if inv else payload.get("arguments")) or {}
@@ -265,14 +401,18 @@ def _tool_text(event_type: str, payload: dict[str, Any], ref: dict[str, Any], in
             return _ENFORCED.get(dec.decision, "Decided {}").format(phrase), explanation
         if dec.enforcement == "advisory":
             return _ADVISED.get(dec.decision, "Advised on {}").format(phrase), (
-                f"Advisory: the integration may not honour this decision. {explanation or ''}".strip())
+                f"Advisory: the integration may not honour this decision. {explanation or ''}".strip()
+            )
         return f"Observed request: {phrase}", (
-            f"Policy outcome {dec.decision} recorded after the fact; nothing could be prevented. {explanation or ''}".strip())
+            f"Policy outcome {dec.decision} recorded after the fact; nothing could be prevented. {explanation or ''}".strip()
+        )
     if event_type == "tool.failed" or payload.get("is_error"):
         return f"{phrase} failed", clip(inv.error if inv else None, 300)
     if ref.get("executed_despite") and inv is not None:
-        return (f"{phrase} ran although ContextOS returned {inv.decision}",
-                f"The call was {str(ref['executed_despite']).replace('_', ' ')} when the integration reported a result.")
+        return (
+            f"{phrase} ran although ContextOS returned {inv.decision}",
+            f"The call was {str(ref['executed_despite']).replace('_', ' ')} when the integration reported a result.",
+        )
     template = _COMPLETED.get(category)
     title = template.format(target[1]) if template and target else f"{phrase} completed"
     if item is not None:
@@ -282,8 +422,9 @@ def _tool_text(event_type: str, payload: dict[str, Any], ref: dict[str, Any], in
     return title, summary
 
 
-def _describe(event_type: str, payload: dict[str, Any], ref: dict[str, Any], item: Any,
-              other: bool) -> tuple[str, str | None]:
+def _describe(
+    event_type: str, payload: dict[str, Any], ref: dict[str, Any], item: Any, other: bool
+) -> tuple[str, str | None]:
     if event_type == "session.started":
         return "Session started", _meta_summary(payload.get("metadata"))
     if event_type == "session.ended":

@@ -128,7 +128,9 @@ def detect_secrets(text: str) -> list[SecretMatch]:
     if not candidates:
         return []
     return [
-        SecretMatch(c.secret_type, c.start, c.end, fingerprint_secret(c.raw), round(min(c.confidence, 1.0), 2))
+        SecretMatch(
+            c.secret_type, c.start, c.end, fingerprint_secret(c.raw), round(min(c.confidence, 1.0), 2)
+        )
         for c in _resolve(candidates, _excluded_spans(scanned))
     ]
 
@@ -249,8 +251,20 @@ def redact_value(value: Any) -> tuple[Any, list[SecretMatch]]:
 
 # --- classification -----------------------------------------------------------------------------
 
-_INTERNAL_SUFFIXES = (".local", ".localhost", ".internal", ".lan", ".corp", ".home", ".intranet", ".test", ".svc",
-                      ".cluster.local", ".localdomain", ".home.arpa")
+_INTERNAL_SUFFIXES = (
+    ".local",
+    ".localhost",
+    ".internal",
+    ".lan",
+    ".corp",
+    ".home",
+    ".intranet",
+    ".test",
+    ".svc",
+    ".cluster.local",
+    ".localdomain",
+    ".home.arpa",
+)
 
 
 def _host_is_internal(host: str) -> bool:

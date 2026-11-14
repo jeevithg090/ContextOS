@@ -32,33 +32,104 @@ log = logging.getLogger("contextos.mcp_gateway")
 
 # (option strings, takes a value, argparse keyword arguments)
 _OPTIONS: list[tuple[tuple[str, ...], bool, dict[str, object]]] = [
-    (("--name",), True, {"required": True, "metavar": "NAME",
-                         "help": "MCP server name as the host knows it (e.g. the .mcp.json key); ContextOS keys the "
-                                 "server and its tools by this name"}),
-    (("--agent",), True, {"metavar": "NAME", "help": "agent name reported to ContextOS (default: CONTEXTOS_AGENT_NAME, "
-                                                     "else the host's MCP client name)"}),
-    (("--fail-mode",), True, {"choices": ("closed", "open"),
-                              "help": "when ContextOS cannot be reached: 'closed' blocks tool calls (default), 'open' "
-                                      "forwards them without a decision"}),
-    (("--approval-timeout",), True, {"type": float, "metavar": "SECONDS",
-                                     "help": "how long a REQUIRE_APPROVAL call waits for a reviewer (default: "
-                                             "CONTEXTOS_APPROVAL_TIMEOUT_S or 300; 0 = do not wait, block); a "
-                                             "request nobody decided in time is withdrawn"}),
-    (("--poll-interval",), True, {"type": float, "default": 2.0, "metavar": "SECONDS",
-                                  "help": "approval polling interval (default 2)"}),
-    (("--session-id",), True, {"metavar": "ID", "help": "session id to report (default: a new id per process)"}),
-    (("--hide-blocked-tools",), False, {"action": "store_true",
-                                        "help": "list no tools when ContextOS classifies this MCP server as BLOCKED "
-                                                "(calls are decided either way)"}),
-    (("--no-context-reports",), False, {"action": "store_true",
-                                        "help": "do not report resource reads and prompts to ContextOS"}),
-    (("--max-result-chars",), True, {"type": int, "default": 100_000, "metavar": "N",
-                                     "help": "characters of each result/resource reported for scanning (default 100000)"}),
-    (("--startup-timeout",), True, {"type": float, "default": 60.0, "metavar": "SECONDS",
-                                    "help": "how long the upstream server may take to initialize (default 60)"}),
+    (
+        ("--name",),
+        True,
+        {
+            "required": True,
+            "metavar": "NAME",
+            "help": "MCP server name as the host knows it (e.g. the .mcp.json key); ContextOS keys the "
+            "server and its tools by this name",
+        },
+    ),
+    (
+        ("--agent",),
+        True,
+        {
+            "metavar": "NAME",
+            "help": "agent name reported to ContextOS (default: CONTEXTOS_AGENT_NAME, "
+            "else the host's MCP client name)",
+        },
+    ),
+    (
+        ("--fail-mode",),
+        True,
+        {
+            "choices": ("closed", "open"),
+            "help": "when ContextOS cannot be reached: 'closed' blocks tool calls (default), 'open' "
+            "forwards them without a decision",
+        },
+    ),
+    (
+        ("--approval-timeout",),
+        True,
+        {
+            "type": float,
+            "metavar": "SECONDS",
+            "help": "how long a REQUIRE_APPROVAL call waits for a reviewer (default: "
+            "CONTEXTOS_APPROVAL_TIMEOUT_S or 300; 0 = do not wait, block); a "
+            "request nobody decided in time is withdrawn",
+        },
+    ),
+    (
+        ("--poll-interval",),
+        True,
+        {
+            "type": float,
+            "default": 2.0,
+            "metavar": "SECONDS",
+            "help": "approval polling interval (default 2)",
+        },
+    ),
+    (
+        ("--session-id",),
+        True,
+        {"metavar": "ID", "help": "session id to report (default: a new id per process)"},
+    ),
+    (
+        ("--hide-blocked-tools",),
+        False,
+        {
+            "action": "store_true",
+            "help": "list no tools when ContextOS classifies this MCP server as BLOCKED "
+            "(calls are decided either way)",
+        },
+    ),
+    (
+        ("--no-context-reports",),
+        False,
+        {"action": "store_true", "help": "do not report resource reads and prompts to ContextOS"},
+    ),
+    (
+        ("--max-result-chars",),
+        True,
+        {
+            "type": int,
+            "default": 100_000,
+            "metavar": "N",
+            "help": "characters of each result/resource reported for scanning (default 100000)",
+        },
+    ),
+    (
+        ("--startup-timeout",),
+        True,
+        {
+            "type": float,
+            "default": 60.0,
+            "metavar": "SECONDS",
+            "help": "how long the upstream server may take to initialize (default 60)",
+        },
+    ),
     (("--cwd",), True, {"metavar": "DIR", "help": "working directory of the upstream server"}),
-    (("--log-level",), True, {"default": "info", "choices": ("debug", "info", "warning", "error"),
-                              "help": "stderr log level (default info); tool arguments and results are never logged"}),
+    (
+        ("--log-level",),
+        True,
+        {
+            "default": "info",
+            "choices": ("debug", "info", "warning", "error"),
+            "help": "stderr log level (default info); tool arguments and results are never logged",
+        },
+    ),
     (("-h", "--help"), False, {"action": "help", "help": "show this help and exit"}),
 ]
 _TAKES_VALUE = {opt: takes for opts, takes, _ in _OPTIONS for opt in opts}
@@ -76,12 +147,13 @@ class UsageError(Exception):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="contextos mcp-gateway", add_help=False,
+        prog="contextos mcp-gateway",
+        add_help=False,
         usage="contextos mcp-gateway --name NAME [options] -- COMMAND [ARGS...]",
         description="Run an MCP server behind ContextOS: every tools/call is decided by ContextOS before the "
-                    "server is contacted; listings, results, resources and prompts are reported for scanning.",
+        "server is contacted; listings, results, resources and prompts are reported for scanning.",
         epilog="Example: contextos mcp-gateway --name github --agent claude-code -- npx -y "
-               "@modelcontextprotocol/server-github",
+        "@modelcontextprotocol/server-github",
     )
     for opts, _takes, kwargs in _OPTIONS:
         parser.add_argument(*opts, **kwargs)  # type: ignore[arg-type]
@@ -95,12 +167,14 @@ def split_argv(argv: Sequence[str]) -> tuple[list[str], list[str]]:
     while i < len(args):
         arg = args[i]
         if arg == "--":
-            return args[:i], args[i + 1:]
+            return args[:i], args[i + 1 :]
         if not arg.startswith("-") or arg == "-":
             return args[:i], args[i:]
         name = arg.split("=", 1)[0]
         if name not in _TAKES_VALUE:
-            raise UsageError(f"unknown gateway option {arg!r} (gateway options must come before the upstream command)")
+            raise UsageError(
+                f"unknown gateway option {arg!r} (gateway options must come before the upstream command)"
+            )
         i += 2 if _TAKES_VALUE[name] and "=" not in arg else 1
     return args, []
 
@@ -173,12 +247,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         log.error("Invalid ContextOS configuration: %s", exc)
         return EXIT_ERROR
     if not config.api_key:
-        log.error("No ContextOS API key: set CONTEXTOS_API_KEY (scopes ingest + decide) or run `contextos init`. "
-                  "The gateway refuses to start rather than block every tool call.")
+        log.error(
+            "No ContextOS API key: set CONTEXTOS_API_KEY (scopes ingest + decide) or run `contextos init`. "
+            "The gateway refuses to start rather than block every tool call."
+        )
         return EXIT_ERROR
     fail_mode = opts.fail_mode or config.fail_mode
     if fail_mode not in ("closed", "open"):
-        log.info("Fail mode %r is not available in the MCP gateway (it has no one to ask); using 'closed'", fail_mode)
+        log.info(
+            "Fail mode %r is not available in the MCP gateway (it has no one to ask); using 'closed'",
+            fail_mode,
+        )
         fail_mode = "closed"
     return _run(invocation, config, fail_mode)
 
@@ -194,19 +273,26 @@ def _run(invocation: Invocation, config: Config, fail_mode: str) -> int:
     opts = invocation.options
     agent_name = opts.agent or config.agent_name
     settings = GatewaySettings(
-        server_name=opts.name, agent_name=agent_name, session_id=opts.session_id or new_session_id(),
+        server_name=opts.name,
+        agent_name=agent_name,
+        session_id=opts.session_id or new_session_id(),
         fail_mode=fail_mode,
-        approval_timeout_s=opts.approval_timeout if opts.approval_timeout is not None
+        approval_timeout_s=opts.approval_timeout
+        if opts.approval_timeout is not None
         else config.approval_timeout_s,
-        poll_s=opts.poll_interval, hide_blocked_tools=opts.hide_blocked_tools,
-        report_context=not opts.no_context_reports, max_result_chars=max(1_000, opts.max_result_chars),
+        poll_s=opts.poll_interval,
+        hide_blocked_tools=opts.hide_blocked_tools,
+        report_context=not opts.no_context_reports,
+        max_result_chars=max(1_000, opts.max_result_chars),
     )
     client = ContextOSClient.from_config(
-        config, agent=AgentRef(name=agent_name or f"mcp-gateway-{opts.name}", framework="mcp"),
+        config,
+        agent=AgentRef(name=agent_name or f"mcp-gateway-{opts.name}", framework="mcp"),
         integration="mcp_gateway",
     )
-    upstream = StdioServerParameters(command=invocation.command[0], args=invocation.command[1:],
-                                     env=upstream_environment(), cwd=opts.cwd)
+    upstream = StdioServerParameters(
+        command=invocation.command[0], args=invocation.command[1:], env=upstream_environment(), cwd=opts.cwd
+    )
     try:
         anyio.run(lambda: serve_stdio(settings, upstream, client, startup_timeout_s=opts.startup_timeout))
     except KeyboardInterrupt:
@@ -216,10 +302,14 @@ def _run(invocation: Invocation, config: Config, fail_mode: str) -> int:
         if isinstance(cause, KeyboardInterrupt):
             return EXIT_OK
         if isinstance(cause, FileNotFoundError | PermissionError):
-            log.error("Cannot start the upstream MCP server %r: %s", invocation.command[0], cause.strerror or cause)
+            log.error(
+                "Cannot start the upstream MCP server %r: %s", invocation.command[0], cause.strerror or cause
+            )
         elif isinstance(cause, TimeoutError):
-            log.error("The upstream MCP server did not finish initializing within %.0fs (--startup-timeout)",
-                      opts.startup_timeout)
+            log.error(
+                "The upstream MCP server did not finish initializing within %.0fs (--startup-timeout)",
+                opts.startup_timeout,
+            )
         else:
             log.error("The MCP gateway stopped: %s: %s", type(cause).__name__, cause)
             log.debug("Gateway failure", exc_info=cause)

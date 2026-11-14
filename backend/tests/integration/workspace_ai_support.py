@@ -28,11 +28,15 @@ def injection_task(client: TestClient, org: Any, db: Session) -> tuple[dict[str,
     """Run a real prompt-injection through the pipeline and open a remediation task for the finding."""
     run_tool(client, org.api_headers, "Read", {"file_path": "/work/billing/README.md"}, MALICIOUS_README)
     db.rollback()
-    finding = db.scalars(select(SecurityFinding).where(
-        SecurityFinding.organization_id == org.org_id, SecurityFinding.category == "instruction_override"
-    )).one()
-    out = ok(client.post(f"{API}/tasks/from-finding", json={"finding_id": finding.id}, headers=org.user_headers),
-             201)
+    finding = db.scalars(
+        select(SecurityFinding).where(
+            SecurityFinding.organization_id == org.org_id, SecurityFinding.category == "instruction_override"
+        )
+    ).one()
+    out = ok(
+        client.post(f"{API}/tasks/from-finding", json={"finding_id": finding.id}, headers=org.user_headers),
+        201,
+    )
     return out["task"], finding
 
 
@@ -59,5 +63,7 @@ def item_by_ref(pack: dict[str, Any], ref: str) -> dict[str, Any]:
     return next(i for i in pack["items"] if i["ref"] == ref)
 
 
-def fix_context(client: TestClient, headers: dict[str, str], task_id: str, status: int = 200, **body: Any) -> dict:
+def fix_context(
+    client: TestClient, headers: dict[str, str], task_id: str, status: int = 200, **body: Any
+) -> dict:
     return ok(client.post(f"{AI}/fix-context", json={"task_id": task_id, **body}, headers=headers), status)

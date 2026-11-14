@@ -24,6 +24,7 @@ TOOL_HTTP = {"name": "WebFetch", "category": "http", "risk_level": "high"}
 
 # ---- scalar operators ------------------------------------------------------------------------
 
+
 def test_eq_is_case_insensitive_for_strings():
     assert matches(leaf("tool.name", "eq", "webfetch"), tool=TOOL_HTTP)
     assert matches(leaf("tool.category", "eq", "HTTP"), tool=TOOL_HTTP)
@@ -137,11 +138,14 @@ def test_is_true_and_is_false_are_strict():
     assert matches(leaf("session.trifecta", "is_true"), session={"trifecta": True})
     assert not matches(leaf("session.trifecta", "is_true"), session={"trifecta": 1})
     assert not matches(leaf("session.trifecta", "is_true"), session={"trifecta": "true"})
-    assert matches(leaf("integration.supports_enforcement", "is_false"), integration={"supports_enforcement": False})
+    assert matches(
+        leaf("integration.supports_enforcement", "is_false"), integration={"supports_enforcement": False}
+    )
     assert not matches(leaf("integration.supports_enforcement", "is_false"), integration={})
 
 
 # ---- combinators -----------------------------------------------------------------------------
+
 
 def test_all_any_not():
     inp = {"tool": TOOL_HTTP, "session": {"trifecta": True}}
@@ -159,7 +163,14 @@ def test_nested_combinators():
     cond = {
         "all": [
             {"any": [leaf("tool.category", "eq", "email"), leaf("tool.category", "eq", "http")]},
-            {"not": {"all": [leaf("destination.classification", "in", ["TRUSTED"]), leaf("session.score", "gt", 10)]}},
+            {
+                "not": {
+                    "all": [
+                        leaf("destination.classification", "in", ["TRUSTED"]),
+                        leaf("session.score", "gt", 10),
+                    ]
+                }
+            },
         ]
     }
     assert matches(cond, tool=TOOL_HTTP, destination={"classification": "TRUSTED"}, session={"score": 5})
@@ -175,6 +186,7 @@ def test_any_evidence_lists_only_the_branches_that_held():
 
 # ---- paths -----------------------------------------------------------------------------------
 
+
 def test_wildcard_matches_any_list_element():
     resources = [
         {"kind": "url", "id": "https://docs.test", "sensitive": False},
@@ -183,7 +195,9 @@ def test_wildcard_matches_any_list_element():
     assert matches(leaf("resources[*].sensitive", "is_true"), resources=resources)
     assert matches(leaf("resources[*].kind", "eq", "FILE"), resources=resources)
     assert not matches(leaf("resources[*].kind", "eq", "command"), resources=resources)
-    out = evaluate_condition(leaf("resources[*].id", "glob", "*.env"), EvaluationInput(resources=resources).to_dict())
+    out = evaluate_condition(
+        leaf("resources[*].id", "glob", "*.env"), EvaluationInput(resources=resources).to_dict()
+    )
     assert out.evidence == ["resources[*].id matches *.env (observed: /app/.env)"]
 
 
@@ -209,8 +223,11 @@ def test_argument_paths_nested_and_wildcard():
 
 # ---- missing fields and empty / invalid conditions --------------------------------------------
 
+
 def test_missing_field_is_false_and_recorded():
-    out = evaluate_condition(leaf("destination.classification", "neq", "TRUSTED"), EvaluationInput().to_dict())
+    out = evaluate_condition(
+        leaf("destination.classification", "neq", "TRUSTED"), EvaluationInput().to_dict()
+    )
     assert not out.matched
     assert out.missing == ["destination.classification"]
     assert "not present in the input" in out.evidence[0]
@@ -224,7 +241,9 @@ def test_not_over_missing_field_matches_and_still_records_it():
 
 
 def test_null_value_counts_as_missing():
-    assert not matches(leaf("context.max_detection_severity", "empty"), context={"max_detection_severity": None})
+    assert not matches(
+        leaf("context.max_detection_severity", "empty"), context={"max_detection_severity": None}
+    )
     assert not matches(leaf("tool.server", "neq", "github"), tool={"server": None})
 
 
@@ -262,6 +281,7 @@ def test_depth_limit_is_enforced():
 
 
 # ---- explain_conditions ----------------------------------------------------------------------
+
 
 def test_explain_conditions_reads_as_english():
     cond = {

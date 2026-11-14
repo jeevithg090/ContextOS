@@ -52,7 +52,9 @@ class LinkCreate(Strict):
     kind: LinkKindName
     url: str | None = Field(default=None, max_length=2048)
     title: str | None = Field(default=None, max_length=400)
-    ref: str | None = Field(default=None, max_length=300, description="Branch name, commit SHA or environment")
+    ref: str | None = Field(
+        default=None, max_length=300, description="Branch name, commit SHA or environment"
+    )
     state: str | None = Field(default=None, max_length=32, description="PR: open|draft|merged|closed")
 
 

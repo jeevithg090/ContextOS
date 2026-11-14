@@ -41,7 +41,9 @@ class PostureOut(BaseModel):
     agents_total: int
     agents_active: int  # agents that reported an event in the window
     sessions_active: int  # sessions still open that had activity in the window
-    trifecta_sessions: int  # sessions with activity in the window whose risk state has all three trifecta legs
+    trifecta_sessions: (
+        int  # sessions with activity in the window whose risk state has all three trifecta legs
+    )
     sources_by_trust: dict[str, int]  # current classification of every known source
     open_findings_by_severity: dict[str, int]  # open + acknowledged, all time
     open_findings_total: int

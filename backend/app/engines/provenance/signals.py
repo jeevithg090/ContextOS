@@ -41,13 +41,20 @@ _INJECTION_CATEGORIES = {FindingCategory.PROMPT_INJECTION.value, FindingCategory
 _INJECTION_RULE_PREFIXES = ("PI-", "IO-")
 
 # Outcomes of the tool call at the end of a path.
-PREVENTED = "prevented"                  # DENY / rejected approval at an enforced boundary
+PREVENTED = "prevented"  # DENY / rejected approval at an enforced boundary
 AWAITING_APPROVAL = "awaiting_approval"  # held at an enforced boundary until a human decides
-ADVISORY_ONLY = "advisory_only"          # blocking decision returned, but the host may ignore it
-NOT_PREVENTED = "not_prevented"          # allowed, approved, or only observed after execution
+ADVISORY_ONLY = "advisory_only"  # blocking decision returned, but the host may ignore it
+NOT_PREVENTED = "not_prevented"  # allowed, approved, or only observed after execution
 
 _TIME_KEYS = (
-    "requested_at", "observed_at", "ts", "occurred_at", "received_at", "collected_at", "started_at", "created_at",
+    "requested_at",
+    "observed_at",
+    "ts",
+    "occurred_at",
+    "received_at",
+    "collected_at",
+    "started_at",
+    "created_at",
 )
 
 
@@ -79,7 +86,9 @@ class Detection:
     def injection(self) -> bool:
         if any(c in _INJECTION_CATEGORIES for c in self.categories):
             return True
-        return any(r.upper().startswith(_INJECTION_RULE_PREFIXES) or "injection" in r.lower() for r in self.rule_ids)
+        return any(
+            r.upper().startswith(_INJECTION_RULE_PREFIXES) or "injection" in r.lower() for r in self.rule_ids
+        )
 
 
 def _str_tuple(value: Any) -> tuple[str, ...]:
@@ -161,7 +170,9 @@ class InvocationAnalysis:
     @property
     def policy_flagged(self) -> bool:
         return self.decision in (Decision.DENY.value, Decision.REQUIRE_APPROVAL.value) or self.status in (
-            "denied", "rejected", "pending_approval",
+            "denied",
+            "rejected",
+            "pending_approval",
         )
 
     @property
@@ -172,8 +183,10 @@ class InvocationAnalysis:
     def worst_destination(self) -> str | None:
         if not self.destinations:
             return None
-        return min((d.classification or TrustLevel.UNKNOWN.value for d in self.destinations),
-                   key=lambda c: TRUST_RANK.get(c, TRUST_RANK[TrustLevel.UNKNOWN]))
+        return min(
+            (d.classification or TrustLevel.UNKNOWN.value for d in self.destinations),
+            key=lambda c: TRUST_RANK.get(c, TRUST_RANK[TrustLevel.UNKNOWN]),
+        )
 
     def leaves(self) -> list[Leaf]:
         found = [*self.sensitive_resources, *self.destinations, *self.secret_items]
@@ -212,9 +225,9 @@ def analyze_invocation(index: GraphIndex, inv_id: str) -> InvocationAnalysis:
         tool_label = index.nodes[tools[0].other]["label"] if tools else node["label"]
     result = InvocationAnalysis(node_id=inv_id, tool_label=str(tool_label), time=node_time(node))
     result.sensitive_flag = bool(attr(node, "sensitive", "sensitive_access", "sensitive_data_detected"))
-    result.secrets_in_arguments = bool(attr(node, "sensitive_data_detected")) or count_of(
-        attr(node, "secret_fingerprints")
-    ) > 0
+    result.secrets_in_arguments = (
+        bool(attr(node, "sensitive_data_detected")) or count_of(attr(node, "secret_fingerprints")) > 0
+    )
     result.matched_fingerprints = count_of(attr(node, "matched_session_fingerprints"))
 
     resource_refs = index.out_of_type(inv_id, ProvenanceNodeType.RESOURCE.value)

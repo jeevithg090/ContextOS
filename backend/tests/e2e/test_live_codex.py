@@ -59,15 +59,26 @@ class CodexHook:
         self.calls = 0
 
     def payload(self, event: str, **fields: Any) -> dict[str, Any]:
-        base = {"session_id": self.session, "transcript_path": None, "cwd": str(self.project),
-                "hook_event_name": event, "model": "gpt-5.5", "permission_mode": "default"}
+        base = {
+            "session_id": self.session,
+            "transcript_path": None,
+            "cwd": str(self.project),
+            "hook_event_name": event,
+            "model": "gpt-5.5",
+            "permission_mode": "default",
+        }
         if event not in ("SessionStart", "SessionEnd"):
             base["turn_id"] = self.turn
         return {**base, **fields}
 
     def __call__(self, event: str, **fields: Any) -> subprocess.CompletedProcess[bytes]:
-        done = run([self.exe, "codex-hook", event], self.env, stdin=json.dumps(self.payload(event, **fields)).encode(),
-                   cwd=self.project, timeout=180)
+        done = run(
+            [self.exe, "codex-hook", event],
+            self.env,
+            stdin=json.dumps(self.payload(event, **fields)).encode(),
+            cwd=self.project,
+            timeout=180,
+        )
         assert b'"ask"' not in done.stdout  # never "ask": Codex treats it as a failed hook and runs the tool
         return done
 
@@ -77,8 +88,13 @@ class CodexHook:
         call_id = f"call_{self.calls}"
         pre = self("PreToolUse", tool_name="Bash", tool_input={"command": command}, tool_use_id=call_id)
         if pre.returncode == 0 and output is not None:
-            post = self("PostToolUse", tool_name="Bash", tool_input={"command": command}, tool_use_id=call_id,
-                        tool_response=output)
+            post = self(
+                "PostToolUse",
+                tool_name="Bash",
+                tool_input={"command": command},
+                tool_use_id=call_id,
+                tool_response=output,
+            )
             assert (post.returncode, post.stdout) == (0, b"")
         return pre
 
@@ -116,7 +132,9 @@ def test_codex_hook_reports_context_and_blocks_exfiltration(live: LiveServer, tm
     assert live.session(hook.session)["status"] == "ended"
 
 
-def test_codex_hook_blocks_an_approval_nobody_decided_and_withdraws_it(live: LiveServer, tmp_path: Path) -> None:
+def test_codex_hook_blocks_an_approval_nobody_decided_and_withdraws_it(
+    live: LiveServer, tmp_path: Path
+) -> None:
     hook = CodexHook(live, tmp_path, CONTEXTOS_CODEX_APPROVAL_WAIT_S="2")
     hook.bash("cat README.md", MALICIOUS_README)
     done = hook.bash(OUTBOUND)
@@ -133,11 +151,22 @@ def test_codex_hook_continues_when_a_user_approves_while_it_polls(live: LiveServ
     hook = CodexHook(live, tmp_path, CONTEXTOS_CODEX_APPROVAL_WAIT_S="120")
     hook.bash("cat README.md", MALICIOUS_README)
     session_id = hook.server_session()["id"]
-    proc = subprocess.Popen([hook.exe, "codex-hook", "PreToolUse"], env=hook.env, cwd=hook.project,  # noqa: S603
-                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.Popen(  # noqa: S603
+        [hook.exe, "codex-hook", "PreToolUse"],
+        env=hook.env,
+        cwd=hook.project,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
     assert proc.stdin is not None
-    proc.stdin.write(json.dumps(hook.payload("PreToolUse", tool_name="Bash", tool_input={"command": OUTBOUND},
-                                             tool_use_id="call_poll")).encode())
+    proc.stdin.write(
+        json.dumps(
+            hook.payload(
+                "PreToolUse", tool_name="Bash", tool_input={"command": OUTBOUND}, tool_use_id="call_poll"
+            )
+        ).encode()
+    )
     proc.stdin.close()
     try:
         deadline = time.monotonic() + 120
@@ -147,7 +176,9 @@ def test_codex_hook_continues_when_a_user_approves_while_it_polls(live: LiveServ
             assert time.monotonic() < deadline, "the approval never appeared"
             time.sleep(0.5)
             pending = live.get("/approvals", status="pending", session_id=session_id)["items"]
-        decided = live.post(f"/approvals/{pending[0]['id']}/decide", {"approve": True, "note": "status check is fine"})
+        decided = live.post(
+            f"/approvals/{pending[0]['id']}/decide", {"approve": True, "note": "status check is fine"}
+        )
         assert decided["status"] == "approved"
         proc.wait(timeout=120)
         stdout, stderr = proc.stdout.read(), proc.stderr.read()  # type: ignore[union-attr]
@@ -170,7 +201,9 @@ def test_real_codex_honours_contextos_decisions(live: LiveServer, tmp_path: Path
     if codex is None:
         pytest.skip("no Codex binary installed (set CONTEXTOS_CODEX_BIN to run this test)")
     adds_before = {d["id"] for d in _add_decisions(live)}
-    result = verify.run_scenario(live.url, live.api_key, codex, tmp_path, contextos_exe=str(tool_path("contextos")))
+    result = verify.run_scenario(
+        live.url, live.api_key, codex, tmp_path, contextos_exe=str(tool_path("contextos"))
+    )
     assert result.returncode == 0, result.stderr[-2000:]
     outputs = [o if isinstance(o, str) else json.dumps(o) for o in result.outputs()]
     assert len(outputs) == 7, outputs
@@ -178,7 +211,9 @@ def test_real_codex_honours_contextos_decisions(live: LiveServer, tmp_path: Path
     # What Codex did: the blocked commands never ran; allowed calls did.
     assert "payments-service" in outputs[0]  # cat README.md ran
     for blocked in outputs[1:3]:  # cat .env, then the curl exfiltration
-        assert blocked.startswith("Command blocked by PreToolUse hook: ContextOS policy blocked this Bash call")
+        assert blocked.startswith(
+            "Command blocked by PreToolUse hook: ContextOS policy blocked this Bash call"
+        )
         assert result.token not in blocked.split(". Command: ")[0]  # Codex appends the model's own command
     assert not (result.project / "exfil-ran.txt").exists()  # the same command's `touch` never ran
     assert (result.project / "docs" / "notes.md").is_file() and "Success" in outputs[3]  # apply_patch
@@ -191,17 +226,31 @@ def test_real_codex_honours_contextos_decisions(live: LiveServer, tmp_path: Path
     assert session is not None and session["agent"]["framework"] == "openai_codex"
     decisions = live.get("/policies/recent-decisions", session_id=session["id"], limit=50)["items"]
     by_tool = sorted((d["tool_name"], d["decision"]) for d in decisions)
-    assert by_tool == [("Bash", "AUDIT"), ("Bash", "DENY"), ("Bash", "DENY"), ("add", "ALLOW"),
-                       ("apply_patch", "ALLOW"), ("multi_agent_v1wait_agent", "ALLOW"),
-                       ("spawn_agent", "ALLOW")], by_tool
+    assert by_tool == [
+        ("Bash", "AUDIT"),
+        ("Bash", "DENY"),
+        ("Bash", "DENY"),
+        ("add", "ALLOW"),
+        ("apply_patch", "ALLOW"),
+        ("multi_agent_v1wait_agent", "ALLOW"),
+        ("spawn_agent", "ALLOW"),
+    ], by_tool
     assert {d["enforcement"] for d in decisions} == {"enforced"}
     events = live.get("/events", session_id=session["id"], limit=100)["items"]
     types = [e["event_type"] for e in events]
-    for expected in ("session.started", "prompt.submitted", "tool.requested", "tool.completed", "agent.delegated",
-                     "session.ended"):
+    for expected in (
+        "session.started",
+        "prompt.submitted",
+        "tool.requested",
+        "tool.completed",
+        "agent.delegated",
+        "session.ended",
+    ):
         assert expected in types, types
     [child] = verify.child_sessions(live, result.thread_id)
-    assert child["status"] == "ended" and child["agent"]["name"].endswith("/explorer")  # closed by SubagentStop
+    assert child["status"] == "ended" and child["agent"]["name"].endswith(
+        "/explorer"
+    )  # closed by SubagentStop
     child_events = [e["event_type"] for e in live.get("/events", session_id=child["id"], limit=20)["items"]]
     assert "session.ended" in child_events, child_events
     new_adds = [d for d in _add_decisions(live) if d["id"] not in adds_before]

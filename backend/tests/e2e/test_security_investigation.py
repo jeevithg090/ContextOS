@@ -31,19 +31,29 @@ from tests.e2e.flow_support import event as _event
 def _run(f: Flow, sid: str, name: str, arguments: dict, result: str) -> dict:
     request = tool(sid, name, arguments)
     decision = f.decide(request)
-    f.events(_event("tool.completed", sid, tool=request["tool"], arguments=arguments,
-                    correlation_id=request["correlation_id"], result=result))
+    f.events(
+        _event(
+            "tool.completed",
+            sid,
+            tool=request["tool"],
+            arguments=arguments,
+            correlation_id=request["correlation_id"],
+            result=result,
+        )
+    )
     return decision
 
 
 def _canonical_sha256(bundle: dict) -> str:
     body = {k: v for k, v in bundle.items() if k != "integrity"}
-    return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
-                                     allow_nan=False).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
+    ).hexdigest()
 
 
 def test_analyst_investigates_an_exfiltration_attempt_and_exports_verified_evidence(
-        client: TestClient, seeded_org: OrgCtx, other_org: OrgCtx) -> None:
+    client: TestClient, seeded_org: OrgCtx, other_org: OrgCtx
+) -> None:
     f = Flow(client, seeded_org)
     sid = f"inv-{uuid.uuid4().hex[:8]}"
     token, aws = synthetic_github_token(), synthetic_aws_secret()
@@ -75,7 +85,10 @@ def test_analyst_investigates_an_exfiltration_attempt_and_exports_verified_evide
     # Replay: what the agent did, in order, with the recorded outcomes.
     steps = f.get(f"/replay/sessions/{session_id}")["steps"]
     assert [s["outcome"]["decision"] for s in steps if (s.get("outcome") or {}).get("decision")] == [
-        "AUDIT", "ALLOW", "DENY"]
+        "AUDIT",
+        "ALLOW",
+        "DENY",
+    ]
 
     # Notes are redacted; the evidence bundle verifies and is itself audited.
     f.post(f"/incidents/{incident_id}/notes", {"body": f"Confirmed: the denied call carried {token}."}, 201)
@@ -95,12 +108,18 @@ def test_analyst_investigates_an_exfiltration_attempt_and_exports_verified_evide
     assert f.get("/audit/verify")["valid"] is True
 
     # Another organisation sees none of it.
-    for path in (f"/incidents/{incident_id}", f"/incidents/{incident_id}/export", f"/replay/sessions/{session_id}"):
+    for path in (
+        f"/incidents/{incident_id}",
+        f"/incidents/{incident_id}/export",
+        f"/replay/sessions/{session_id}",
+    ):
         assert client.get(f"/api/v1{path}", headers=other_org.user_headers).status_code == 404
     assert client.get("/api/v1/incidents", headers=other_org.user_headers).json()["total"] == 0
 
     # Close the investigation.
-    closed = f.patch(f"/incidents/{incident_id}", {"status": "resolved",
-                                                  "resolution": "Token rotated; README fixed upstream."})
+    closed = f.patch(
+        f"/incidents/{incident_id}",
+        {"status": "resolved", "resolution": "Token rotated; README fixed upstream."},
+    )
     assert closed["status"] == "resolved" and closed["resolved_at"]
     assert f.get("/overview/nav-counts")["open_incidents"] == 0

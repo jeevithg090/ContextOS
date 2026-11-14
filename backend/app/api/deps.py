@@ -126,7 +126,11 @@ def get_principal(request: Request, db: Session = Depends(get_db)) -> Principal:
     if token.startswith(API_KEY_PREFIX):
         principal = _principal_from_api_key(db, token)
     elif token.startswith(SESSION_TOKEN_PREFIX):
-        if from_cookie and request.method in _UNSAFE_METHODS and request.headers.get(CSRF_HEADER) != CSRF_VALUE:
+        if (
+            from_cookie
+            and request.method in _UNSAFE_METHODS
+            and request.headers.get(CSRF_HEADER) != CSRF_VALUE
+        ):
             raise PermissionDeniedError("Missing CSRF header")
         principal = _principal_from_session(db, token, request.headers.get(ORG_HEADER))
     else:
@@ -173,10 +177,17 @@ def credential_still_valid(db: Session, principal: Principal, permission: str) -
     """
     now = utcnow()
     if principal.kind == "api_key":
-        key = db.scalar(select(ApiKey).where(ApiKey.id == principal.api_key_id,
-                                             ApiKey.organization_id == principal.org_id))
-        return (key is not None and key.revoked_at is None
-                and (key.expires_at is None or key.expires_at > now) and permission in (key.scopes or []))
+        key = db.scalar(
+            select(ApiKey).where(
+                ApiKey.id == principal.api_key_id, ApiKey.organization_id == principal.org_id
+            )
+        )
+        return (
+            key is not None
+            and key.revoked_at is None
+            and (key.expires_at is None or key.expires_at > now)
+            and permission in (key.scopes or [])
+        )
     if principal.auth_session_id is not None:
         auth = db.scalar(select(AuthSession).where(AuthSession.id == principal.auth_session_id))
         if auth is None or auth.revoked_at is not None or auth.expires_at <= now:
@@ -184,8 +195,11 @@ def credential_still_valid(db: Session, principal: Principal, permission: str) -
     user = db.get(User, principal.user_id) if principal.user_id else None
     if user is None or not user.is_active:
         return False
-    membership = db.scalar(select(Membership).where(Membership.user_id == user.id,
-                                                    Membership.organization_id == principal.org_id))
+    membership = db.scalar(
+        select(Membership).where(
+            Membership.user_id == user.id, Membership.organization_id == principal.org_id
+        )
+    )
     return membership is not None and permission in ROLE_PERMISSIONS.get(membership.role, set())
 
 

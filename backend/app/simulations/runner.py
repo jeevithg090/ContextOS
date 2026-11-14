@@ -71,17 +71,19 @@ class _Builder:
             agent = {"name": a.agent_name, "framework": a.framework, "version": a.version}
             session, parent = a.main_session, None
         integration = fields.pop("integration", "claude_code")
-        return EventEnvelope.model_validate({
-            "event_id": f"{self.run_id}-{self.counter:03d}",
-            "event_type": event_type.value,
-            "timestamp": utcnow(),
-            "agent": {k: v for k, v in agent.items() if v is not None},
-            "session_id": session,
-            "parent_session_id": parent,
-            "integration": integration,
-            "collected_via": f"simulation_lab:{event_type.value}",
-            **fields,
-        })
+        return EventEnvelope.model_validate(
+            {
+                "event_id": f"{self.run_id}-{self.counter:03d}",
+                "event_type": event_type.value,
+                "timestamp": utcnow(),
+                "agent": {k: v for k, v in agent.items() if v is not None},
+                "session_id": session,
+                "parent_session_id": parent,
+                "integration": integration,
+                "collected_via": f"simulation_lab:{event_type.value}",
+                **fields,
+            }
+        )
 
 
 def execute(db: Any, ctx: IngestContext, scenario: Scenario, actors: Actors, rv: RunVars) -> Execution:
@@ -94,10 +96,15 @@ def execute(db: Any, ctx: IngestContext, scenario: Scenario, actors: Actors, rv:
         try:
             outcome = _run_step(db, ctx, b, step, rv)
         except Exception as exc:  # recorded on the run and logged; the run is marked failed
-            log.warning("simulation step failed", extra={"scenario": scenario.id, "step": step.label,
-                                                          "error_type": type(exc).__name__})
-            out.outcomes[step.label] = StepOutcome(label=step.label, kind=type(step).__name__,
-                                                   error=f"{type(exc).__name__}: {getattr(exc, 'message', '')}"[:300])
+            log.warning(
+                "simulation step failed",
+                extra={"scenario": scenario.id, "step": step.label, "error_type": type(exc).__name__},
+            )
+            out.outcomes[step.label] = StepOutcome(
+                label=step.label,
+                kind=type(step).__name__,
+                error=f"{type(exc).__name__}: {getattr(exc, 'message', '')}"[:300],
+            )
             out.error = f"Step '{step.label}' could not be processed by the pipeline ({type(exc).__name__})."
             break
         out.outcomes[step.label] = outcome
@@ -125,29 +132,61 @@ def _run_step(db: Any, ctx: IngestContext, b: _Builder, step: Any, rv: RunVars) 
     if isinstance(step, ToolCall):
         return _tool_call(db, ctx, b, step, rv)
     if isinstance(step, ContextRead):
-        refs = ingest(db, ctx, b.envelope(
-            EventType.CONTEXT_INGESTED, actor=step.actor,
-            source={"type": step.source_type, "identifier": step.identifier},
-            content=resolve_text(step.content, rv), content_type=step.content_type))
+        refs = ingest(
+            db,
+            ctx,
+            b.envelope(
+                EventType.CONTEXT_INGESTED,
+                actor=step.actor,
+                source={"type": step.source_type, "identifier": step.identifier},
+                content=resolve_text(step.content, rv),
+                content_type=step.content_type,
+            ),
+        )
         return StepOutcome(label=step.label, kind="context", refs=refs, session_id=refs.get("session_id"))
     if isinstance(step, McpListing):
-        refs = ingest(db, ctx, b.envelope(
-            EventType.MCP_SERVER_CONNECTED, integration="mcp_gateway",
-            source={"type": SourceType.MCP_SERVER.value, "identifier": step.server},
-            metadata={"tools": [{"name": n, "description": d} for n, d in step.tools]}))
+        refs = ingest(
+            db,
+            ctx,
+            b.envelope(
+                EventType.MCP_SERVER_CONNECTED,
+                integration="mcp_gateway",
+                source={"type": SourceType.MCP_SERVER.value, "identifier": step.server},
+                metadata={"tools": [{"name": n, "description": d} for n, d in step.tools]},
+            ),
+        )
         return StepOutcome(label=step.label, kind="mcp_listing", refs=refs, session_id=refs.get("session_id"))
     if isinstance(step, Delegate):
-        refs = ingest(db, ctx, b.envelope(
-            EventType.AGENT_DELEGATED,
-            delegation={"child_agent": {"name": b.actors.child_agent, "framework": "simulation"},
-                        "child_session_id": b.actors.child_session, "task": step.task}))
+        refs = ingest(
+            db,
+            ctx,
+            b.envelope(
+                EventType.AGENT_DELEGATED,
+                delegation={
+                    "child_agent": {"name": b.actors.child_agent, "framework": "simulation"},
+                    "child_session_id": b.actors.child_session,
+                    "task": step.task,
+                },
+            ),
+        )
         return StepOutcome(label=step.label, kind="delegation", refs=refs, session_id=refs.get("session_id"))
     if isinstance(step, ChildReply):
-        refs = ingest(db, ctx, b.envelope(
-            EventType.AGENT_MESSAGE,
-            message={"from_agent": b.actors.child_agent, "from_session_id": b.actors.child_session,
-                     "to_agent": b.actors.agent_name, "content": resolve_text(step.content, rv) or ""}))
-        return StepOutcome(label=step.label, kind="agent_message", refs=refs, session_id=refs.get("session_id"))
+        refs = ingest(
+            db,
+            ctx,
+            b.envelope(
+                EventType.AGENT_MESSAGE,
+                message={
+                    "from_agent": b.actors.child_agent,
+                    "from_session_id": b.actors.child_session,
+                    "to_agent": b.actors.agent_name,
+                    "content": resolve_text(step.content, rv) or "",
+                },
+            ),
+        )
+        return StepOutcome(
+            label=step.label, kind="agent_message", refs=refs, session_id=refs.get("session_id")
+        )
     raise TypeError(f"unknown step type {type(step).__name__}")
 
 
@@ -155,24 +194,50 @@ def _tool_call(db: Any, ctx: IngestContext, b: _Builder, step: ToolCall, rv: Run
     arguments = resolve_args(step.arguments, rv)
     tool = {"name": step.tool, "provider": step.provider, **({"server": step.server} if step.server else {})}
     correlation = f"{b.run_id}-{step.label}"[:200]
-    response = decide_tool_request(db, ctx, b.envelope(
-        EventType.TOOL_REQUESTED, actor=step.actor, integration=step.integration, tool=tool, arguments=arguments,
-        correlation_id=correlation))
+    response = decide_tool_request(
+        db,
+        ctx,
+        b.envelope(
+            EventType.TOOL_REQUESTED,
+            actor=step.actor,
+            integration=step.integration,
+            tool=tool,
+            arguments=arguments,
+            correlation_id=correlation,
+        ),
+    )
     outcome = StepOutcome(
-        label=step.label, kind="tool_call", decision=response.decision, enforcement=response.enforcement,
+        label=step.label,
+        kind="tool_call",
+        decision=response.decision,
+        enforcement=response.enforcement,
         approval_id=response.approval_id,
-        refs={"policy_decision_id": response.policy_decision_id, "tool_invocation_id": response.tool_invocation_id,
-              "approval_id": response.approval_id, "risk": dict(response.risk or {}),
-              "matched_policies": [m.get("name") for m in response.matched_policies][:5]},
+        refs={
+            "policy_decision_id": response.policy_decision_id,
+            "tool_invocation_id": response.tool_invocation_id,
+            "approval_id": response.approval_id,
+            "risk": dict(response.risk or {}),
+            "matched_policies": [m.get("name") for m in response.matched_policies][:5],
+        },
     )
     invocation = db.get(ToolInvocation, response.tool_invocation_id)  # server-generated id from this run
     outcome.session_id = invocation.session_id if invocation is not None else None
     outcome.executed = response.decision in _RUNS
     result = resolve_text(step.result, rv)
     if outcome.executed and result is not None:
-        refs = ingest(db, ctx, b.envelope(
-            EventType.TOOL_COMPLETED, actor=step.actor, integration=step.integration, tool=tool,
-            arguments=arguments, result=result, correlation_id=correlation))
+        refs = ingest(
+            db,
+            ctx,
+            b.envelope(
+                EventType.TOOL_COMPLETED,
+                actor=step.actor,
+                integration=step.integration,
+                tool=tool,
+                arguments=arguments,
+                result=result,
+                correlation_id=correlation,
+            ),
+        )
         if refs.get("context_item_id"):
             outcome.refs["context_item_id"] = refs["context_item_id"]
     return outcome

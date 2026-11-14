@@ -49,8 +49,18 @@ from app.services.integrations_health import (
 from app.services.integrations_setup import server_url_for, setup_guide
 
 __all__ = [
-    "CATALOG", "CATALOG_BY_KIND", "STALE_AFTER", "CatalogSpec", "catalog_spec", "connected_integrations",
-    "display_name", "health_of", "integrations_overview", "normalise_kind", "server_url_for", "setup_guide",
+    "CATALOG",
+    "CATALOG_BY_KIND",
+    "STALE_AFTER",
+    "CatalogSpec",
+    "catalog_spec",
+    "connected_integrations",
+    "display_name",
+    "health_of",
+    "integrations_overview",
+    "normalise_kind",
+    "server_url_for",
+    "setup_guide",
     "setup_guide_for_org",
 ]
 
@@ -65,8 +75,10 @@ def health_of(last_event_at: datetime | None, now: datetime) -> tuple[str, str]:
         return health, "Registered, but no event has been received yet."
     if health == CONNECTED:
         return health, f"Received an event in the last {STALE_AFTER_HOURS} hours."
-    return health, (f"No event in the last {STALE_AFTER_HOURS} hours. The agent may simply be idle; if it is "
-                    "running, check its configuration with `contextos doctor`.")
+    return health, (
+        f"No event in the last {STALE_AFTER_HOURS} hours. The agent may simply be idle; if it is "
+        "running, check its configuration with `contextos doctor`."
+    )
 
 
 def setup_guide_for_org(db: Session, org_id: str, kind: str, base_url: str) -> SetupGuideOut | None:
@@ -82,8 +94,11 @@ def setup_guide_for_org(db: Session, org_id: str, kind: str, base_url: str) -> S
 def _events_24h(db: Session, org_id: str, since: datetime) -> dict[str, int]:
     rows = db.execute(
         select(IngestedEvent.integration, func.count())
-        .where(IngestedEvent.organization_id == org_id, IngestedEvent.is_simulation.is_(False),
-               IngestedEvent.received_at >= since)
+        .where(
+            IngestedEvent.organization_id == org_id,
+            IngestedEvent.is_simulation.is_(False),
+            IngestedEvent.received_at >= since,
+        )
         .group_by(IngestedEvent.integration)
     ).all()
     counts: dict[str, int] = {}
@@ -96,8 +111,11 @@ def _events_24h(db: Session, org_id: str, since: datetime) -> dict[str, int]:
 def _decisions_by_kind(db: Session, org_id: str) -> dict[str, EnforcementCountsOut]:
     rows = db.execute(
         select(IngestedEvent.integration, PolicyDecision.enforcement, func.count())
-        .join(IngestedEvent, (IngestedEvent.id == PolicyDecision.event_id)
-              & (IngestedEvent.organization_id == PolicyDecision.organization_id))
+        .join(
+            IngestedEvent,
+            (IngestedEvent.id == PolicyDecision.event_id)
+            & (IngestedEvent.organization_id == PolicyDecision.organization_id),
+        )
         .where(PolicyDecision.organization_id == org_id, PolicyDecision.is_simulation.is_(False))
         .group_by(IngestedEvent.integration, PolicyDecision.enforcement)
     ).all()
@@ -131,15 +149,26 @@ def connected_integrations(db: Session, org_id: str, now: datetime) -> list[Conn
     out: list[ConnectedIntegrationOut] = []
     for row in rows:
         health, detail = health_of(row.last_event_at, now)
-        out.append(ConnectedIntegrationOut(
-            id=row.id, kind=row.kind, name=row.name, display_name=display_name(row.kind),
-            supported=getattr(CATALOG_BY_KIND.get(row.kind), "status", None) == "supported",
-            best_enforcement=best_enforcement(row.kind), health=health, health_detail=detail,
-            first_seen_at=row.created_at, last_event_at=row.last_event_at,
-            event_count=row.event_count or 0, decision_count=row.decision_count or 0,
-            events_24h=events.get(row.kind, 0), decisions=decisions.get(row.kind, EnforcementCountsOut()),
-            agent_count=agents.get(row.id, 0), last_error=row.last_error,
-        ))
+        out.append(
+            ConnectedIntegrationOut(
+                id=row.id,
+                kind=row.kind,
+                name=row.name,
+                display_name=display_name(row.kind),
+                supported=getattr(CATALOG_BY_KIND.get(row.kind), "status", None) == "supported",
+                best_enforcement=best_enforcement(row.kind),
+                health=health,
+                health_detail=detail,
+                first_seen_at=row.created_at,
+                last_event_at=row.last_event_at,
+                event_count=row.event_count or 0,
+                decision_count=row.decision_count or 0,
+                events_24h=events.get(row.kind, 0),
+                decisions=decisions.get(row.kind, EnforcementCountsOut()),
+                agent_count=agents.get(row.id, 0),
+                last_error=row.last_error,
+            )
+        )
     epoch = datetime.min.replace(tzinfo=now.tzinfo)
     out.sort(key=lambda i: (_ORDER[i.health], -(ensure_utc(i.last_event_at) or epoch).timestamp(), i.kind))
     return out
@@ -154,12 +183,21 @@ def _catalog_entry(spec: CatalogSpec, connected: list[ConnectedIntegrationOut]) 
         return [CapabilityOut(name=n, mode=m, description=d) for n, m, d in items]  # type: ignore[arg-type]
 
     return CatalogEntryOut(
-        kind=spec.kind, name=spec.name, status=spec.status, summary=spec.summary,  # type: ignore[arg-type]
-        best_enforcement=spec.best_enforcement, monitoring=caps(spec.monitoring),  # type: ignore[arg-type]
-        enforcement=caps(spec.enforcement), limitations=list(spec.limitations),
-        integration_surface=spec.integration_surface, available_today=spec.available_today,
-        interim_kind=spec.interim_kind, docs_path=spec.docs_path, api_key_scopes=list(spec.api_key_scopes),
-        health=health, last_event_at=last,  # type: ignore[arg-type]
+        kind=spec.kind,
+        name=spec.name,
+        status=spec.status,
+        summary=spec.summary,  # type: ignore[arg-type]
+        best_enforcement=spec.best_enforcement,
+        monitoring=caps(spec.monitoring),  # type: ignore[arg-type]
+        enforcement=caps(spec.enforcement),
+        limitations=list(spec.limitations),
+        integration_surface=spec.integration_surface,
+        available_today=spec.available_today,
+        interim_kind=spec.interim_kind,
+        docs_path=spec.docs_path,
+        api_key_scopes=list(spec.api_key_scopes),
+        health=health,
+        last_event_at=last,  # type: ignore[arg-type]
     )
 
 

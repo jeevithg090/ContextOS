@@ -96,15 +96,20 @@ def _close(db: Session, org_id: str, approval_id: str, values: dict[str, Any]) -
     """Move one approval out of ``pending``. False when another request already closed it."""
     result = db.execute(
         update(Approval)
-        .where(Approval.organization_id == org_id, Approval.id == approval_id,
-               Approval.status == ApprovalStatus.PENDING)
+        .where(
+            Approval.organization_id == org_id,
+            Approval.id == approval_id,
+            Approval.status == ApprovalStatus.PENDING,
+        )
         .values(**values)
         .execution_options(synchronize_session=False)
     )
     return result.rowcount == 1  # type: ignore[attr-defined]
 
 
-def _settle_invocation(db: Session, org_id: str, approval: Approval, status: str) -> tuple[str | None, str | None]:
+def _settle_invocation(
+    db: Session, org_id: str, approval: Approval, status: str
+) -> tuple[str | None, str | None]:
     """Record the approval outcome on the paused call. Returns (status before, status after).
 
     Only a call still waiting (``pending_approval``) changes; a call the integration ran anyway
@@ -112,16 +117,22 @@ def _settle_invocation(db: Session, org_id: str, approval: Approval, status: str
     """
     if not approval.tool_invocation_id:
         return None, None
-    before = db.scalar(select(ToolInvocation.status).where(
-        ToolInvocation.organization_id == org_id, ToolInvocation.id == approval.tool_invocation_id))
+    before = db.scalar(
+        select(ToolInvocation.status).where(
+            ToolInvocation.organization_id == org_id, ToolInvocation.id == approval.tool_invocation_id
+        )
+    )
     if before is None:
         return None, None
     if before != _AWAITING:
         return before, before
     db.execute(
         update(ToolInvocation)
-        .where(ToolInvocation.organization_id == org_id, ToolInvocation.id == approval.tool_invocation_id,
-               ToolInvocation.status == _AWAITING)
+        .where(
+            ToolInvocation.organization_id == org_id,
+            ToolInvocation.id == approval.tool_invocation_id,
+            ToolInvocation.status == _AWAITING,
+        )
         .values(status=status)
         .execution_options(synchronize_session=False)
     )
@@ -131,11 +142,22 @@ def _settle_invocation(db: Session, org_id: str, approval: Approval, status: str
 def _record_expiry(db: Session, org_id: str, approval: Approval) -> None:
     before, after = _settle_invocation(db, org_id, approval, _INVOCATION_STATUS[ApprovalStatus.EXPIRED])
     append_audit(
-        db, org_id, action="approval.expired", actor_type="system", target_type="approval", target_id=approval.id,
-        details={"outcome": ApprovalStatus.EXPIRED.value, "tool_invocation_id": approval.tool_invocation_id,
-                 "policy_decision_id": approval.policy_decision_id, "agent_id": approval.agent_id,
-                 "session_id": approval.session_id, "invocation_status_before": before,
-                 "invocation_status": after, "expires_at": isoformat(approval.expires_at)},
+        db,
+        org_id,
+        action="approval.expired",
+        actor_type="system",
+        target_type="approval",
+        target_id=approval.id,
+        details={
+            "outcome": ApprovalStatus.EXPIRED.value,
+            "tool_invocation_id": approval.tool_invocation_id,
+            "policy_decision_id": approval.policy_decision_id,
+            "agent_id": approval.agent_id,
+            "session_id": approval.session_id,
+            "invocation_status_before": before,
+            "invocation_status": after,
+            "expires_at": isoformat(approval.expires_at),
+        },
     )
 
 
@@ -146,21 +168,33 @@ def _expire(db: Session, org_id: str, approval: Approval, now: datetime) -> bool
     db.refresh(approval)
     if closed:
         _record_expiry(db, org_id, approval)
-        notify(db, org_id, "approval.decided", id=approval.id, status=ApprovalStatus.EXPIRED.value,
-               session_id=approval.session_id)
+        notify(
+            db,
+            org_id,
+            "approval.decided",
+            id=approval.id,
+            status=ApprovalStatus.EXPIRED.value,
+            session_id=approval.session_id,
+        )
     return closed
 
 
 def _overdue(approval: Approval, now: datetime) -> bool:
-    return (approval.status == ApprovalStatus.PENDING and approval.expires_at is not None
-            and approval.expires_at <= now)
+    return (
+        approval.status == ApprovalStatus.PENDING
+        and approval.expires_at is not None
+        and approval.expires_at <= now
+    )
 
 
 def _call_awaiting(db: Session, org_id: str, approval: Approval) -> bool:
     if not approval.tool_invocation_id:
         return False
-    status = db.scalar(select(ToolInvocation.status).where(
-        ToolInvocation.organization_id == org_id, ToolInvocation.id == approval.tool_invocation_id))
+    status = db.scalar(
+        select(ToolInvocation.status).where(
+            ToolInvocation.organization_id == org_id, ToolInvocation.id == approval.tool_invocation_id
+        )
+    )
     return status == _AWAITING
 
 
@@ -172,16 +206,28 @@ def expire_overdue(db: Session, org_id: str, *, now: datetime | None = None) -> 
     audited.
     """
     now = now or utcnow()
-    overdue = list(db.scalars(select(Approval).where(
-        Approval.organization_id == org_id, Approval.status == ApprovalStatus.PENDING,
-        Approval.expires_at.is_not(None), Approval.expires_at <= now)))
+    overdue = list(
+        db.scalars(
+            select(Approval).where(
+                Approval.organization_id == org_id,
+                Approval.status == ApprovalStatus.PENDING,
+                Approval.expires_at.is_not(None),
+                Approval.expires_at <= now,
+            )
+        )
+    )
     expired = sum(1 for approval in overdue if _expire(db, org_id, approval, now))
     unsettled = db.scalars(
         select(Approval)
-        .join(ToolInvocation, (ToolInvocation.id == Approval.tool_invocation_id)
-              & (ToolInvocation.organization_id == org_id))
-        .where(Approval.organization_id == org_id, Approval.status == ApprovalStatus.EXPIRED,
-               ToolInvocation.status == _AWAITING)
+        .join(
+            ToolInvocation,
+            (ToolInvocation.id == Approval.tool_invocation_id) & (ToolInvocation.organization_id == org_id),
+        )
+        .where(
+            Approval.organization_id == org_id,
+            Approval.status == ApprovalStatus.EXPIRED,
+            ToolInvocation.status == _AWAITING,
+        )
     ).all()
     for approval in unsettled:
         _record_expiry(db, org_id, approval)
@@ -216,32 +262,59 @@ def decide_approval(
             details={"status": approval.status, "expires_at": isoformat(approval.expires_at)},
         )
     if approval.status != ApprovalStatus.PENDING:
-        raise ConflictError(_already_closed(approval), details={
-            "status": approval.status, "decided_at": isoformat(approval.decided_at),
-            "decided_by_user_id": approval.decided_by_user_id})
+        raise ConflictError(
+            _already_closed(approval),
+            details={
+                "status": approval.status,
+                "decided_at": isoformat(approval.decided_at),
+                "decided_by_user_id": approval.decided_by_user_id,
+            },
+        )
 
     status = ApprovalStatus.APPROVED if approve else ApprovalStatus.REJECTED
     clean_note = _clean_note(note)
     now = utcnow()
-    if not _close(db, org_id, approval.id, {"status": status, "decided_at": now, "decided_by_user_id": user_id,
-                                            "decision_note": clean_note}):
+    if not _close(
+        db,
+        org_id,
+        approval.id,
+        {"status": status, "decided_at": now, "decided_by_user_id": user_id, "decision_note": clean_note},
+    ):
         db.refresh(approval)
         raise ConflictError(_already_closed(approval), details={"status": approval.status})
     db.refresh(approval)
     before, after = _settle_invocation(db, org_id, approval, _INVOCATION_STATUS[status])
     waited = (now - approval.requested_at).total_seconds() if approval.requested_at else None
     append_audit(
-        db, org_id, action="approval.decided", actor_type="user", actor_id=user_id, target_type="approval",
+        db,
+        org_id,
+        action="approval.decided",
+        actor_type="user",
+        actor_id=user_id,
+        target_type="approval",
         target_id=approval.id,
-        details={"outcome": status.value, "tool_invocation_id": approval.tool_invocation_id,
-                 "policy_decision_id": approval.policy_decision_id, "agent_id": approval.agent_id,
-                 "session_id": approval.session_id, "invocation_status_before": before,
-                 "invocation_status": after, "note": clean_note[:500] if clean_note else None,
-                 "waited_s": round(waited, 1) if waited is not None else None,
-                 "is_simulation": bool(approval.is_simulation)},
+        details={
+            "outcome": status.value,
+            "tool_invocation_id": approval.tool_invocation_id,
+            "policy_decision_id": approval.policy_decision_id,
+            "agent_id": approval.agent_id,
+            "session_id": approval.session_id,
+            "invocation_status_before": before,
+            "invocation_status": after,
+            "note": clean_note[:500] if clean_note else None,
+            "waited_s": round(waited, 1) if waited is not None else None,
+            "is_simulation": bool(approval.is_simulation),
+        },
     )
-    notify(db, org_id, "approval.decided", id=approval.id, status=status.value, session_id=approval.session_id,
-           tool_invocation_id=approval.tool_invocation_id)
+    notify(
+        db,
+        org_id,
+        "approval.decided",
+        id=approval.id,
+        status=status.value,
+        session_id=approval.session_id,
+        tool_invocation_id=approval.tool_invocation_id,
+    )
     db.flush()
     return approval
 
@@ -264,8 +337,14 @@ MAX_CANCEL_REASON_CHARS = 500
 
 
 def cancel_approval(
-    db: Session, org_id: str, approval_id: str, *, actor_type: str, actor_id: str | None,
-    reason: str | None = None, bound_agent_id: str | None = None,
+    db: Session,
+    org_id: str,
+    approval_id: str,
+    *,
+    actor_type: str,
+    actor_id: str | None,
+    reason: str | None = None,
+    bound_agent_id: str | None = None,
 ) -> Approval:
     """An integration stopped waiting for a reviewer (its host timed out or the user aborted).
 
@@ -281,8 +360,10 @@ def cancel_approval(
     if approval.status == ApprovalStatus.CANCELLED:
         return approval
     if approval.status != ApprovalStatus.PENDING:
-        raise ConflictError(_already_closed(approval), details={
-            "status": approval.status, "decided_at": isoformat(approval.decided_at)})
+        raise ConflictError(
+            _already_closed(approval),
+            details={"status": approval.status, "decided_at": isoformat(approval.decided_at)},
+        )
     now = utcnow()
     if not _close(db, org_id, approval.id, {"status": ApprovalStatus.CANCELLED, "decided_at": now}):
         db.refresh(approval)
@@ -293,14 +374,33 @@ def cancel_approval(
     before, after = _settle_invocation(db, org_id, approval, ApprovalStatus.CANCELLED.value)
     clean = redact_text(reason.strip()[:MAX_CANCEL_REASON_CHARS]).text if reason and reason.strip() else None
     append_audit(
-        db, org_id, action="approval.cancelled", actor_type=actor_type, actor_id=actor_id, target_type="approval",
+        db,
+        org_id,
+        action="approval.cancelled",
+        actor_type=actor_type,
+        actor_id=actor_id,
+        target_type="approval",
         target_id=approval.id,
-        details={"outcome": ApprovalStatus.CANCELLED.value, "tool_invocation_id": approval.tool_invocation_id,
-                 "policy_decision_id": approval.policy_decision_id, "agent_id": approval.agent_id,
-                 "session_id": approval.session_id, "invocation_status_before": before, "invocation_status": after,
-                 "reason": clean, "is_simulation": bool(approval.is_simulation)},
+        details={
+            "outcome": ApprovalStatus.CANCELLED.value,
+            "tool_invocation_id": approval.tool_invocation_id,
+            "policy_decision_id": approval.policy_decision_id,
+            "agent_id": approval.agent_id,
+            "session_id": approval.session_id,
+            "invocation_status_before": before,
+            "invocation_status": after,
+            "reason": clean,
+            "is_simulation": bool(approval.is_simulation),
+        },
     )
-    notify(db, org_id, "approval.decided", id=approval.id, status=ApprovalStatus.CANCELLED.value,
-           session_id=approval.session_id, tool_invocation_id=approval.tool_invocation_id)
+    notify(
+        db,
+        org_id,
+        "approval.decided",
+        id=approval.id,
+        status=ApprovalStatus.CANCELLED.value,
+        session_id=approval.session_id,
+        tool_invocation_id=approval.tool_invocation_id,
+    )
     db.flush()
     return approval

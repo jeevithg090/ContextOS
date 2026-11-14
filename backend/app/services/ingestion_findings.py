@@ -122,10 +122,19 @@ def raise_finding(
         st.add_ref("incident_ids", finding.incident_id)
     if created and finding.severity == Severity.CRITICAL:
         append_audit(
-            st.db, st.ctx.org_id, action="finding.critical", actor_type="system",
-            target_type="finding", target_id=finding.id,
-            details={"category": category, "rule_id": rule_id, "session_id": finding.session_id,
-                     "agent_id": finding.agent_id, "event_id": st.event.id},
+            st.db,
+            st.ctx.org_id,
+            action="finding.critical",
+            actor_type="system",
+            target_type="finding",
+            target_id=finding.id,
+            details={
+                "category": category,
+                "rule_id": rule_id,
+                "session_id": finding.session_id,
+                "agent_id": finding.agent_id,
+                "event_id": st.event.id,
+            },
         )
     return finding, created
 

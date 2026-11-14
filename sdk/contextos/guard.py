@@ -163,6 +163,7 @@ class ToolGuard:
         if self.tool_name is None:
             self.tool_name = fn.__name__
         if inspect.iscoroutinefunction(fn):
+
             @functools.wraps(fn)
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 return await self.arun(fn, *args, **kwargs)
@@ -195,9 +196,13 @@ class ToolGuard:
         try:
             result = await fn(*permit.call.args, **permit.call.kwargs)
         except Exception as exc:
-            await asyncio.to_thread(self.report, permit, error=exc, duration_ms=(time.perf_counter() - started) * 1000)
+            await asyncio.to_thread(
+                self.report, permit, error=exc, duration_ms=(time.perf_counter() - started) * 1000
+            )
             raise
-        await asyncio.to_thread(self.report, permit, result=result, duration_ms=(time.perf_counter() - started) * 1000)
+        await asyncio.to_thread(
+            self.report, permit, result=result, duration_ms=(time.perf_counter() - started) * 1000
+        )
         return result
 
     # -- before the call ------------------------------------------------------------------------
@@ -221,8 +226,13 @@ class ToolGuard:
             parent_session_id=session.parent_session_id if session else None,
             correlation_id=new_correlation_id(),
             collected_via="python_sdk.guard",
-            tool=ToolRef(name=self.tool_name or "tool", provider=self.provider, server=self.server,
-                         category_hint=self.category_hint, description=self.description),
+            tool=ToolRef(
+                name=self.tool_name or "tool",
+                provider=self.provider,
+                server=self.server,
+                category_hint=self.category_hint,
+                description=self.description,
+            ),
             destination=self._destination(arguments),
             arguments=arguments,
         )
@@ -233,47 +243,63 @@ class ToolGuard:
         try:
             envelope = self.build_request(call, client)
         except ValueError as exc:  # e.g. an over-long tool name: no decision can be requested
-            raise ToolDenied(f"the decision request could not be built ({exc.__class__.__name__}: "
-                             f"{str(exc).splitlines()[0]}); failing closed", tool_name=self.tool_name) from None
+            raise ToolDenied(
+                f"the decision request could not be built ({exc.__class__.__name__}: "
+                f"{str(exc).splitlines()[0]}); failing closed",
+                tool_name=self.tool_name,
+            ) from None
         try:
             decision = client.decide(envelope)
         except (Unreachable, ServerError) as exc:
             return self._apply_fail_mode(exc, call, envelope, client)
         except AuthError as exc:
-            raise ToolDenied(f"ContextOS rejected the API key ({exc.message}); failing closed",
-                             tool_name=self.tool_name) from None
+            raise ToolDenied(
+                f"ContextOS rejected the API key ({exc.message}); failing closed", tool_name=self.tool_name
+            ) from None
         except APIError as exc:
-            raise ToolDenied(f"ContextOS could not evaluate this call ({exc.message}); failing closed",
-                             tool_name=self.tool_name) from None
+            raise ToolDenied(
+                f"ContextOS could not evaluate this call ({exc.message}); failing closed",
+                tool_name=self.tool_name,
+            ) from None
         return self._apply_decision(decision, call, envelope, client)
 
-    def _apply_fail_mode(self, exc: ContextOSError, call: BoundCall, envelope: EventEnvelope,
-                         client: ContextOSClient) -> Permit:
+    def _apply_fail_mode(
+        self, exc: ContextOSError, call: BoundCall, envelope: EventEnvelope, client: ContextOSClient
+    ) -> Permit:
         mode = self.fail_mode
         what = "unreachable" if isinstance(exc, Unreachable) else "failing"
         self._record_unguarded(client, envelope, mode)
         if mode == "open":
-            message = (f"ContextOS is {what} ({exc}); fail mode 'open' lets tool '{self.tool_name}' run "
-                       "WITHOUT a policy decision")
+            message = (
+                f"ContextOS is {what} ({exc}); fail mode 'open' lets tool '{self.tool_name}' run "
+                "WITHOUT a policy decision"
+            )
             log.warning(message)
             warnings.warn(message, RuntimeWarning, stacklevel=4)
             return Permit(call, envelope, client, None, fail_open=True)
         if mode == "ask":
-            raise ApprovalRequired(f"ContextOS is {what} ({exc}); fail mode 'ask' needs a human decision",
-                                   tool_name=self.tool_name)
+            raise ApprovalRequired(
+                f"ContextOS is {what} ({exc}); fail mode 'ask' needs a human decision",
+                tool_name=self.tool_name,
+            )
         raise ToolDenied(f"ContextOS is {what} ({exc}) and fail mode is 'closed'", tool_name=self.tool_name)
 
     def _record_unguarded(self, client: ContextOSClient, envelope: EventEnvelope, mode: str) -> None:
         """Spool the attempt so the server later sees it (as observed); same event id, so no duplicates."""
-        metadata = {**envelope.metadata, "decision_unavailable": True, "fail_mode": mode,
-                    "local_outcome": "ran_unguarded" if mode == "open" else "not_run"}
+        metadata = {
+            **envelope.metadata,
+            "decision_unavailable": True,
+            "fail_mode": mode,
+            "local_outcome": "ran_unguarded" if mode == "open" else "not_run",
+        }
         try:
             client.spool_events([envelope.model_copy(update={"metadata": metadata})])
         except OSError as err:
             log.warning("Could not spool the unguarded tool attempt: %s", err)
 
-    def _apply_decision(self, decision: DecisionResponse, call: BoundCall, envelope: EventEnvelope,
-                        client: ContextOSClient) -> Permit:
+    def _apply_decision(
+        self, decision: DecisionResponse, call: BoundCall, envelope: EventEnvelope, client: ContextOSClient
+    ) -> Permit:
         outcome = decision.decision.upper()
         if outcome in (Decision.ALLOW, Decision.AUDIT):
             return Permit(call, envelope, client, decision)
@@ -284,44 +310,69 @@ class ToolGuard:
             return Permit(call, envelope, client, decision)
         if outcome == Decision.RESTRICT:
             return self._restrict(decision, call, envelope, client)
-        raise ToolDenied(f"unrecognised decision '{decision.decision}'; failing closed", decision,
-                         tool_name=self.tool_name)
+        raise ToolDenied(
+            f"unrecognised decision '{decision.decision}'; failing closed", decision, tool_name=self.tool_name
+        )
 
     def _await_approval(self, decision: DecisionResponse, client: ContextOSClient) -> None:
         if (decision.approval_status or "").lower() == ApprovalStatus.APPROVED:
             return
         if not decision.approval_id:
-            raise ToolDenied("approval is required but the server returned no approval id", decision,
-                             tool_name=self.tool_name)
+            raise ToolDenied(
+                "approval is required but the server returned no approval id",
+                decision,
+                tool_name=self.tool_name,
+            )
         timeout = self.approval_timeout_s
         if timeout <= 0:
-            raise ApprovalRequired(f"approval required: {decision.reason}", decision, tool_name=self.tool_name,
-                                   approval_id=decision.approval_id)
-        log.info("Tool '%s' is waiting for approval %s (up to %.0fs)", self.tool_name, decision.approval_id, timeout)
+            raise ApprovalRequired(
+                f"approval required: {decision.reason}",
+                decision,
+                tool_name=self.tool_name,
+                approval_id=decision.approval_id,
+            )
+        log.info(
+            "Tool '%s' is waiting for approval %s (up to %.0fs)",
+            self.tool_name,
+            decision.approval_id,
+            timeout,
+        )
         try:
             approval = client.wait_for_approval(decision.approval_id, timeout_s=timeout, poll_s=self.poll_s)
         except ApprovalTimeout:
             # Nothing waits on the request any more, so withdraw it (a decision made a moment ago wins).
-            after = withdraw_approval(client, decision.approval_id,
-                                      f"guard() for '{self.tool_name}' stopped waiting after {timeout:.0f}s.")
+            after = withdraw_approval(
+                client,
+                decision.approval_id,
+                f"guard() for '{self.tool_name}' stopped waiting after {timeout:.0f}s.",
+            )
             if after == ApprovalStatus.APPROVED:
                 return
             state = {ApprovalStatus.CANCELLED: "; the request was withdrawn"}.get(after or "", "")
             if after in (ApprovalStatus.REJECTED, ApprovalStatus.EXPIRED):
                 state = f"; it was {after}"
-            raise ToolDenied(f"no approval decision within {timeout:.0f}s (approval {decision.approval_id}){state}",
-                             decision, tool_name=self.tool_name) from None
+            raise ToolDenied(
+                f"no approval decision within {timeout:.0f}s (approval {decision.approval_id}){state}",
+                decision,
+                tool_name=self.tool_name,
+            ) from None
         except ContextOSError as exc:  # auth / API errors while polling: fail closed
-            raise ToolDenied(f"could not check approval {decision.approval_id} ({exc})", decision,
-                             tool_name=self.tool_name) from None
+            raise ToolDenied(
+                f"could not check approval {decision.approval_id} ({exc})", decision, tool_name=self.tool_name
+            ) from None
         status = approval_status_of(approval)
         if status != ApprovalStatus.APPROVED:
             note = approval.get("decision_note") if isinstance(approval, dict) else None
-            raise ToolDenied(f"approval {decision.approval_id} was {status or 'not granted'}"
-                             + (f": {note}" if note else ""), decision, tool_name=self.tool_name)
+            raise ToolDenied(
+                f"approval {decision.approval_id} was {status or 'not granted'}"
+                + (f": {note}" if note else ""),
+                decision,
+                tool_name=self.tool_name,
+            )
 
-    def _restrict(self, decision: DecisionResponse, call: BoundCall, envelope: EventEnvelope,
-                  client: ContextOSClient) -> Permit:
+    def _restrict(
+        self, decision: DecisionResponse, call: BoundCall, envelope: EventEnvelope, client: ContextOSClient
+    ) -> Permit:
         def verify(masked: dict[str, Any]) -> bool | None:
             text = json.dumps(to_jsonable(masked), ensure_ascii=False, default=str)
             found = scan_reports_secrets(client.scan(text, source_type="other"))
@@ -337,13 +388,24 @@ class ToolGuard:
         )
         if not outcome.allowed:
             raise ToolDenied(f"{decision.reason} — {outcome.reason}", decision, tool_name=self.tool_name)
-        return Permit(call.replace_arguments(outcome.arguments), envelope, client, decision,
-                      restrictions_applied=outcome.applied)
+        return Permit(
+            call.replace_arguments(outcome.arguments),
+            envelope,
+            client,
+            decision,
+            restrictions_applied=outcome.applied,
+        )
 
     # -- after the call -------------------------------------------------------------------------
 
-    def report(self, permit: Permit, *, result: Any = None, error: BaseException | None = None,
-               duration_ms: float = 0.0) -> None:
+    def report(
+        self,
+        permit: Permit,
+        *,
+        result: Any = None,
+        error: BaseException | None = None,
+        duration_ms: float = 0.0,
+    ) -> None:
         """Send tool.completed / tool.failed. Never raises; problems are logged."""
         request = permit.envelope
         metadata: dict[str, Any] = {"duration_ms": round(duration_ms, 1)}
@@ -360,10 +422,17 @@ class ToolGuard:
             event_type, payload = EventType.TOOL_COMPLETED, result
         try:
             event = permit.client.new_event(
-                event_type, request.session_id, agent=request.agent, parent_session_id=request.parent_session_id,
-                correlation_id=request.correlation_id, collected_via="python_sdk.guard", tool=request.tool,
-                destination=request.destination, result=truncate_result(payload, self.max_result_chars),
-                is_error=error is not None, metadata=metadata,
+                event_type,
+                request.session_id,
+                agent=request.agent,
+                parent_session_id=request.parent_session_id,
+                correlation_id=request.correlation_id,
+                collected_via="python_sdk.guard",
+                tool=request.tool,
+                destination=request.destination,
+                result=truncate_result(payload, self.max_result_chars),
+                is_error=error is not None,
+                metadata=metadata,
             )
             if permit.fail_open:  # the server was just unreachable: go straight to the spool
                 permit.client.spool_events([event])

@@ -102,8 +102,11 @@ def _percentile(values: list[float], q: float) -> float | None:
 
 
 def _ratio(numerator: int, denominator: int) -> RatioOut:
-    return RatioOut(numerator=numerator, denominator=denominator,
-                    rate=round(numerator / denominator, 4) if denominator else None)
+    return RatioOut(
+        numerator=numerator,
+        denominator=denominator,
+        rate=round(numerator / denominator, 4) if denominator else None,
+    )
 
 
 def _day(value: datetime) -> datetime:
@@ -115,8 +118,9 @@ def _week(value: datetime) -> datetime:
     return day - timedelta(days=day.weekday())
 
 
-def _series(start: datetime, now: datetime, created: list[datetime], completed: list[datetime],
-            weekly: bool) -> list[SeriesPointOut]:
+def _series(
+    start: datetime, now: datetime, created: list[datetime], completed: list[datetime], weekly: bool
+) -> list[SeriesPointOut]:
     floor = _week if weekly else _day
     step = timedelta(days=7 if weekly else 1)
     buckets: dict[datetime, list[int]] = {}
@@ -144,8 +148,11 @@ def _agent_names(db: Session, org_id: str, ids: set[str | None]) -> dict[str, st
     wanted = {i for i in ids if i}
     if not wanted:
         return {}
-    return dict(db.execute(select(Agent.id, Agent.name).where(Agent.organization_id == org_id,
-                                                              Agent.id.in_(wanted))).all())
+    return dict(
+        db.execute(
+            select(Agent.id, Agent.name).where(Agent.organization_id == org_id, Agent.id.in_(wanted))
+        ).all()
+    )
 
 
 def _cards(db: Session, org_id: str, tasks: list[Task]) -> dict[str, TaskCardOut]:
@@ -158,13 +165,25 @@ def _cards(db: Session, org_id: str, tasks: list[Task]) -> dict[str, TaskCardOut
 
 def finding_links(db: Session, org_id: str) -> dict[str, list[Link]]:
     """Every non-archived task linked to each finding (direct field or ``finding`` reference)."""
-    direct = select(Task.related_finding_id, Task, BoardColumn).join(
-        BoardColumn, BoardColumn.id == Task.column_id
-    ).where(Task.organization_id == org_id, Task.archived_at.is_(None), Task.related_finding_id.is_not(None))
-    via_ref = select(Ref.ref_id, Task, BoardColumn).select_from(Ref).join(Task, Task.id == Ref.task_id).join(
-        BoardColumn, BoardColumn.id == Task.column_id
-    ).where(Ref.organization_id == org_id, Ref.ref_type == "finding", Task.organization_id == org_id,
-            Task.archived_at.is_(None))
+    direct = (
+        select(Task.related_finding_id, Task, BoardColumn)
+        .join(BoardColumn, BoardColumn.id == Task.column_id)
+        .where(
+            Task.organization_id == org_id, Task.archived_at.is_(None), Task.related_finding_id.is_not(None)
+        )
+    )
+    via_ref = (
+        select(Ref.ref_id, Task, BoardColumn)
+        .select_from(Ref)
+        .join(Task, Task.id == Ref.task_id)
+        .join(BoardColumn, BoardColumn.id == Task.column_id)
+        .where(
+            Ref.organization_id == org_id,
+            Ref.ref_type == "finding",
+            Task.organization_id == org_id,
+            Task.archived_at.is_(None),
+        )
+    )
     links: dict[str, dict[str, Link]] = defaultdict(dict)
     for query in (direct, via_ref):
         for finding_id, task, column in db.execute(query).all():
@@ -184,7 +203,9 @@ def remediation_of(links: list[Link]) -> Remediation:
         return Remediation("no_task", None, 0)
     open_links = [link for link in links if not link[1].is_done_column]
     if open_links:
-        return Remediation("task_open", min(open_links, key=lambda lk: (lk[0].created_at, lk[0].number)), len(links))
+        return Remediation(
+            "task_open", min(open_links, key=lambda lk: (lk[0].created_at, lk[0].number)), len(links)
+        )
     recent = sorted(links, key=lambda lk: lk[0].completed_at or lk[0].updated_at, reverse=True)
     verified = [link for link in recent if link[0].verification_status == "passed"]
     if verified:
@@ -197,25 +218,37 @@ def state_reason(rem: Remediation, card: TaskCardOut | None) -> str:
         return "No remediation task tracks this finding yet."
     task, column = rem.primary
     key = task_key(task)
-    others = f" {rem.linked - 1} other linked task{'s' if rem.linked > 2 else ''} also reference it." \
-        if rem.linked > 1 else ""
+    others = (
+        f" {rem.linked - 1} other linked task{'s' if rem.linked > 2 else ''} also reference it."
+        if rem.linked > 1
+        else ""
+    )
     if rem.state == "task_open":
         names = [a.name for a in card.assignees if a.role == "assignee"] if card else []
         who = f"assigned to {', '.join(names)}" if names else "not assigned to anyone"
-        passed = " Verification has passed; the task still has to reach a done column." \
-            if task.verification_status == "passed" else ""
+        passed = (
+            " Verification has passed; the task still has to reach a done column."
+            if task.verification_status == "passed"
+            else ""
+        )
         return f"{key} is in '{column.name}', {who}.{passed}{others}"
     if rem.state == "task_done_unverified":
-        return (f"{key} is in '{column.name}' (done) without a passed verification run, so the fix is claimed but "
-                f"not proven.{others}")
+        return (
+            f"{key} is in '{column.name}' (done) without a passed verification run, so the fix is claimed but "
+            f"not proven.{others}"
+        )
     return f"{key} is done and a passed verification run proves the fix. The finding can now be resolved.{others}"
 
 
-def _open_findings(db: Session, org_id: str, *, include_simulated: bool, severity: str | None = None,
-                   q: str | None = None) -> list[Any]:
-    query = select(SecurityFinding.id, SecurityFinding.severity, SecurityFinding.first_seen_at,
-                   SecurityFinding.last_seen_at).where(
-        SecurityFinding.organization_id == org_id, SecurityFinding.status.in_(OPEN_FINDING_STATUSES))
+def _open_findings(
+    db: Session, org_id: str, *, include_simulated: bool, severity: str | None = None, q: str | None = None
+) -> list[Any]:
+    query = select(
+        SecurityFinding.id,
+        SecurityFinding.severity,
+        SecurityFinding.first_seen_at,
+        SecurityFinding.last_seen_at,
+    ).where(SecurityFinding.organization_id == org_id, SecurityFinding.status.in_(OPEN_FINDING_STATUSES))
     if not include_simulated:
         query = query.where(SecurityFinding.is_simulation.is_(False))
     if severity:
@@ -225,12 +258,15 @@ def _open_findings(db: Session, org_id: str, *, include_simulated: bool, severit
     return list(db.execute(query).all())
 
 
-def _completion_rate(db: Session, org_id: str, links: dict[str, list[Link]], include_simulated: bool) -> RatioOut:
+def _completion_rate(
+    db: Session, org_id: str, links: dict[str, list[Link]], include_simulated: bool
+) -> RatioOut:
     ids = list(links)
     existing: set[str] = set()
     for start in range(0, len(ids), 500):
-        query = select(SecurityFinding.id).where(SecurityFinding.organization_id == org_id,
-                                                 SecurityFinding.id.in_(ids[start:start + 500]))
+        query = select(SecurityFinding.id).where(
+            SecurityFinding.organization_id == org_id, SecurityFinding.id.in_(ids[start : start + 500])
+        )
         if not include_simulated:
             query = query.where(SecurityFinding.is_simulation.is_(False))
         existing.update(db.scalars(query))
@@ -242,8 +278,15 @@ def _completion_rate(db: Session, org_id: str, links: dict[str, list[Link]], inc
 
 
 def remediation_pipeline(
-    db: Session, org_id: str, *, state: str | None = None, severity: str | None = None, q: str | None = None,
-    include_simulated: bool = False, limit: int = 50, offset: int = 0,
+    db: Session,
+    org_id: str,
+    *,
+    state: str | None = None,
+    severity: str | None = None,
+    q: str | None = None,
+    include_simulated: bool = False,
+    limit: int = 50,
+    offset: int = 0,
 ) -> RemediationPageOut:
     """Open findings, most severe first (then most recently seen), each with its remediation state."""
     links = finding_links(db, org_id)
@@ -251,80 +294,156 @@ def remediation_pipeline(
     states = {row.id: remediation_of(links.get(row.id, [])) for row in rows}
     counts = Counter(rem.state for rem in states.values())
     matching = [row for row in rows if state is None or states[row.id].state == state]
-    matching.sort(key=lambda r: (-SEVERITY_RANK.get(r.severity, -1), -ensure_utc(r.last_seen_at).timestamp(), r.id))
-    page_ids = [row.id for row in matching[offset:offset + limit]]
-    findings = {f.id: f for f in db.scalars(select(SecurityFinding).where(
-        SecurityFinding.organization_id == org_id, SecurityFinding.id.in_(page_ids or [""])))}
+    matching.sort(
+        key=lambda r: (-SEVERITY_RANK.get(r.severity, -1), -ensure_utc(r.last_seen_at).timestamp(), r.id)
+    )
+    page_ids = [row.id for row in matching[offset : offset + limit]]
+    findings = {
+        f.id: f
+        for f in db.scalars(
+            select(SecurityFinding).where(
+                SecurityFinding.organization_id == org_id, SecurityFinding.id.in_(page_ids or [""])
+            )
+        )
+    }
     cards = _cards(db, org_id, [states[fid].primary[0] for fid in page_ids if states[fid].primary])
     agents = _agent_names(db, org_id, {findings[fid].agent_id for fid in page_ids})
     items = []
     for fid in page_ids:
         finding, rem = findings[fid], states[fid]
         card = cards.get(rem.primary[0].id) if rem.primary else None
-        items.append(RemediationFindingOut(
-            finding_id=finding.id, title=finding.title, category=finding.category, severity=finding.severity,
-            status=finding.status, confidence=finding.confidence, occurrence_count=finding.occurrence_count,
-            first_seen_at=finding.first_seen_at, last_seen_at=finding.last_seen_at,
-            is_simulation=finding.is_simulation, agent_id=finding.agent_id,
-            agent_name=agents.get(finding.agent_id or ""), session_id=finding.session_id,
-            incident_id=finding.incident_id, state=rem.state, state_reason=state_reason(rem, card),  # type: ignore[arg-type]
-            linked_task_count=rem.linked, task=card,
-        ))
-    return RemediationPageOut(items=items, total=len(matching), limit=limit, offset=offset,
-                              counts=RemediationCountsOut(**{s: counts.get(s, 0) for s in STATES}))
+        items.append(
+            RemediationFindingOut(
+                finding_id=finding.id,
+                title=finding.title,
+                category=finding.category,
+                severity=finding.severity,
+                status=finding.status,
+                confidence=finding.confidence,
+                occurrence_count=finding.occurrence_count,
+                first_seen_at=finding.first_seen_at,
+                last_seen_at=finding.last_seen_at,
+                is_simulation=finding.is_simulation,
+                agent_id=finding.agent_id,
+                agent_name=agents.get(finding.agent_id or ""),
+                session_id=finding.session_id,
+                incident_id=finding.incident_id,
+                state=rem.state,
+                state_reason=state_reason(rem, card),  # type: ignore[arg-type]
+                linked_task_count=rem.linked,
+                task=card,
+            )
+        )
+    return RemediationPageOut(
+        items=items,
+        total=len(matching),
+        limit=limit,
+        offset=offset,
+        counts=RemediationCountsOut(**{s: counts.get(s, 0) for s in STATES}),
+    )
 
 
 # ----------------------------------------------------------------------------- engineering analytics
 
 
 def _task_base(org_id: str, board_id: str | None, *columns: Any) -> Any:
-    query = select(*columns).select_from(Task).join(BoardColumn, BoardColumn.id == Task.column_id).where(
-        Task.organization_id == org_id, Task.archived_at.is_(None))
+    query = (
+        select(*columns)
+        .select_from(Task)
+        .join(BoardColumn, BoardColumn.id == Task.column_id)
+        .where(Task.organization_id == org_id, Task.archived_at.is_(None))
+    )
     return query.where(Task.board_id == board_id) if board_id else query
 
 
 def _outstanding_critical(
-    db: Session, org_id: str, board_id: str | None, open_rows: list[Any], states: dict[str, Remediation],
+    db: Session,
+    org_id: str,
+    board_id: str | None,
+    open_rows: list[Any],
+    states: dict[str, Remediation],
     links: dict[str, list[Link]],
 ) -> OutstandingCriticalOut:
-    critical_ids = [r.id for r in sorted(open_rows, key=lambda r: ensure_utc(r.first_seen_at))
-                    if r.severity == "critical" and states[r.id].state in ("no_task", "task_open")]
-    tracked = {task.id for fid in critical_ids for task, column in links.get(fid, []) if not column.is_done_column}
+    critical_ids = [
+        r.id
+        for r in sorted(open_rows, key=lambda r: ensure_utc(r.first_seen_at))
+        if r.severity == "critical" and states[r.id].state in ("no_task", "task_open")
+    ]
+    tracked = {
+        task.id for fid in critical_ids for task, column in links.get(fid, []) if not column.is_done_column
+    }
     open_critical = _task_base(org_id, board_id, Task.id).where(
-        BoardColumn.is_done_column.is_(False), Task.severity == "critical")
+        BoardColumn.is_done_column.is_(False), Task.severity == "critical"
+    )
     task_ids = list(db.scalars(open_critical.order_by(Task.created_at, Task.number)))
     extra_ids = [tid for tid in task_ids if tid not in tracked]
 
     shown_findings = critical_ids[:CRITICAL_LIST_LIMIT]
-    shown_tasks = extra_ids[:max(0, CRITICAL_LIST_LIMIT - len(shown_findings))]
-    findings = {f.id: f for f in db.scalars(select(SecurityFinding).where(
-        SecurityFinding.organization_id == org_id, SecurityFinding.id.in_(shown_findings or [""])))}
-    tasks = {t.id: t for t in db.scalars(select(Task).where(Task.organization_id == org_id,
-                                                            Task.id.in_(shown_tasks or [""])))}
+    shown_tasks = extra_ids[: max(0, CRITICAL_LIST_LIMIT - len(shown_findings))]
+    findings = {
+        f.id: f
+        for f in db.scalars(
+            select(SecurityFinding).where(
+                SecurityFinding.organization_id == org_id, SecurityFinding.id.in_(shown_findings or [""])
+            )
+        )
+    }
+    tasks = {
+        t.id: t
+        for t in db.scalars(
+            select(Task).where(Task.organization_id == org_id, Task.id.in_(shown_tasks or [""]))
+        )
+    }
     primaries = [states[fid].primary[0] for fid in shown_findings if states[fid].primary]
     cards = _cards(db, org_id, [*primaries, *tasks.values()])
-    agents = _agent_names(db, org_id, {f.agent_id for f in findings.values()} | {t.related_agent_id for t in tasks.values()})
+    agents = _agent_names(
+        db, org_id, {f.agent_id for f in findings.values()} | {t.related_agent_id for t in tasks.values()}
+    )
     items = []
     for fid in shown_findings:
         finding, rem = findings[fid], states[fid]
-        items.append(CriticalItemOut(
-            kind="finding", id=finding.id, title=finding.title, severity=finding.severity, since=finding.first_seen_at,
-            state=rem.state, is_simulation=finding.is_simulation, agent_id=finding.agent_id,  # type: ignore[arg-type]
-            agent_name=agents.get(finding.agent_id or ""), task=cards.get(rem.primary[0].id) if rem.primary else None,
-        ))
+        items.append(
+            CriticalItemOut(
+                kind="finding",
+                id=finding.id,
+                title=finding.title,
+                severity=finding.severity,
+                since=finding.first_seen_at,
+                state=rem.state,
+                is_simulation=finding.is_simulation,
+                agent_id=finding.agent_id,  # type: ignore[arg-type]
+                agent_name=agents.get(finding.agent_id or ""),
+                task=cards.get(rem.primary[0].id) if rem.primary else None,
+            )
+        )
     for tid in shown_tasks:
         task = tasks[tid]
-        items.append(CriticalItemOut(
-            kind="task", id=task.id, title=task.title, severity="critical", since=task.created_at, state="task_open",
-            is_simulation=False, agent_id=task.related_agent_id, agent_name=agents.get(task.related_agent_id or ""),
-            task=cards.get(task.id),
-        ))
-    return OutstandingCriticalOut(total=len(critical_ids) + len(extra_ids), findings=len(critical_ids),
-                                  tasks=len(task_ids), items=items)
+        items.append(
+            CriticalItemOut(
+                kind="task",
+                id=task.id,
+                title=task.title,
+                severity="critical",
+                since=task.created_at,
+                state="task_open",
+                is_simulation=False,
+                agent_id=task.related_agent_id,
+                agent_name=agents.get(task.related_agent_id or ""),
+                task=cards.get(task.id),
+            )
+        )
+    return OutstandingCriticalOut(
+        total=len(critical_ids) + len(extra_ids), findings=len(critical_ids), tasks=len(task_ids), items=items
+    )
 
 
 def engineering_analytics(
-    db: Session, org_id: str, *, board_id: str | None = None, window_days: int = 30, include_simulated: bool = False,
+    db: Session,
+    org_id: str,
+    *,
+    board_id: str | None = None,
+    window_days: int = 30,
+    include_simulated: bool = False,
     now: datetime | None = None,
 ) -> EngineeringAnalyticsOut:
     if board_id:
@@ -332,28 +451,49 @@ def engineering_analytics(
     moment = now or utcnow()
     start = moment - timedelta(days=window_days)
 
-    open_rows = db.execute(_task_base(org_id, board_id, Task.priority, Task.task_type, BoardColumn.status_key,
-                                      Task.due_date).where(BoardColumn.is_done_column.is_(False))).all()
+    open_rows = db.execute(
+        _task_base(
+            org_id, board_id, Task.priority, Task.task_type, BoardColumn.status_key, Task.due_date
+        ).where(BoardColumn.is_done_column.is_(False))
+    ).all()
     by_priority, by_type = Counter(r.priority for r in open_rows), Counter(r.task_type for r in open_rows)
     by_status = Counter(r.status_key for r in open_rows)
     overdue = sum(1 for r in open_rows if r.due_date is not None and ensure_utc(r.due_date) < moment)  # type: ignore[operator]
-    known_types = [t for t in TASK_TYPES if by_type.get(t)] + sorted(t for t in by_type if t not in TASK_TYPES)
+    known_types = [t for t in TASK_TYPES if by_type.get(t)] + sorted(
+        t for t in by_type if t not in TASK_TYPES
+    )
 
-    completed = db.execute(_task_base(org_id, board_id, Task.created_at, Task.completed_at).where(
-        BoardColumn.is_done_column.is_(True), Task.completed_at.is_not(None), Task.completed_at >= start)).all()
+    completed = db.execute(
+        _task_base(org_id, board_id, Task.created_at, Task.completed_at).where(
+            BoardColumn.is_done_column.is_(True), Task.completed_at.is_not(None), Task.completed_at >= start
+        )
+    ).all()
     durations = [_hours(r.created_at, r.completed_at) for r in completed]
     completed_at = [ensure_utc(r.completed_at) for r in completed]
-    created_at = [ensure_utc(c) for c in db.scalars(_task_base(org_id, board_id, Task.created_at).where(
-        Task.created_at >= start))]
+    created_at = [
+        ensure_utc(c)
+        for c in db.scalars(_task_base(org_id, board_id, Task.created_at).where(Task.created_at >= start))
+    ]
 
-    reopen_sum, reopened_tasks = db.execute(_task_base(
-        org_id, board_id, func.coalesce(func.sum(Task.reopened_count), 0),
-        func.coalesce(func.sum(case((Task.reopened_count > 0, 1), else_=0)), 0))).one()
+    reopen_sum, reopened_tasks = db.execute(
+        _task_base(
+            org_id,
+            board_id,
+            func.coalesce(func.sum(Task.reopened_count), 0),
+            func.coalesce(func.sum(case((Task.reopened_count > 0, 1), else_=0)), 0),
+        )
+    ).one()
 
-    runs_query = select(VerificationRun.status, func.count(VerificationRun.id)).join(
-        Task, Task.id == VerificationRun.task_id).where(
-        VerificationRun.organization_id == org_id, Task.organization_id == org_id, Task.archived_at.is_(None),
-        VerificationRun.created_at >= start)
+    runs_query = (
+        select(VerificationRun.status, func.count(VerificationRun.id))
+        .join(Task, Task.id == VerificationRun.task_id)
+        .where(
+            VerificationRun.organization_id == org_id,
+            Task.organization_id == org_id,
+            Task.archived_at.is_(None),
+            VerificationRun.created_at >= start,
+        )
+    )
     if board_id:
         runs_query = runs_query.where(Task.board_id == board_id)
     runs = dict(db.execute(runs_query.group_by(VerificationRun.status)).all())
@@ -364,8 +504,13 @@ def engineering_analytics(
     finding_counts = Counter(rem.state for rem in states.values())
 
     return EngineeringAnalyticsOut(
-        generated_at=moment, window_days=window_days, window_start=start, board_id=board_id,
-        include_simulated=include_simulated, open_tasks=len(open_rows), overdue=overdue,
+        generated_at=moment,
+        window_days=window_days,
+        window_start=start,
+        board_id=board_id,
+        include_simulated=include_simulated,
+        open_tasks=len(open_rows),
+        overdue=overdue,
         by_priority=[CountOut(key=p, count=by_priority.get(p, 0)) for p in PRIORITIES],
         by_type=[CountOut(key=t, count=by_type[t]) for t in known_types],
         by_status_key=[CountOut(key=s, count=by_status.get(s, 0)) for s in STATUS_KEYS if s != "done"],
@@ -374,14 +519,21 @@ def engineering_analytics(
         median_resolution_hours=_round(statistics.median(durations)) if durations else None,
         p90_resolution_hours=_round(_percentile(durations, 0.9)),
         findings_awaiting_remediation=FindingBacklogOut(
-            total=finding_counts["no_task"] + finding_counts["task_open"], no_task=finding_counts["no_task"],
-            task_open=finding_counts["task_open"], open_findings=len(findings)),
+            total=finding_counts["no_task"] + finding_counts["task_open"],
+            no_task=finding_counts["no_task"],
+            task_open=finding_counts["task_open"],
+            open_findings=len(findings),
+        ),
         remediation_completion_rate=_completion_rate(db, org_id, links, include_simulated),
-        reopened_issues=ReopenedOut(reopen_events=int(reopen_sum or 0), tasks_reopened=int(reopened_tasks or 0)),
+        reopened_issues=ReopenedOut(
+            reopen_events=int(reopen_sum or 0), tasks_reopened=int(reopened_tasks or 0)
+        ),
         failed_verification_runs=_ratio(int(runs.get("failed", 0)), int(sum(runs.values()))),
         outstanding_critical=_outstanding_critical(db, org_id, board_id, findings, states, links),
         series_granularity="day" if window_days <= DAILY_SERIES_MAX_DAYS else "week",
-        created_vs_completed=_series(start, moment, created_at, completed_at, weekly=window_days > DAILY_SERIES_MAX_DAYS),
+        created_vs_completed=_series(
+            start, moment, created_at, completed_at, weekly=window_days > DAILY_SERIES_MAX_DAYS
+        ),
         throughput=_series(start, moment, created_at, completed_at, weekly=True),
         cycle_time=_cycle_buckets(durations),
     )

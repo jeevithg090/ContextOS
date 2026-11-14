@@ -42,9 +42,19 @@ from app.engines.provenance.signals import (
     trust_of,
 )
 
-_TRUST_POINTS: dict[str, int] = {TrustLevel.BLOCKED: 3, TrustLevel.SUSPICIOUS: 2, TrustLevel.UNKNOWN: 1, TrustLevel.EXTERNAL: 1}
+_TRUST_POINTS: dict[str, int] = {
+    TrustLevel.BLOCKED: 3,
+    TrustLevel.SUSPICIOUS: 2,
+    TrustLevel.UNKNOWN: 1,
+    TrustLevel.EXTERNAL: 1,
+}
 _DETECTION_POINTS: dict[str, int] = {Severity.CRITICAL: 3, Severity.HIGH: 2, Severity.MEDIUM: 1}
-_DESTINATION_POINTS: dict[str, int] = {TrustLevel.BLOCKED: 5, TrustLevel.SUSPICIOUS: 4, TrustLevel.UNKNOWN: 2, TrustLevel.EXTERNAL: 2}
+_DESTINATION_POINTS: dict[str, int] = {
+    TrustLevel.BLOCKED: 5,
+    TrustLevel.SUSPICIOUS: 4,
+    TrustLevel.UNKNOWN: 2,
+    TrustLevel.EXTERNAL: 2,
+}
 _OUTCOME_ADJUSTMENT: dict[str, int] = {PREVENTED: -3, AWAITING_APPROVAL: -2}
 _MAX_SIBLINGS = 3
 _EARLIEST = datetime.min.replace(tzinfo=UTC)
@@ -100,7 +110,10 @@ def _sensitive_siblings(
         if ref.other == sink.node_id:
             continue
         sibling = analyze(ref.other)
-        if not (sibling.sensitive or sibling.secret_items) or sibling.outcome in (PREVENTED, AWAITING_APPROVAL):
+        if not (sibling.sensitive or sibling.secret_items) or sibling.outcome in (
+            PREVENTED,
+            AWAITING_APPROVAL,
+        ):
             continue  # a call that was stopped (or is still held) did not touch the data
         if sibling.time is not None and sink.time is not None and sibling.time > sink.time:
             continue
@@ -151,7 +164,9 @@ def assess(
     sensitive = sink.sensitive or bool(siblings)
     outbound = sink.outbound
     matched = sink.matched_fingerprints > 0
-    secrets = sink.secrets or any(s.secrets for s in siblings) or any(contains_secrets(n) for n in origin_nodes)
+    secrets = (
+        sink.secrets or any(s.secrets for s in siblings) or any(contains_secrets(n) for n in origin_nodes)
+    )
 
     score = _TRUST_POINTS.get(worst_trust, 0) + _DETECTION_POINTS.get(detection.max_severity or "", 0)
     score += 2 if injection else 0
@@ -215,7 +230,13 @@ def assess(
 
 def priority(a: Assessment) -> tuple:
     """Most severe first; unprevented before prevented; shorter (more direct) paths first."""
-    return (-SEVERITY_RANK[a.severity], -a.score, a.sink.outcome == PREVENTED, len(a.node_ids), tuple(a.node_ids))
+    return (
+        -SEVERITY_RANK[a.severity],
+        -a.score,
+        a.sink.outcome == PREVENTED,
+        len(a.node_ids),
+        tuple(a.node_ids),
+    )
 
 
 __all__ = ["Assessment", "assess", "priority", "severity_for"]

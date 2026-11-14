@@ -22,8 +22,21 @@ REDACTION_MARKER = "[REDACTED"
 
 # Query/fragment keys whose values are always masked, whatever they look like.
 _SENSITIVE_KEY_PARTS = (
-    "token", "secret", "passw", "pwd", "auth", "sig", "credential", "session", "jwt",
-    "apikey", "api_key", "api-key", "private", "cookie", "bearer",
+    "token",
+    "secret",
+    "passw",
+    "pwd",
+    "auth",
+    "sig",
+    "credential",
+    "session",
+    "jwt",
+    "apikey",
+    "api_key",
+    "api-key",
+    "private",
+    "cookie",
+    "bearer",
 )
 _SENSITIVE_KEYS_EXACT = {"key", "code", "pass", "sid", "otp", "k", "access", "refresh"}
 
@@ -34,12 +47,18 @@ _TOKEN_PREFIX = re.compile(
 )
 _TOKENISH = re.compile(r"^[A-Za-z0-9+/=_\-.~:]+$")
 _EMAIL = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,63}$")
-_DOMAIN = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9\-]{2,59})$")
+_DOMAIN = re.compile(
+    r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9\-]{2,59})$"
+)
 _LOOPBACK_NAMES = {"localhost", "localhost.localdomain", "ip6-localhost", "ip6-loopback"}
 
 # Instance-metadata endpoints hand out cloud credentials to anything that can reach them.
 METADATA_HOSTS = {
-    "169.254.169.254", "fd00:ec2::254", "metadata.google.internal", "metadata", "100.100.100.200",
+    "169.254.169.254",
+    "fd00:ec2::254",
+    "metadata.google.internal",
+    "metadata",
+    "100.100.100.200",
     "169.254.170.2",
 }
 
@@ -79,7 +98,9 @@ def mask_path_segments(path: str, *, min_length: int = 20, min_entropy: float = 
     if not path:
         return path
     parts = path.split("/")
-    return "/".join(MASK if looks_secret(p, min_length=min_length, min_entropy=min_entropy) else p for p in parts)
+    return "/".join(
+        MASK if looks_secret(p, min_length=min_length, min_entropy=min_entropy) else p for p in parts
+    )
 
 
 def _mask_pairs(raw: str) -> str:
@@ -122,8 +143,10 @@ def sanitize_url(raw: str) -> str | None:
     query = _mask_pairs(parts.query) if parts.query else ""
     fragment = ""
     if parts.fragment:
-        fragment = _mask_pairs(parts.fragment) if "=" in parts.fragment else (
-            MASK if looks_secret(parts.fragment) else parts.fragment
+        fragment = (
+            _mask_pairs(parts.fragment)
+            if "=" in parts.fragment
+            else (MASK if looks_secret(parts.fragment) else parts.fragment)
         )
     if scheme == "file":
         return truncate(urlunsplit((scheme, netloc, path, "", "")))

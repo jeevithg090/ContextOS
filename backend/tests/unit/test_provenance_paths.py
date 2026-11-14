@@ -31,15 +31,27 @@ class G:
 
     def edge(self, src: str, dst: str, relation: str, **attrs) -> str:
         edge_id = attrs.pop("id", f"e{len(self.edges) + 1}")
-        self.edges.append({"id": edge_id, "src": src, "dst": dst, "relation": relation,
-                           "confidence": attrs.pop("confidence", "observed"), **attrs})
+        self.edges.append(
+            {
+                "id": edge_id,
+                "src": src,
+                "dst": dst,
+                "relation": relation,
+                "confidence": attrs.pop("confidence", "observed"),
+                **attrs,
+            }
+        )
         return edge_id
 
     def build(self) -> ProvenanceGraph:
         return build_graph(self.nodes, self.edges)
 
 
-INJECTION = {"max_severity": "high", "rule_ids": ["PI-001-ignore-previous"], "categories": ["prompt_injection"]}
+INJECTION = {
+    "max_severity": "high",
+    "rule_ids": ["PI-001-ignore-previous"],
+    "categories": ["prompt_injection"],
+}
 
 
 def readme_scenario(
@@ -54,14 +66,27 @@ def readme_scenario(
     """README (untrusted) -> session -> Read .env -> WebFetch to an unclassified host."""
     g = G()
     g.node("src:readme", "source", "README.md", trust_level=source_trust)
-    g.node("ctx:readme", "context_item", "README.md (fetched)", trust_level=source_trust,
-           detection_summary=detection or {})
+    g.node(
+        "ctx:readme",
+        "context_item",
+        "README.md (fetched)",
+        trust_level=source_trust,
+        detection_summary=detection or {},
+    )
     g.node("ses:1", "session", "coding session")
     g.edge("src:readme", "ctx:readme", "source_produced_item")
     g.edge("ctx:readme", "ses:1", "item_entered_session", **({"observed_at": t(0)} if timestamps else {}))
     if with_read:
-        g.node("inv:read", "tool_invocation", "Read .env", tool_name="Read", decision="ALLOW",
-               enforcement="enforced", status="completed", **({"requested_at": t(1)} if timestamps else {}))
+        g.node(
+            "inv:read",
+            "tool_invocation",
+            "Read .env",
+            tool_name="Read",
+            decision="ALLOW",
+            enforcement="enforced",
+            status="completed",
+            **({"requested_at": t(1)} if timestamps else {}),
+        )
         g.node("res:env", "resource", ".env", sensitive=True)
         g.edge("ses:1", "inv:read", "session_invoked_tool")
         g.edge("inv:read", "res:env", "invocation_accessed_resource")
@@ -86,7 +111,15 @@ def only(paths: list[RiskyPath]) -> RiskyPath:
 
 def test_readme_to_env_read_to_webfetch_unknown_host_is_one_critical_path():
     path = only(find_risky_paths(readme_scenario().build()))
-    assert path.node_ids == ["src:readme", "ctx:readme", "ses:1", "inv:read", "res:env", "inv:fetch", "dst:host"]
+    assert path.node_ids == [
+        "src:readme",
+        "ctx:readme",
+        "ses:1",
+        "inv:read",
+        "res:env",
+        "inv:fetch",
+        "dst:host",
+    ]
     assert len(path.edge_ids) == 6
     assert path.severity == "critical"
     assert path.category == "exfiltration"
@@ -133,7 +166,9 @@ def test_advisory_deny_is_not_claimed_as_prevented():
 
 
 def test_observed_deny_is_not_prevented():
-    graph = readme_scenario(fetch={"decision": "DENY", "enforcement": "observed", "status": "completed"}).build()
+    graph = readme_scenario(
+        fetch={"decision": "DENY", "enforcement": "observed", "status": "completed"}
+    ).build()
     path = only(find_risky_paths(graph))
     assert path.outcome == "not_prevented"
     assert "nothing was prevented" in path.explanation
@@ -142,7 +177,9 @@ def test_observed_deny_is_not_prevented():
 @pytest.mark.parametrize("worse", ["SUSPICIOUS", "BLOCKED"])
 def test_suspicious_or_blocked_destination_raises_severity(worse):
     base = only(find_risky_paths(readme_scenario(detection=None, with_read=False).build()))
-    worse_path = only(find_risky_paths(readme_scenario(detection=None, with_read=False, dest_class=worse).build()))
+    worse_path = only(
+        find_risky_paths(readme_scenario(detection=None, with_read=False, dest_class=worse).build())
+    )
     assert worse_path.score > base.score
     assert SEVERITY_RANK[worse_path.severity] > SEVERITY_RANK[base.severity]
     assert worse_path.category == "destination_risk"
@@ -164,9 +201,14 @@ def test_injection_detection_on_origin_raises_severity():
 
 def test_matched_secret_fingerprint_raises_severity_and_is_called_inferred():
     base = only(find_risky_paths(readme_scenario(detection=None).build()))
-    matched = only(find_risky_paths(readme_scenario(
-        detection=None, fetch={"matched_session_fingerprints": [{"type": "aws", "fingerprint": "f" * 16}]},
-    ).build()))
+    matched = only(
+        find_risky_paths(
+            readme_scenario(
+                detection=None,
+                fetch={"matched_session_fingerprints": [{"type": "aws", "fingerprint": "f" * 16}]},
+            ).build()
+        )
+    )
     assert matched.score >= base.score + 3
     assert "inferred match" in matched.explanation
     assert any("fingerprint" in r and "inferred" in r for r in matched.reasons)
@@ -238,7 +280,9 @@ def test_dangling_edges_in_a_hand_built_graph_are_ignored():
 
 def delegation_scenario(*, delegated_at: str = t(1)) -> G:
     g = G()
-    g.node("ctx:issue", "context_item", "GitHub issue #42", trust_level="EXTERNAL", detection_summary=INJECTION)
+    g.node(
+        "ctx:issue", "context_item", "GitHub issue #42", trust_level="EXTERNAL", detection_summary=INJECTION
+    )
     g.node("ses:planner", "session", "planner")
     g.node("ses:worker", "session", "worker")
     g.node("inv:post", "tool_invocation", "http_request", tool_name="http_request", requested_at=t(3))
@@ -272,8 +316,15 @@ def test_agent_message_carries_content_to_another_session():
     g.node("ses:a", "session", "triage agent")
     g.node("ctx:msg", "context_item", "message to ops agent", trust_level="APPROVED")
     g.node("ses:b", "session", "ops agent")
-    g.node("inv:bash", "tool_invocation", "Bash", tool_name="Bash", decision="REQUIRE_APPROVAL",
-           enforcement="enforced", status="pending_approval")
+    g.node(
+        "inv:bash",
+        "tool_invocation",
+        "Bash",
+        tool_name="Bash",
+        decision="REQUIRE_APPROVAL",
+        enforcement="enforced",
+        status="pending_approval",
+    )
     g.edge("src:mail", "ctx:mail", "source_produced_item")
     g.edge("ctx:mail", "ses:a", "item_entered_session")
     g.edge("ses:a", "ctx:msg", "agent_messaged")
@@ -337,7 +388,9 @@ def test_results_are_capped_and_sorted_by_severity():
     g.edge("ctx:bad", "ses:1", "item_entered_session")
     for i in range(40):
         g.node(f"inv:{i}", "tool_invocation", f"call {i}", tool_name="http_request")
-        g.node(f"dst:{i}", "destination", f"host{i}.example", classification="BLOCKED" if i % 2 else "EXTERNAL")
+        g.node(
+            f"dst:{i}", "destination", f"host{i}.example", classification="BLOCKED" if i % 2 else "EXTERNAL"
+        )
         g.edge("ses:1", f"inv:{i}", "session_invoked_tool")
         g.edge(f"inv:{i}", f"dst:{i}", "invocation_sent_to")
     graph = g.build()
@@ -361,8 +414,13 @@ def test_inline_resources_and_nested_data_attributes_are_read():
     g = G()
     g.node("ctx:x", "context_item", "tool output", data={"trust_level": "SUSPICIOUS"})
     g.node("ses:1", "session")
-    g.node("inv:cat", "tool_invocation", "Bash", data={"tool_name": "Bash"},
-           resources=[{"kind": "file", "id": "~/.aws/credentials", "sensitive": True}])
+    g.node(
+        "inv:cat",
+        "tool_invocation",
+        "Bash",
+        data={"tool_name": "Bash"},
+        resources=[{"kind": "file", "id": "~/.aws/credentials", "sensitive": True}],
+    )
     g.edge("ctx:x", "ses:1", "item_entered_session")
     g.edge("ses:1", "inv:cat", "session_invoked_tool")
     path = only(find_risky_paths(g.build()))
@@ -383,7 +441,9 @@ def test_many_benign_calls_do_not_hide_a_risky_one():
     g = readme_scenario(with_read=False, detection=None)
     for i in range(300):
         g.node(f"inv:ls{i}", "tool_invocation", f"Glob {i}", tool_name="Glob", requested_at=t(1))
-        g.edges.insert(2, {"id": f"ls{i}", "src": "ses:1", "dst": f"inv:ls{i}", "relation": "session_invoked_tool"})
+        g.edges.insert(
+            2, {"id": f"ls{i}", "src": "ses:1", "dst": f"inv:ls{i}", "relation": "session_invoked_tool"}
+        )
     path = only(find_risky_paths(g.build()))
     assert path.sink_id == "inv:fetch"
 

@@ -65,16 +65,25 @@ def agents(limit: int = LIMIT_OPT, include_simulated: bool = SIM_OPT, as_json: b
     rows = items_of(payload)
     hidden = _hidden_simulated_agents(payload, include_simulated)
     if not rows:
-        out().print("No agents yet. Agents register automatically when they send their first event."
-                    + (f" ({hidden} simulated agent(s) hidden: --include-simulated)" if hidden else ""))
+        out().print(
+            "No agents yet. Agents register automatically when they send their first event."
+            + (f" ({hidden} simulated agent(s) hidden: --include-simulated)" if hidden else "")
+        )
         return
     table = Table(title="Agents", title_justify="left")
     for col in ("Name", "Framework", "Environment", "Status", "Risk", "Last seen", "ID", ""):
         table.add_column(col, no_wrap=col in ("ID", "Last seen"))
     for a in rows:
-        table.add_row(text(pick(a, "name")), text(pick(a, "framework")), text(pick(a, "environment")),
-                      status(pick(a, "status")), text(pick(a, "risk_score")), fmt_time(pick(a, "last_seen_at")),
-                      text(pick(a, "id")), _sim(a))
+        table.add_row(
+            text(pick(a, "name")),
+            text(pick(a, "framework")),
+            text(pick(a, "environment")),
+            status(pick(a, "status")),
+            text(pick(a, "risk_score")),
+            fmt_time(pick(a, "last_seen_at")),
+            text(pick(a, "id")),
+            _sim(a),
+        )
     out().print(table)
     _footer(len(rows), total_of(payload, len(rows)), "agents")
     if hidden:
@@ -83,7 +92,9 @@ def agents(limit: int = LIMIT_OPT, include_simulated: bool = SIM_OPT, as_json: b
 
 def events(
     session: str | None = typer.Option(None, "--session", "-s", help="Only events of this session id."),
-    event_type: str | None = typer.Option(None, "--type", "-t", help="Only this event type, e.g. tool.requested."),
+    event_type: str | None = typer.Option(
+        None, "--type", "-t", help="Only this event type, e.g. tool.requested."
+    ),
     limit: int = LIMIT_OPT,
     include_simulated: bool = SIM_OPT,
     as_json: bool = JSON_OPT,
@@ -91,8 +102,9 @@ def events(
     """List recently ingested events (newest first). Simulation Lab events are hidden unless asked for."""
     cfg = get_config()
     with cli_errors(cfg.url):
-        payload = get_client(cfg).list_events(session_id=session, event_type=event_type, limit=limit,
-                                              include_simulated=include_simulated)
+        payload = get_client(cfg).list_events(
+            session_id=session, event_type=event_type, limit=limit, include_simulated=include_simulated
+        )
     if as_json:
         return print_json(payload)
     rows = items_of(payload)
@@ -104,9 +116,16 @@ def events(
     for col in ("Received", "Type", "Agent", "Session", "Integration", "Processing", "ID", ""):
         table.add_column(col, no_wrap=col in ("Received", "ID"))
     for e in rows:
-        table.add_row(fmt_time(pick(e, "received_at", "occurred_at")), text(pick(e, "event_type")),
-                      text(pick(e, "agent_name")), text(pick(e, "session_id")), text(pick(e, "integration")),
-                      text(pick(e, "processing_status", default="processed")), text(pick(e, "id")), _sim(e))
+        table.add_row(
+            fmt_time(pick(e, "received_at", "occurred_at")),
+            text(pick(e, "event_type")),
+            text(pick(e, "agent_name")),
+            text(pick(e, "session_id")),
+            text(pick(e, "integration")),
+            text(pick(e, "processing_status", default="processed")),
+            text(pick(e, "id")),
+            _sim(e),
+        )
     out().print(table)
     _footer(len(rows), total_of(payload, len(rows)), "events")
 
@@ -128,14 +147,22 @@ def policies(as_json: bool = JSON_OPT) -> None:
     for p in rows:
         mode = str(pick(p, "mode", default="enforce"))
         mode_text = "enforce" if mode == "enforce" else "[dim]monitor (recorded only)[/dim]"
-        table.add_row(text(pick(p, "name")), decision(pick(p, "outcome")), mode_text,
-                      "yes" if pick(p, "enabled", default=True) else "[dim]no[/dim]", text(pick(p, "priority")),
-                      severity(pick(p, "severity")), text(pick(p, "id")))
+        table.add_row(
+            text(pick(p, "name")),
+            decision(pick(p, "outcome")),
+            mode_text,
+            "yes" if pick(p, "enabled", default=True) else "[dim]no[/dim]",
+            text(pick(p, "priority")),
+            severity(pick(p, "severity")),
+            text(pick(p, "id")),
+        )
     out().print(table)
 
 
 def incidents(
-    state: str | None = typer.Option(None, "--status", help="open, investigating, contained, resolved, false_positive."),
+    state: str | None = typer.Option(
+        None, "--status", help="open, investigating, contained, resolved, false_positive."
+    ),
     limit: int = LIMIT_OPT,
     include_simulated: bool = SIM_OPT,
     as_json: bool = JSON_OPT,
@@ -143,7 +170,9 @@ def incidents(
     """List incidents."""
     cfg = get_config()
     with cli_errors(cfg.url):
-        payload = get_client(cfg).list_incidents(status=state, limit=limit, include_simulated=include_simulated)
+        payload = get_client(cfg).list_incidents(
+            status=state, limit=limit, include_simulated=include_simulated
+        )
     if as_json:
         return print_json(payload)
     rows = items_of(payload)
@@ -154,8 +183,15 @@ def incidents(
     for col in ("Key", "Title", "Severity", "Status", "Opened", "ID", ""):
         table.add_column(col, no_wrap=col in ("Key", "Opened", "ID"))
     for i in rows:
-        table.add_row(text(pick(i, "key", "number")), text(pick(i, "title")), severity(pick(i, "severity")),
-                      status(pick(i, "status")), fmt_time(pick(i, "opened_at")), text(pick(i, "id")), _sim(i))
+        table.add_row(
+            text(pick(i, "key", "number")),
+            text(pick(i, "title")),
+            severity(pick(i, "severity")),
+            status(pick(i, "status")),
+            fmt_time(pick(i, "opened_at")),
+            text(pick(i, "id")),
+            _sim(i),
+        )
     out().print(table)
     _footer(len(rows), total_of(payload, len(rows)), "incidents")
 
@@ -176,9 +212,14 @@ def _timeline_line(entry: dict[str, Any]) -> str:
     return f"[dim]{when}[/dim]  [bold]{text(kind)}[/bold]  {text(title, '')}  {' '.join(badges)}".rstrip()
 
 
-def replay(session_id: str = typer.Argument(..., help="ContextOS session id (asn_…, as in `contextos events`) or the "
-                                                        "integration's own session id (e.g. the SDK's ses_…)."),
-           as_json: bool = JSON_OPT) -> None:
+def replay(
+    session_id: str = typer.Argument(
+        ...,
+        help="ContextOS session id (asn_…, as in `contextos events`) or the "
+        "integration's own session id (e.g. the SDK's ses_…).",
+    ),
+    as_json: bool = JSON_OPT,
+) -> None:
     """Print a session's recorded timeline in order (what happened, not why)."""
     cfg = get_config()
     client = get_client(cfg)
@@ -191,8 +232,10 @@ def replay(session_id: str = typer.Argument(..., help="ContextOS session id (asn
     console = out()
     agent = pick(pick(session, "agent", default={}), "name")
     label = f" {SIMULATED} (Simulation Lab)" if pick(session, "is_simulation") else ""
-    console.print(f"[bold]Session {text(pick(session, 'id', default=session_id))}[/bold]"
-                  f"{f' of agent {text(agent)}' if agent else ''}{label} — {len(entries)} recorded step(s)")
+    console.print(
+        f"[bold]Session {text(pick(session, 'id', default=session_id))}[/bold]"
+        f"{f' of agent {text(agent)}' if agent else ''}{label} — {len(entries)} recorded step(s)"
+    )
     if not entries:
         console.print("Nothing was recorded for this session.")
         return
@@ -201,8 +244,10 @@ def replay(session_id: str = typer.Argument(..., help="ContextOS session id (asn
         explanation = pick(entry, "explanation") if isinstance(entry, dict) else None
         if explanation:
             console.print(f"    [dim]{text(explanation)}[/dim]")
-    console.print("[dim]Steps are listed in recorded order. Steps that appear together were observed together; "
-                  "that is not proof one caused another.[/dim]")
+    console.print(
+        "[dim]Steps are listed in recorded order. Steps that appear together were observed together; "
+        "that is not proof one caused another.[/dim]"
+    )
 
 
 def _print_scenarios(payload: Any) -> None:
@@ -214,8 +259,12 @@ def _print_scenarios(payload: Any) -> None:
     for col in ("ID", "Name", "Category", "What it tests"):
         table.add_column(col, no_wrap=col == "ID")
     for s in rows:
-        table.add_row(text(pick(s, "id", "scenario_id")), text(pick(s, "name", "title")),
-                      text(pick(s, "category", "kind")), text(pick(s, "description", "summary")))
+        table.add_row(
+            text(pick(s, "id", "scenario_id")),
+            text(pick(s, "name", "title")),
+            text(pick(s, "category", "kind")),
+            text(pick(s, "description", "summary")),
+        )
     out().print(table)
 
 
@@ -241,9 +290,11 @@ def simulate(
         except AuthError as exc:
             if exc.status_code != 403:
                 raise
-            err().print(f"[red]Not authorised:[/red] {escape(exc.message)}. Running a scenario writes simulated "
-                        "events through the pipeline, so the API key needs the 'ingest' scope (and 'read' to list "
-                        "scenarios and fetch results).")
+            err().print(
+                f"[red]Not authorised:[/red] {escape(exc.message)}. Running a scenario writes simulated "
+                "events through the pipeline, so the API key needs the 'ingest' scope (and 'read' to list "
+                "scenarios and fetch results)."
+            )
             raise typer.Exit(EXIT_ERROR) from None
         deadline = time.monotonic() + wait_s
         while str(pick(run, "status", default="")).lower() == "running" and time.monotonic() < deadline:
@@ -263,9 +314,17 @@ def simulate(
 def _print_run(run: Any) -> None:
     console = out()
     passed = pick(run, "passed")
-    verdict = "[green]PASSED[/green]" if passed else "[red]FAILED[/red]" if passed is False else "[yellow]no verdict[/yellow]"
-    console.print(f"[bold]Simulation {text(pick(run, 'scenario_name', 'scenario_id'))}[/bold] "
-                  f"({text(pick(run, 'id'))}) — {text(pick(run, 'status'))} — {verdict}")
+    verdict = (
+        "[green]PASSED[/green]"
+        if passed
+        else "[red]FAILED[/red]"
+        if passed is False
+        else "[yellow]no verdict[/yellow]"
+    )
+    console.print(
+        f"[bold]Simulation {text(pick(run, 'scenario_name', 'scenario_id'))}[/bold] "
+        f"({text(pick(run, 'id'))}) — {text(pick(run, 'status'))} — {verdict}"
+    )
     if pick(run, "summary"):
         console.print(text(pick(run, "summary")))
     if pick(run, "error"):
@@ -277,10 +336,16 @@ def _print_run(run: Any) -> None:
             table.add_column(col)
         for r in results:
             ok = pick(r, "passed")
-            table.add_row(text(pick(r, "name", "check", "step")), text(pick(r, "expected")), text(pick(r, "actual", "observed")),
-                          "[green]pass[/green]" if ok else "[red]fail[/red]" if ok is False else "—")
+            table.add_row(
+                text(pick(r, "name", "check", "step")),
+                text(pick(r, "expected")),
+                text(pick(r, "actual", "observed")),
+                "[green]pass[/green]" if ok else "[red]fail[/red]" if ok is False else "—",
+            )
         console.print(table)
-    console.print(f"[dim]Everything this run recorded is {SIMULATED}[dim] (flagged is_simulation) and is left out of "
-                  "real metrics and lists unless simulated data is requested.[/dim]")
+    console.print(
+        f"[dim]Everything this run recorded is {SIMULATED}[dim] (flagged is_simulation) and is left out of "
+        "real metrics and lists unless simulated data is requested.[/dim]"
+    )
     if pick(run, "session_id"):
         console.print(f"[dim]Inspect it with: contextos replay {text(pick(run, 'session_id'))}[/dim]")

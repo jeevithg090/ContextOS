@@ -50,7 +50,9 @@ class KeyValueFormatter(logging.Formatter):
 
     def _format(self, record: logging.LogRecord) -> str:
         base = f"{self.formatTime(record, '%H:%M:%S')} {record.levelname:<5} {record.name}: {record.getMessage()}"
-        extras = [f"{k}={v}" for k, v in record.__dict__.items() if k not in _RESERVED and not k.startswith("_")]
+        extras = [
+            f"{k}={v}" for k, v in record.__dict__.items() if k not in _RESERVED and not k.startswith("_")
+        ]
         line = base + (" " + " ".join(extras) if extras else "")
         if record.exc_info:
             line += "\n" + self.formatException(record.exc_info)

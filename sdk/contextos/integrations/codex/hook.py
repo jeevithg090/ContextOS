@@ -58,9 +58,13 @@ def default_client(cfg: CodexHookConfig, budget_s: float) -> ContextOSClient:
     """Client for one hook process: short timeouts that fit the budget, one retry, per-agent spool."""
     timeout = max(1.0, min(cfg.base.timeout_s, budget_s / 2))
     return ContextOSClient(
-        cfg.base.url, cfg.base.api_key, timeout=timeout,
+        cfg.base.url,
+        cfg.base.api_key,
+        timeout=timeout,
         agent=mapping.agent_ref(cfg.agent_name, cfg.base.environment),
-        integration=mapping.INTEGRATION, spool_max_bytes=cfg.base.spool_max_bytes, max_retries=1,
+        integration=mapping.INTEGRATION,
+        spool_max_bytes=cfg.base.spool_max_bytes,
+        max_retries=1,
     )
 
 
@@ -69,7 +73,9 @@ def _debug(enabled: bool, message: str) -> None:
         print(f"contextos-codex-hook: {message}", file=sys.stderr)
 
 
-def handle_pre_tool_use(h: HookInput, cfg: CodexHookConfig, client_factory: ClientFactory, started: float) -> Verdict:
+def handle_pre_tool_use(
+    h: HookInput, cfg: CodexHookConfig, client_factory: ClientFactory, started: float
+) -> Verdict:
     deadline = started + cfg.decide_budget_s
     client = client_factory(cfg, cfg.decide_budget_s)
     try:
@@ -80,8 +86,9 @@ def handle_pre_tool_use(h: HookInput, cfg: CodexHookConfig, client_factory: Clie
 
 def handle_observation(h: HookInput, cfg: CodexHookConfig, client_factory: ClientFactory) -> int:
     """Report a non-blocking event. Returns how many events were accepted or spooled."""
-    events = observe.observation_events(h, mapping.agent_ref(cfg.agent_name, cfg.base.environment),
-                                        max_result_chars=cfg.max_result_chars)
+    events = observe.observation_events(
+        h, mapping.agent_ref(cfg.agent_name, cfg.base.environment), max_result_chars=cfg.max_result_chars
+    )
     if not events:
         return 0
     budget = SESSION_END_BUDGET_S if h.event == "SessionEnd" else EVENT_BUDGET_S
@@ -106,7 +113,11 @@ def _emit(verdict: Verdict, stdout: IO[str], stderr: IO[str], tool: str) -> int:
     try:
         code, out, err = verdict.answer()
     except ValueError:
-        code, out, err = BLOCK_EXIT, None, f"ContextOS produced an invalid answer for this {tool} call; blocked.\n"
+        code, out, err = (
+            BLOCK_EXIT,
+            None,
+            f"ContextOS produced an invalid answer for this {tool} call; blocked.\n",
+        )
     try:
         if out:
             stdout.write(out)
@@ -116,7 +127,9 @@ def _emit(verdict: Verdict, stdout: IO[str], stderr: IO[str], tool: str) -> int:
             stderr.flush()
     except (OSError, ValueError) as exc:
         try:
-            stderr.write(f"ContextOS could not answer for this {tool} call ({type(exc).__name__}); blocked.\n")
+            stderr.write(
+                f"ContextOS could not answer for this {tool} call ({type(exc).__name__}); blocked.\n"
+            )
             stderr.flush()
         except (OSError, ValueError):
             pass  # nothing left to write to; exit 2 still blocks only with a reason, nothing more to do
@@ -124,9 +137,15 @@ def _emit(verdict: Verdict, stdout: IO[str], stderr: IO[str], tool: str) -> int:
     return code
 
 
-def main(event_name: str, *, stdin: IO[bytes] | None = None, stdout: IO[str] | None = None,
-         stderr: IO[str] | None = None, env: Mapping[str, str] | None = None,
-         client_factory: ClientFactory | None = None) -> int:
+def main(
+    event_name: str,
+    *,
+    stdin: IO[bytes] | None = None,
+    stdout: IO[str] | None = None,
+    stderr: IO[str] | None = None,
+    env: Mapping[str, str] | None = None,
+    client_factory: ClientFactory | None = None,
+) -> int:
     """Hook entry point. Returns the process exit code: 2 blocks a PreToolUse call, otherwise 0."""
     started = time.monotonic()
     environ = os.environ if env is None else env
@@ -145,7 +164,11 @@ def main(event_name: str, *, stdin: IO[bytes] | None = None, stdout: IO[str] | N
         event = h.event
         blocking = event == "PreToolUse"
     except (PayloadError, OSError) as exc:
-        problem = str(exc) if isinstance(exc, PayloadError) else f"the hook input could not be read ({exc.strerror})"
+        problem = (
+            str(exc)
+            if isinstance(exc, PayloadError)
+            else f"the hook input could not be read ({exc.strerror})"
+        )
 
     if not blocking and event not in mapping.SUPPORTED_EVENTS:
         _debug(debug, f"{event or 'unknown event'}: not handled by ContextOS")
@@ -163,15 +186,19 @@ def main(event_name: str, *, stdin: IO[bytes] | None = None, stdout: IO[str] | N
         assert h is not None and cfg is not None
         budget = SESSION_END_BUDGET_S if event == "SessionEnd" else EVENT_BUDGET_S
         try:
-            finished, count = run_with_budget(lambda: handle_observation(h, cfg, factory), budget,
-                                              name="contextos-codex-hook")
+            finished, count = run_with_budget(
+                lambda: handle_observation(h, cfg, factory), budget, name="contextos-codex-hook"
+            )
         except (ContextOSError, OSError, ValueError) as exc:
             _debug(debug, f"{event}: not reported ({type(exc).__name__}: {exc})")
             return 0
         except Exception as exc:  # noqa: BLE001 - observation hooks must never break the session
             _debug(debug, f"{event}: internal error {type(exc).__name__}")
             return 0
-        _debug(debug, f"{event}: {'reported ' + str(count) + ' event(s)' if finished else 'gave up after the time budget'}")
+        _debug(
+            debug,
+            f"{event}: {'reported ' + str(count) + ' event(s)' if finished else 'gave up after the time budget'}",
+        )
         return 0
 
     # -- PreToolUse: always answer ---------------------------------------------------------------
@@ -181,17 +208,29 @@ def main(event_name: str, *, stdin: IO[bytes] | None = None, stdout: IO[str] | N
         verdict = fail_mode_verdict(mode, tool, problem or "the hook could not start")
     else:
         try:
-            finished, result = run_with_budget(lambda: handle_pre_tool_use(h, cfg, factory, started),
-                                               cfg.decide_budget_s - (time.monotonic() - started),
-                                               name="contextos-codex-hook")
-            verdict = result if finished else fail_mode_verdict(
-                cfg.fail_mode, tool, f"no answer within the hook's {cfg.decide_budget_s:.0f}s budget")
+            finished, result = run_with_budget(
+                lambda: handle_pre_tool_use(h, cfg, factory, started),
+                cfg.decide_budget_s - (time.monotonic() - started),
+                name="contextos-codex-hook",
+            )
+            verdict = (
+                result
+                if finished
+                else fail_mode_verdict(
+                    cfg.fail_mode, tool, f"no answer within the hook's {cfg.decide_budget_s:.0f}s budget"
+                )
+            )
         except Exception as exc:  # noqa: BLE001 - a crash must not let the tool run unchecked
-            verdict = fail_mode_verdict(cfg.fail_mode, tool, f"the ContextOS hook failed ({type(exc).__name__})")
+            verdict = fail_mode_verdict(
+                cfg.fail_mode, tool, f"the ContextOS hook failed ({type(exc).__name__})"
+            )
     code = _emit(verdict, out, err, tool)
     decided = verdict.decision.decision if verdict.decision else "-"
-    _debug(debug, f"PreToolUse {tool}: decision={decided} answer={verdict.kind} outcome={verdict.outcome} "
-           f"in {(time.monotonic() - started) * 1000:.0f} ms")
+    _debug(
+        debug,
+        f"PreToolUse {tool}: decision={decided} answer={verdict.kind} outcome={verdict.outcome} "
+        f"in {(time.monotonic() - started) * 1000:.0f} ms",
+    )
     return code
 
 

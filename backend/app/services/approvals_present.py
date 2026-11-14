@@ -143,7 +143,9 @@ def risk_summary(raw: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def session_risk(snapshot: dict[str, Any] | None, risk_state: dict[str, Any] | None, risk_score: int | None) -> dict[str, Any]:
+def session_risk(
+    snapshot: dict[str, Any] | None, risk_state: dict[str, Any] | None, risk_score: int | None
+) -> dict[str, Any]:
     """Trifecta legs as the policy engine saw them (``input_snapshot.session``) plus the evidence
     currently recorded on the session (``AgentSession.risk_state``; labelled with when it was computed)."""
     snap = snapshot if isinstance(snapshot, dict) else {}
@@ -153,11 +155,22 @@ def session_risk(snapshot: dict[str, Any] | None, risk_state: dict[str, Any] | N
     legs = []
     for key, label in _LEGS:
         items = evidence.get(key) if isinstance(evidence.get(key), list) else []
-        legs.append({
-            "key": key, "label": label, "active_at_decision": bool(at_decision.get(key)),
-            "evidence": [{"type": str(e.get("type") or "record"), "id": (str(e["id"]) if e.get("id") else None),
-                          "detail": e.get("detail")} for e in items if isinstance(e, dict)][:10],
-        })
+        legs.append(
+            {
+                "key": key,
+                "label": label,
+                "active_at_decision": bool(at_decision.get(key)),
+                "evidence": [
+                    {
+                        "type": str(e.get("type") or "record"),
+                        "id": (str(e["id"]) if e.get("id") else None),
+                        "detail": e.get("detail"),
+                    }
+                    for e in items
+                    if isinstance(e, dict)
+                ][:10],
+            }
+        )
     context = snap.get("context") if isinstance(snap.get("context"), dict) else {}
     return {
         "score_at_decision": _int(at_decision.get("score")),
@@ -172,42 +185,62 @@ def session_risk(snapshot: dict[str, Any] | None, risk_state: dict[str, Any] | N
     }
 
 
-def enforcement_note(*, status: str, enforcement: str | None, integration: str | None,
-                     invocation_status: str | None, ran_before_decision: bool = False) -> str:
+def enforcement_note(
+    *,
+    status: str,
+    enforcement: str | None,
+    integration: str | None,
+    invocation_status: str | None,
+    ran_before_decision: bool = False,
+) -> str:
     """What approving / rejecting actually does for the integration that asked (honest claims only).
 
     ``ran_before_decision``: the integration reported the call finished before the request was decided.
     """
-    who = _INTEGRATION_LABELS.get(integration or "", f"The {integration} integration" if integration else "The integration")
+    who = _INTEGRATION_LABELS.get(
+        integration or "", f"The {integration} integration" if integration else "The integration"
+    )
     if invocation_status in _RAN_ANYWAY and status != ApprovalStatus.APPROVED:
         if status == ApprovalStatus.PENDING:
-            return (f"{who} reported this call as {invocation_status} before anyone decided here (for example, "
-                    "Claude Code falls back to its own permission prompt when its wait runs out). ContextOS "
-                    "recorded that its decision was not honoured; see the related findings. Deciding now still "
-                    "records the outcome.")
-        return (f"The call was reported as {invocation_status} although this request was {status}. ContextOS "
-                "recorded that its decision was not honoured; see the related findings.")
+            return (
+                f"{who} reported this call as {invocation_status} before anyone decided here (for example, "
+                "Claude Code falls back to its own permission prompt when its wait runs out). ContextOS "
+                "recorded that its decision was not honoured; see the related findings. Deciding now still "
+                "records the outcome."
+            )
+        return (
+            f"The call was reported as {invocation_status} although this request was {status}. ContextOS "
+            "recorded that its decision was not honoured; see the related findings."
+        )
     if enforcement == EnforcementMode.ENFORCED:
         if status == ApprovalStatus.PENDING:
-            return (f"{who} paused this call at its execution boundary and is polling ContextOS for the outcome. "
-                    "Approve lets it run; Reject makes the integration deny it. Integrations stop waiting after "
-                    "their own timeout (for example, Claude Code then falls back to its own permission prompt or "
-                    "denies), so a late decision is recorded but the agent may need to retry.")
+            return (
+                f"{who} paused this call at its execution boundary and is polling ContextOS for the outcome. "
+                "Approve lets it run; Reject makes the integration deny it. Integrations stop waiting after "
+                "their own timeout (for example, Claude Code then falls back to its own permission prompt or "
+                "denies), so a late decision is recorded but the agent may need to retry."
+            )
         if status == ApprovalStatus.APPROVED:
             if ran_before_decision and invocation_status in _RAN_ANYWAY:
-                return (f"Approved, but {who} had already reported this call as {invocation_status} before the "
-                        "decision, so the approval did not gate it.")
-            return f"Approved. {who} receives \"approved\" on its next poll and lets the call run."
+                return (
+                    f"Approved, but {who} had already reported this call as {invocation_status} before the "
+                    "decision, so the approval did not gate it."
+                )
+            return f'Approved. {who} receives "approved" on its next poll and lets the call run.'
         if status == ApprovalStatus.REJECTED:
-            return f"Rejected. {who} receives \"rejected\" on its next poll and denies the call."
+            return f'Rejected. {who} receives "rejected" on its next poll and denies the call.'
         if status == ApprovalStatus.EXPIRED:
             return f"Nobody decided before the deadline. {who} treats an expired request as not approved."
         if status == ApprovalStatus.CANCELLED:
-            return (f"{who} stopped waiting and withdrew this request (for example, its own timeout ran out), so "
-                    "the call was not run on this approval.")
+            return (
+                f"{who} stopped waiting and withdrew this request (for example, its own timeout ran out), so "
+                "the call was not run on this approval."
+            )
         return f"{who} treats a {status} request as not approved."
     if enforcement == EnforcementMode.ADVISORY:
-        return (f"Advisory only. {who} received the approval requirement, but ContextOS cannot confirm that it "
-                "waits for the outcome. Your decision is recorded and returned if it polls; the call may already "
-                "have run.")
+        return (
+            f"Advisory only. {who} received the approval requirement, but ContextOS cannot confirm that it "
+            "waits for the outcome. Your decision is recorded and returned if it polls; the call may already "
+            "have run."
+        )
     return "Observed only: this call was reported after the fact, so a decision here cannot prevent it."

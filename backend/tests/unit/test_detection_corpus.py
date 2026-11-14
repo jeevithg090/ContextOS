@@ -77,7 +77,8 @@ def _split(outcomes: list[metrics.Outcome], split: str) -> list[metrics.Outcome]
 def test_committed_corpus_is_reproducible():
     for path, expected in rendered().items():
         assert path.read_text(encoding="utf-8") == expected, (
-            f"{path.name} differs from the generator output; run `python -m tests.corpus.generate`")
+            f"{path.name} differs from the generator output; run `python -m tests.corpus.generate`"
+        )
 
 
 def test_corpus_size_and_balance(content):
@@ -93,7 +94,18 @@ def test_corpus_size_and_balance(content):
 
 
 def test_content_samples_are_schema_valid(content):
-    keys = {"id", "seed_id", "text", "label", "family", "expected_category", "carrier", "technique", "lang", "split"}
+    keys = {
+        "id",
+        "seed_id",
+        "text",
+        "label",
+        "family",
+        "expected_category",
+        "carrier",
+        "technique",
+        "lang",
+        "split",
+    }
     ids = [s["id"] for s in content]
     assert len(ids) == len(set(ids))
     for s in content:
@@ -112,7 +124,18 @@ def test_content_samples_are_schema_valid(content):
 
 
 def test_tool_samples_are_schema_valid(tools):
-    keys = {"id", "seed_id", "tool", "category", "arguments", "label", "family", "expected_category", "shape", "split"}
+    keys = {
+        "id",
+        "seed_id",
+        "tool",
+        "category",
+        "arguments",
+        "label",
+        "family",
+        "expected_category",
+        "shape",
+        "split",
+    }
     assert len({s["id"] for s in tools}) == len(tools)
     for s in tools:
         assert set(s) == keys, s["id"]
@@ -134,8 +157,9 @@ def test_no_seed_appears_in_both_splits(corpus_path):
 
 
 def _hosts(text: str) -> list[str]:
-    return [urlsplit(u).hostname or "" for u in re.findall(r"https?://[^\s\"'<>)\\]+", text)] + \
-        re.findall(r"@((?:\d{1,3}\.){3}\d{1,3})", text)
+    return [urlsplit(u).hostname or "" for u in re.findall(r"https?://[^\s\"'<>)\\]+", text)] + re.findall(
+        r"@((?:\d{1,3}\.){3}\d{1,3})", text
+    )
 
 
 def _reserved(host: str) -> bool:
@@ -192,26 +216,34 @@ def test_dev_split_stays_at_tuned_level(which, content_outcomes, tool_outcomes):
 
 def test_every_obfuscation_technique_keeps_working(content_outcomes):
     """Per-technique recall over both splits: a normalisation regression shows up here first."""
-    by_technique = metrics.breakdown([o for o in content_outcomes if o.malicious], lambda o: o.sample["technique"])
+    by_technique = metrics.breakdown(
+        [o for o in content_outcomes if o.malicious], lambda o: o.sample["technique"]
+    )
     for technique, c in by_technique.items():
         assert c["recall"] >= 0.80, (technique, c)
 
 
 def test_benign_hard_negatives_never_reach_high_severity_except_pinned(content_outcomes, tool_outcomes):
     high = {
-        o.sample["id"] for o in content_outcomes + tool_outcomes
+        o.sample["id"]
+        for o in content_outcomes + tool_outcomes
         if not o.malicious and SEVERITY_RANK.get(o.max_severity or "", 0) >= _HIGH
     }
     assert high == KNOWN_HIGH_SEVERITY_BENIGN, (
         f"new: {sorted(high - KNOWN_HIGH_SEVERITY_BENIGN)}; fixed (update the pin and the doc): "
-        f"{sorted(KNOWN_HIGH_SEVERITY_BENIGN - high)}")
+        f"{sorted(KNOWN_HIGH_SEVERITY_BENIGN - high)}"
+    )
 
 
 def test_obfuscation_lookalikes_raise_no_alert(content_outcomes):
     """Encoded images/data, minified JS, emoji joiners, non-Latin text, spaced and leet-looking words."""
-    flagged = [o.sample["id"] for o in content_outcomes
-               if o.sample["family"].startswith("benign/lookalike") and o.predicted and o.sample["id"]
-               not in KNOWN_HIGH_SEVERITY_BENIGN]
+    flagged = [
+        o.sample["id"]
+        for o in content_outcomes
+        if o.sample["family"].startswith("benign/lookalike")
+        and o.predicted
+        and o.sample["id"] not in KNOWN_HIGH_SEVERITY_BENIGN
+    ]
     assert not flagged, flagged
 
 
@@ -222,7 +254,13 @@ def test_evaluator_report_shape():
     assert result["prediction_rule"] == "any hit with severity >= medium"
     for section in ("content", "tool_requests"):
         rep = result[section]
-        assert set(rep) == {"overall", "breakdowns", "worst_false_positives", "worst_false_negatives", "miscategorised"}
+        assert set(rep) == {
+            "overall",
+            "breakdowns",
+            "worst_false_positives",
+            "worst_false_negatives",
+            "miscategorised",
+        }
         assert len(rep["worst_false_negatives"]) <= 3
     assert set(result["content"]["breakdowns"]) == {"family", "technique", "carrier", "language"}
     text = render_text(result)

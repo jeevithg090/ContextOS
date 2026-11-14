@@ -16,11 +16,28 @@ from typing import Any
 DEFAULT_TEMPLATE = "software_development"
 
 STATUS_KEYS: tuple[str, ...] = (
-    "backlog", "todo", "investigating", "ready", "in_progress", "review", "testing", "verified", "done",
+    "backlog",
+    "todo",
+    "investigating",
+    "ready",
+    "in_progress",
+    "review",
+    "testing",
+    "verified",
+    "done",
 )
 
 COLOR_TOKENS: tuple[str, ...] = (
-    "slate", "accent", "trusted", "approved", "external", "suspicious", "blocked", "high", "medium", "low",
+    "slate",
+    "accent",
+    "trusted",
+    "approved",
+    "external",
+    "suspicious",
+    "blocked",
+    "high",
+    "medium",
+    "low",
 )
 
 
@@ -52,7 +69,12 @@ BOARD_TEMPLATES: dict[str, dict[str, Any]] = {
         "columns": [
             _col("Backlog", "backlog", "slate", "Captured work that has not been prioritised yet."),
             _col("To Do", "todo", "slate", "Prioritised and ready to be picked up."),
-            _col("Investigating", "investigating", "external", "Reproducing the problem and gathering evidence."),
+            _col(
+                "Investigating",
+                "investigating",
+                "external",
+                "Reproducing the problem and gathering evidence.",
+            ),
             _col("Ready for Fix", "ready", "approved", "Root cause understood; the fix can start."),
             _col("In Progress", "in_progress", "accent", "Being implemented.", wip_limit=5),
             _col("Code Review", "review", "medium", "Change is up for review.", wip_limit=5),
@@ -70,8 +92,13 @@ BOARD_TEMPLATES: dict[str, dict[str, Any]] = {
             _col("In Progress", "in_progress", "accent", "Fix being implemented.", wip_limit=5),
             _col("Review", "review", "medium", "Fix under code and security review."),
             _col("Testing", "testing", "low", "Regression and adversarial tests running."),
-            _col("Verified", "verified", "trusted",
-                 "A passed verification run proves the fix. Entering this column requires one.", verify=True),
+            _col(
+                "Verified",
+                "verified",
+                "trusted",
+                "A passed verification run proves the fix. Entering this column requires one.",
+                verify=True,
+            ),
             _col("Done", "done", "trusted", "Verified fix released; finding can be resolved.", done=True),
         ],
     },
@@ -81,12 +108,27 @@ BOARD_TEMPLATES: dict[str, dict[str, Any]] = {
         "columns": [
             _col("Reported", "backlog", "blocked", "Signals and reports not yet triaged."),
             _col("Triage", "todo", "high", "Assessing scope, severity and owner."),
-            _col("Investigating", "investigating", "suspicious", "Establishing what happened and what is affected."),
-            _col("Containing", "in_progress", "accent", "Stopping further impact (revoking access, blocking destinations).",
-                 wip_limit=3),
+            _col(
+                "Investigating",
+                "investigating",
+                "suspicious",
+                "Establishing what happened and what is affected.",
+            ),
+            _col(
+                "Containing",
+                "in_progress",
+                "accent",
+                "Stopping further impact (revoking access, blocking destinations).",
+                wip_limit=3,
+            ),
             _col("Remediating", "review", "medium", "Fixing the underlying cause and reviewing the change."),
-            _col("Verified", "verified", "trusted", "Containment and fix confirmed by a passed verification run.",
-                 verify=True),
+            _col(
+                "Verified",
+                "verified",
+                "trusted",
+                "Containment and fix confirmed by a passed verification run.",
+                verify=True,
+            ),
             _col("Closed", "done", "trusted", "Post-incident actions recorded; incident closed.", done=True),
         ],
     },
@@ -178,7 +220,9 @@ def validate_columns(columns: list[dict[str, Any]]) -> list[str]:
 
 
 def _is_hex(value: str) -> bool:
-    return len(value) == 7 and value.startswith("#") and all(ch in "0123456789abcdefABCDEF" for ch in value[1:])
+    return (
+        len(value) == 7 and value.startswith("#") and all(ch in "0123456789abcdefABCDEF" for ch in value[1:])
+    )
 
 
 def get_template(key: str) -> dict[str, Any]:

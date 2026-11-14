@@ -34,13 +34,16 @@ def test_siblings_do_not_add_up():
     assert json_depth_exceeds(wide, limit=1)
 
 
-@pytest.mark.parametrize("body", [
-    b'"' * 2_000_000,                      # many empty strings
-    b'"' + b"a" * 2_000_000,               # one unterminated string
-    b'"' + b"\\a" * 700_000,               # escapes without a closing quote
-    b'"a' * 1_000_000,                     # alternating quotes
-    b",[]" * 600_000,                      # many shallow brackets
-])
+@pytest.mark.parametrize(
+    "body",
+    [
+        b'"' * 2_000_000,  # many empty strings
+        b'"' + b"a" * 2_000_000,  # one unterminated string
+        b'"' + b"\\a" * 700_000,  # escapes without a closing quote
+        b'"a' * 1_000_000,  # alternating quotes
+        b",[]" * 600_000,  # many shallow brackets
+    ],
+)
 def test_adversarial_bodies_are_scanned_in_linear_time(body):
     started = time.perf_counter()
     json_depth_exceeds(body)

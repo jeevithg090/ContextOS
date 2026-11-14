@@ -60,13 +60,22 @@ from .results import DELEGATION_TOOLS, bounded_arguments, extract_result
 INTEGRATION = "claude_code"
 FRAMEWORK = "claude_code"
 PROVIDER = "claude_code"
-SUPPORTED_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure",
-                    "SubagentStop", "SessionEnd")
+SUPPORTED_EVENTS = (
+    "SessionStart",
+    "UserPromptSubmit",
+    "PreToolUse",
+    "PostToolUse",
+    "PostToolUseFailure",
+    "SubagentStop",
+    "SessionEnd",
+)
 MAX_TASK_CHARS = 20_000
 MAX_PROMPT_CHARS = 200_000
 _ID_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,128}$")
 _NOTIFICATION_RE = re.compile(r"^\s*<task-notification>")
-_TAG_RES = {tag: re.compile(rf"<{tag}>([^<]{{1,200}})</{tag}>") for tag in ("task-id", "tool-use-id", "status")}
+_TAG_RES = {
+    tag: re.compile(rf"<{tag}>([^<]{{1,200}})</{tag}>") for tag in ("task-id", "tool-use-id", "status")
+}
 _META_STRING = 1_000
 
 
@@ -140,7 +149,9 @@ class HookInput:
     def runs_in_background(self) -> bool:
         """The delegated subagent keeps running after the tool returns (PostToolUse only knows)."""
         response = self.data.get("tool_response")
-        if isinstance(response, Mapping) and (response.get("isAsync") is True or response.get("status") == "async_launched"):
+        if isinstance(response, Mapping) and (
+            response.get("isAsync") is True or response.get("status") == "async_launched"
+        ):
             return True
         return bool(self.tool_input.get("run_in_background"))
 
@@ -226,7 +237,9 @@ def base_metadata(h: HookInput) -> dict[str, Any]:
 
 
 def agent_ref(name: str, environment: str | None = None) -> AgentRef:
-    return AgentRef(name=name[:200], framework=FRAMEWORK, environment=(environment or None) and environment[:32])
+    return AgentRef(
+        name=name[:200], framework=FRAMEWORK, environment=(environment or None) and environment[:32]
+    )
 
 
 def child_agent(agent: AgentRef, h: HookInput) -> AgentRef:
@@ -241,8 +254,15 @@ def child_session_id(h: HookInput) -> str:
 
 def _new(h: HookInput, agent: AgentRef, event_type: EventType, kind: str, **fields: Any) -> EventEnvelope:
     fields.setdefault("metadata", base_metadata(h))
-    return EventEnvelope(event_id=h.event_id(kind), event_type=event_type, agent=agent, session_id=h.session_id,
-                         integration=INTEGRATION, collected_via=collected_via(h), **fields)
+    return EventEnvelope(
+        event_id=h.event_id(kind),
+        event_type=event_type,
+        agent=agent,
+        session_id=h.session_id,
+        integration=INTEGRATION,
+        collected_via=collected_via(h),
+        **fields,
+    )
 
 
 # -- builders -------------------------------------------------------------------------------------
@@ -250,8 +270,15 @@ def _new(h: HookInput, agent: AgentRef, event_type: EventType, kind: str, **fiel
 
 def tool_request(h: HookInput, agent: AgentRef) -> EventEnvelope:
     """``tool.requested`` for ``POST /decide``: the FULL tool input, never truncated."""
-    return _new(h, agent, EventType.TOOL_REQUESTED, "tool.requested", correlation_id=h.correlation_id,
-                tool=tool_ref(h), arguments=h.tool_input)
+    return _new(
+        h,
+        agent,
+        EventType.TOOL_REQUESTED,
+        "tool.requested",
+        correlation_id=h.correlation_id,
+        tool=tool_ref(h),
+        arguments=h.tool_input,
+    )
 
 
 def delegation(h: HookInput, agent: AgentRef) -> EventEnvelope:
@@ -265,39 +292,65 @@ def delegation(h: HookInput, agent: AgentRef) -> EventEnvelope:
     for key in ("description", "subagent_type", "model", "run_in_background"):
         if key in h.tool_input:
             meta[f"delegation_{key}"] = _short(h.tool_input[key], 400)
-    return _new(h, agent, EventType.AGENT_DELEGATED, "delegation", correlation_id=h.correlation_id,
-                delegation=DelegationRef(child_agent=child_agent(agent, h), child_session_id=child_session_id(h),
-                                         task=text),
-                metadata=meta)
+    return _new(
+        h,
+        agent,
+        EventType.AGENT_DELEGATED,
+        "delegation",
+        correlation_id=h.correlation_id,
+        delegation=DelegationRef(
+            child_agent=child_agent(agent, h), child_session_id=child_session_id(h), task=text
+        ),
+        metadata=meta,
+    )
 
 
-def tool_result(h: HookInput, agent: AgentRef, *, max_result_chars: int,
-                extra_metadata: Mapping[str, Any] | None = None) -> EventEnvelope:
+def tool_result(
+    h: HookInput, agent: AgentRef, *, max_result_chars: int, extra_metadata: Mapping[str, Any] | None = None
+) -> EventEnvelope:
     failed = h.event == "PostToolUseFailure"
     meta = base_metadata(h)
-    if isinstance(h.data.get("duration_ms"), (int, float)) and not isinstance(h.data.get("duration_ms"), bool):
+    if isinstance(h.data.get("duration_ms"), (int, float)) and not isinstance(
+        h.data.get("duration_ms"), bool
+    ):
         meta["duration_ms"] = h.data["duration_ms"]
     if failed and isinstance(h.data.get("is_interrupt"), bool):
         meta["is_interrupt"] = h.data["is_interrupt"]
     meta.update(extra_metadata or {})
     if failed:
         error = h.data.get("error")
-        result: Any = extract_result(h.tool_name, error if error is not None else "Tool reported a failure",
-                                     max_result_chars)
+        result: Any = extract_result(
+            h.tool_name, error if error is not None else "Tool reported a failure", max_result_chars
+        )
     else:
         result = extract_result(h.tool_name, h.data.get("tool_response"), max_result_chars)
-    return _new(h, agent, EventType.TOOL_FAILED if failed else EventType.TOOL_COMPLETED,
-                "tool.failed" if failed else "tool.completed", correlation_id=h.correlation_id, tool=tool_ref(h),
-                arguments=bounded_arguments(h.tool_input), result=result, is_error=failed, metadata=meta)
+    return _new(
+        h,
+        agent,
+        EventType.TOOL_FAILED if failed else EventType.TOOL_COMPLETED,
+        "tool.failed" if failed else "tool.completed",
+        correlation_id=h.correlation_id,
+        tool=tool_ref(h),
+        arguments=bounded_arguments(h.tool_input),
+        result=result,
+        is_error=failed,
+        metadata=meta,
+    )
 
 
 def child_session_closed(h: HookInput, child: AgentRef, child_session: str, reason: str) -> EventEnvelope:
     """``session.ended`` for a delegated subagent's child session."""
     meta = {**base_metadata(h), "reason": reason}
-    return EventEnvelope(event_id=h.event_id("delegation.ended") if h.tool_use_id else new_event_id(),
-                         event_type=EventType.SESSION_ENDED, agent=child, session_id=child_session,
-                         parent_session_id=h.session_id, integration=INTEGRATION, collected_via=collected_via(h),
-                         metadata=meta)
+    return EventEnvelope(
+        event_id=h.event_id("delegation.ended") if h.tool_use_id else new_event_id(),
+        event_type=EventType.SESSION_ENDED,
+        agent=child,
+        session_id=child_session,
+        parent_session_id=h.session_id,
+        integration=INTEGRATION,
+        collected_via=collected_via(h),
+        metadata=meta,
+    )
 
 
 def session_started(h: HookInput, agent: AgentRef) -> EventEnvelope:
@@ -321,7 +374,10 @@ def prompt_submitted(h: HookInput, agent: AgentRef) -> EventEnvelope | None:
     if not isinstance(prompt, str) or not prompt.strip():
         return None
     if len(prompt) > MAX_PROMPT_CHARS:
-        prompt = prompt[:MAX_PROMPT_CHARS - 80] + f"\n[TRUNCATED: {len(prompt) - MAX_PROMPT_CHARS + 80} more characters]"
+        prompt = (
+            prompt[: MAX_PROMPT_CHARS - 80]
+            + f"\n[TRUNCATED: {len(prompt) - MAX_PROMPT_CHARS + 80} more characters]"
+        )
     meta = base_metadata(h)
     if h._str("prompt_id"):
         meta["prompt_id"] = _short(h._str("prompt_id"), 200)
@@ -333,27 +389,44 @@ def task_notification(h: HookInput) -> dict[str, str] | None:
     prompt = h.data.get("prompt")
     if not isinstance(prompt, str) or not _NOTIFICATION_RE.match(prompt):
         return None
-    found = {tag.replace("-", "_"): m.group(1).strip() for tag, rx in _TAG_RES.items() if (m := rx.search(prompt))}
+    found = {
+        tag.replace("-", "_"): m.group(1).strip() for tag, rx in _TAG_RES.items() if (m := rx.search(prompt))
+    }
     return found
 
 
-def notification_events(h: HookInput, agent: AgentRef, info: Mapping[str, str],
-                        delegation_record: Mapping[str, Any] | None) -> list[EventEnvelope]:
+def notification_events(
+    h: HookInput, agent: AgentRef, info: Mapping[str, str], delegation_record: Mapping[str, Any] | None
+) -> list[EventEnvelope]:
     """A ``<task-notification>`` turn: the result of background work, not something a person typed."""
     prompt = str(h.data.get("prompt") or "")
     if len(prompt) > MAX_PROMPT_CHARS:
-        prompt = prompt[:MAX_PROMPT_CHARS - 80] + f"\n[TRUNCATED: {len(prompt) - MAX_PROMPT_CHARS + 80} more characters]"
-    meta = {**base_metadata(h), "claude_code_turn": "task_notification",
-            **{f"notification_{k}": _short(v, 200) for k, v in info.items()}}
+        prompt = (
+            prompt[: MAX_PROMPT_CHARS - 80]
+            + f"\n[TRUNCATED: {len(prompt) - MAX_PROMPT_CHARS + 80} more characters]"
+        )
+    meta = {
+        **base_metadata(h),
+        "claude_code_turn": "task_notification",
+        **{f"notification_{k}": _short(v, 200) for k, v in info.items()},
+    }
     if delegation_record and delegation_record.get("child_session_id"):
-        message = MessageRef(from_agent=str(delegation_record.get("child_agent") or f"{agent.name}/subagent")[:200],
-                             from_session_id=str(delegation_record["child_session_id"]), to_agent=agent.name,
-                             content=prompt)
+        message = MessageRef(
+            from_agent=str(delegation_record.get("child_agent") or f"{agent.name}/subagent")[:200],
+            from_session_id=str(delegation_record["child_session_id"]),
+            to_agent=agent.name,
+            content=prompt,
+        )
         return [_new(h, agent, EventType.AGENT_MESSAGE, "prompt", message=message, metadata=meta)]
-    source = SourceRef(type=SourceType.TOOL_OUTPUT, identifier="claude_code:task-notification",
-                       display_name="Claude Code background task result",
-                       metadata={k: _short(v, 200) for k, v in info.items()})
-    return [_new(h, agent, EventType.CONTEXT_INGESTED, "prompt", source=source, content=prompt, metadata=meta)]
+    source = SourceRef(
+        type=SourceType.TOOL_OUTPUT,
+        identifier="claude_code:task-notification",
+        display_name="Claude Code background task result",
+        metadata={k: _short(v, 200) for k, v in info.items()},
+    )
+    return [
+        _new(h, agent, EventType.CONTEXT_INGESTED, "prompt", source=source, content=prompt, metadata=meta)
+    ]
 
 
 __all__ = [

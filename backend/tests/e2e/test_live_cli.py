@@ -67,12 +67,24 @@ def test_every_cli_command_against_the_live_server(live: LiveServer, tmp_path: P
     # Real traffic from this project's agent, then the data commands.
     session = f"ses_cli_{uuid.uuid4().hex[:10]}"
     with live.key() as key:
-        events = [{"event_id": f"evt-{uuid.uuid4().hex}", "event_type": t, "timestamp": "2026-11-11T10:00:00+00:00",
-                   "agent": {"name": agent, "framework": "python_sdk"}, "session_id": session,
-                   "integration": "python_sdk", **extra}
-                  for t, extra in (("session.started", {}),
-                                   ("context.ingested", {"source": {"type": "file", "identifier": "/w/README.md"},
-                                                         "content": MALICIOUS_README}))]
+        events = [
+            {
+                "event_id": f"evt-{uuid.uuid4().hex}",
+                "event_type": t,
+                "timestamp": "2026-11-11T10:00:00+00:00",
+                "agent": {"name": agent, "framework": "python_sdk"},
+                "session_id": session,
+                "integration": "python_sdk",
+                **extra,
+            }
+            for t, extra in (
+                ("session.started", {}),
+                (
+                    "context.ingested",
+                    {"source": {"type": "file", "identifier": "/w/README.md"}, "content": MALICIOUS_README},
+                ),
+            )
+        ]
         assert key.post("/events", json={"events": events}).status_code == 200
     agents = cli.json("agents")
     assert agent in [a["name"] for a in agents["items"]]
@@ -94,7 +106,9 @@ def test_every_cli_command_against_the_live_server(live: LiveServer, tmp_path: P
     (cli.project / ".env").write_text("X=1\n", encoding="utf-8")
     scan = cli("scan", str(cli.project / "README.md"), str(cli.project / ".env"), expect=3)
     assert "PI-OVERRIDE-001" in scan and "sensitive path, not uploaded" in scan
-    assert "<stdin> — nothing detected" in cli("scan", "-", stdin=b"Run make test before opening a pull request.")
+    assert "<stdin> — nothing detected" in cli(
+        "scan", "-", stdin=b"Run make test before opening a pull request."
+    )
 
     # Integrations entry points are wired (their behaviour is covered by the other live tests).
     assert "PreToolUse" in cli("hook", "--help")

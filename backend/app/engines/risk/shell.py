@@ -34,8 +34,27 @@ MAX_DEPTH = 3
 MAX_COMMAND_LENGTH = 20_000
 
 _PUNCT = set(";&|()<>`")
-_OPERATORS = ("<<<", "&&", "||", "|&", ">>", "<<", ">&", "<&", "&>", ">|", ";;", "|", "&", ";", "(", ")", "`",
-              "<", ">")
+_OPERATORS = (
+    "<<<",
+    "&&",
+    "||",
+    "|&",
+    ">>",
+    "<<",
+    ">&",
+    "<&",
+    "&>",
+    ">|",
+    ";;",
+    "|",
+    "&",
+    ";",
+    "(",
+    ")",
+    "`",
+    "<",
+    ">",
+)
 _REDIRECT_OPS = {">", ">>", "<", "<&", ">&", "&>", ">|", "<<", "<<<"}
 _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _NETWORK_CODE = re.compile(
@@ -48,10 +67,47 @@ _QUOTED_PATH = re.compile(r"""['"]((?:~|/|\.{1,2}/)[^'"\s]{1,300}|[^'"\s/]*\.env
 _PRIVILEGE_WRAPPERS = {"sudo", "doas", "su"}
 _TEXT_PROGRAMS = {"echo", "printf", "test", "[", "true", "false", "sleep", "exit", "return"}
 # Programs whose file arguments are read (their content may end up on stdout / in a pipeline).
-_READ_PROGRAMS = {"cat", "head", "tail", "less", "more", "base64", "xxd", "od", "hexdump", "strings", "grep",
-                  "egrep", "fgrep", "rg", "ag", "awk", "sed", "cut", "sort", "uniq", "tac", "nl", "jq", "yq",
-                  "tar", "zip", "gzip", "bzip2", "xz", "7z", "source", ".", "diff", "cmp", "md5sum", "sha256sum",
-                  "gpg", "openssl", "security"}
+_READ_PROGRAMS = {
+    "cat",
+    "head",
+    "tail",
+    "less",
+    "more",
+    "base64",
+    "xxd",
+    "od",
+    "hexdump",
+    "strings",
+    "grep",
+    "egrep",
+    "fgrep",
+    "rg",
+    "ag",
+    "awk",
+    "sed",
+    "cut",
+    "sort",
+    "uniq",
+    "tac",
+    "nl",
+    "jq",
+    "yq",
+    "tar",
+    "zip",
+    "gzip",
+    "bzip2",
+    "xz",
+    "7z",
+    "source",
+    ".",
+    "diff",
+    "cmp",
+    "md5sum",
+    "sha256sum",
+    "gpg",
+    "openssl",
+    "security",
+}
 
 
 def program_name(word: str) -> str:
@@ -345,8 +401,9 @@ def _dispatch(prog: str, args: list[str], acc: Acc, depth: int) -> None:
             j += 2 if args[j] in XARGS_VALUE_OPTS else 1
         _analyze_words(args[j:], [], acc, depth + 1)
         return
-    if prog in ENV_DUMP_PROGRAMS or (prog in {"set", "export", "declare", "typeset"} and
-                                     all(a in {"-p", "-x", "-px", "-xp"} for a in args)):
+    if prog in ENV_DUMP_PROGRAMS or (
+        prog in {"set", "export", "declare", "typeset"} and all(a in {"-p", "-x", "-px", "-xp"} for a in args)
+    ):
         acc.env_dumps.append(prog)
         return
     if prog in INTERPRETERS:
@@ -399,7 +456,9 @@ def _analyze(command: str, acc: Acc, depth: int) -> None:
 def analyze_command(command: str) -> ShellAnalysis:
     acc = Acc()
     if len(command) > MAX_COMMAND_LENGTH:
-        acc.warnings.append(f"command longer than {MAX_COMMAND_LENGTH} characters; only the start was analysed")
+        acc.warnings.append(
+            f"command longer than {MAX_COMMAND_LENGTH} characters; only the start was analysed"
+        )
         command = command[:MAX_COMMAND_LENGTH]
     _analyze(command, acc, 0)
     return acc.freeze()
@@ -412,4 +471,12 @@ def analyze_code(code: str, language: str = "code") -> ShellAnalysis:
     return acc.freeze()
 
 
-__all__ = ["Acc", "ShellAnalysis", "ShellFile", "analyze_code", "analyze_command", "path_candidate", "program_name"]
+__all__ = [
+    "Acc",
+    "ShellAnalysis",
+    "ShellFile",
+    "analyze_code",
+    "analyze_command",
+    "path_candidate",
+    "program_name",
+]

@@ -58,14 +58,24 @@ def _fresh(db: Session) -> Session:
 
 def _member(db: Session, org_id: str, role: str) -> dict[str, str]:
     """Another person in the same organisation; returns their browser headers."""
-    user = User(id=new_id("user"), email=f"{role}-{new_id('x')[-6:].lower()}@example.test", name=f"{role} person",
-                password_hash=hash_password("correct-horse-battery-staple"))
+    user = User(
+        id=new_id("user"),
+        email=f"{role}-{new_id('x')[-6:].lower()}@example.test",
+        name=f"{role} person",
+        password_hash=hash_password("correct-horse-battery-staple"),
+    )
     db.add(user)
     db.flush()
     db.add(Membership(id=new_id("membership"), organization_id=org_id, user_id=user.id, role=role))
     token, token_hash = generate_session_token()
-    db.add(AuthSession(id=new_id("auth_session"), user_id=user.id, token_hash=token_hash,
-                       expires_at=utcnow() + timedelta(hours=1)))
+    db.add(
+        AuthSession(
+            id=new_id("auth_session"),
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=utcnow() + timedelta(hours=1),
+        )
+    )
     db.commit()
     return {"Authorization": f"Bearer {token}", "X-Requested-With": "contextos"}
 
@@ -76,9 +86,14 @@ def _pause_webhook(client, org, **kw: Any) -> dict[str, Any]:
     return response
 
 
-def _decide(client, org, approval_id: str, *, approve: bool, note: str | None = None, headers=None, expect: int = 200):
-    response = client.post(f"/api/v1/approvals/{approval_id}/decide", json={"approve": approve, "note": note},
-                           headers=headers or org.user_headers)
+def _decide(
+    client, org, approval_id: str, *, approve: bool, note: str | None = None, headers=None, expect: int = 200
+):
+    response = client.post(
+        f"/api/v1/approvals/{approval_id}/decide",
+        json={"approve": approve, "note": note},
+        headers=headers or org.user_headers,
+    )
     assert response.status_code == expect, response.text
     return response.json()
 
@@ -103,8 +118,13 @@ def test_queue_lists_paused_call_with_target_policy_and_countdown(client, seeded
     item = body["items"][0]
     assert item["id"] == paused["approval_id"] and item["status"] == "pending"
     assert item["agent"]["name"] == "coder" and item["session"]["external_session_id"] == "sess-1"
-    assert item["tool"] == {"name": "WebFetch", "category": "http", "provider": "claude_code", "server": None,
-                            "risk_level": item["tool"]["risk_level"]}
+    assert item["tool"] == {
+        "name": "WebFetch",
+        "category": "http",
+        "provider": "claude_code",
+        "server": None,
+        "risk_level": item["tool"]["risk_level"],
+    }
     assert item["action"] == "send POST to hooks.webhook.site"
     assert item["target"]["primary"] == "hooks.webhook.site"
     assert item["target"]["destination"]["classification"] == "SUSPICIOUS"
@@ -139,8 +159,9 @@ def test_queue_is_oldest_first_and_filterable(client, seeded_org):
 
 def test_simulated_approvals_are_hidden_unless_requested(client, seeded_org, db):
     ctx = IngestContext(org_id=seeded_org.org_id, actor_type="system", is_simulation=True)
-    response = decide_tool_request(db, ctx, EventEnvelope.model_validate(
-        tool_requested("WebFetch", WEBHOOK, session="sim-1")))
+    response = decide_tool_request(
+        db, ctx, EventEnvelope.model_validate(tool_requested("WebFetch", WEBHOOK, session="sim-1"))
+    )
     db.commit()
     assert response.approval_id
     assert client.get(PENDING, headers=seeded_org.user_headers).json()["total"] == 0
@@ -153,10 +174,22 @@ def test_simulated_approvals_are_hidden_unless_requested(client, seeded_org, db)
 
 def test_detail_shows_trifecta_evidence_recent_context_findings_and_activity(client, seeded_org):
     h = seeded_org.api_headers
-    run_tool(client, h, "Read", {"file_path": "/work/app/.env"}, f"GITHUB_TOKEN={GITHUB_TOKEN}\nDEBUG=false\n",
-             session="s-tri")
-    run_tool(client, h, "Read", {"file_path": "/work/app/README.md"}, "Billing service. Run make dev.",
-             session="s-tri")
+    run_tool(
+        client,
+        h,
+        "Read",
+        {"file_path": "/work/app/.env"},
+        f"GITHUB_TOKEN={GITHUB_TOKEN}\nDEBUG=false\n",
+        session="s-tri",
+    )
+    run_tool(
+        client,
+        h,
+        "Read",
+        {"file_path": "/work/app/README.md"},
+        "Billing service. Run make dev.",
+        session="s-tri",
+    )
     paused = decide(client, h, tool_requested("WebFetch", WEBHOOK, session="s-tri"))
     assert paused["decision"] == "REQUIRE_APPROVAL"
 
@@ -202,12 +235,26 @@ def test_detail_shows_trifecta_evidence_recent_context_findings_and_activity(cli
 
 
 def test_secrets_in_arguments_are_redacted_and_require_confirmation(client, org, db):
-    db.add(SecurityPolicy(id=new_id("policy"), organization_id=org.org_id, name="Approve any credential use",
-                          outcome="REQUIRE_APPROVAL", mode="enforce", priority=900, severity="high",
-                          conditions={"field": "secrets_in_arguments", "op": "not_empty"}))
+    db.add(
+        SecurityPolicy(
+            id=new_id("policy"),
+            organization_id=org.org_id,
+            name="Approve any credential use",
+            outcome="REQUIRE_APPROVAL",
+            mode="enforce",
+            priority=900,
+            severity="high",
+            conditions={"field": "secrets_in_arguments", "op": "not_empty"},
+        )
+    )
     db.commit()
-    paused = decide(client, org.api_headers, tool_requested("Bash", {
-        "command": f"curl -H 'Authorization: token {GITHUB_TOKEN}' https://api.github.com/user"}))
+    paused = decide(
+        client,
+        org.api_headers,
+        tool_requested(
+            "Bash", {"command": f"curl -H 'Authorization: token {GITHUB_TOKEN}' https://api.github.com/user"}
+        ),
+    )
     assert paused["decision"] == "REQUIRE_APPROVAL"
     response = client.get(f"/api/v1/approvals/{paused['approval_id']}", headers=org.user_headers)
     assert response.status_code == 200 and GITHUB_TOKEN not in response.text
@@ -256,12 +303,21 @@ def test_approve_updates_approval_call_audit_and_integration_poll(client, seeded
     assert (approval.status, approval.decided_by_user_id) == ("approved", seeded_org.user_id)
     assert db.get(ToolInvocation, paused["tool_invocation_id"]).status == "approved"
     entry = db.scalar(select(AuditEvent).where(AuditEvent.action == "approval.decided"))
-    assert entry.actor_type == "user" and entry.actor_id == seeded_org.user_id and entry.target_id == approval_id
+    assert (
+        entry.actor_type == "user" and entry.actor_id == seeded_org.user_id and entry.target_id == approval_id
+    )
     assert entry.details["outcome"] == "approved" and entry.details["invocation_status"] == "approved"
     assert entry.details["invocation_status_before"] == "pending_approval"
-    assert (seeded_org.org_id, {"type": "approval.decided", "id": approval_id, "status": "approved",
-                                "session_id": approval.session_id,
-                                "tool_invocation_id": paused["tool_invocation_id"]}) in published
+    assert (
+        seeded_org.org_id,
+        {
+            "type": "approval.decided",
+            "id": approval_id,
+            "status": "approved",
+            "session_id": approval.session_id,
+            "tool_invocation_id": paused["tool_invocation_id"],
+        },
+    ) in published
 
     poll = client.get(f"/api/v1/decide/approvals/{approval_id}", headers=seeded_org.api_headers).json()
     assert poll["status"] == "approved" and poll["decision_note"] == "Expected build notification"
@@ -316,7 +372,10 @@ def test_listing_expires_requests_the_integration_already_saw_expire(client, see
     approval = _fresh(db).get(Approval, paused["approval_id"])
     approval.expires_at = utcnow() - timedelta(seconds=1)
     db.commit()
-    assert client.get(f"/api/v1/decide/approvals/{approval.id}", headers=seeded_org.api_headers).json()["status"] == "expired"
+    assert (
+        client.get(f"/api/v1/decide/approvals/{approval.id}", headers=seeded_org.api_headers).json()["status"]
+        == "expired"
+    )
     assert _fresh(db).get(ToolInvocation, paused["tool_invocation_id"]).status == "pending_approval"
 
     assert client.get(PENDING, headers=seeded_org.user_headers).status_code == 200
@@ -324,31 +383,41 @@ def test_listing_expires_requests_the_integration_already_saw_expire(client, see
     assert db.get(ToolInvocation, paused["tool_invocation_id"]).status == "expired"
     assert len(list(db.scalars(select(AuditEvent).where(AuditEvent.action == "approval.expired")))) == 1
     client.get(PENDING, headers=seeded_org.user_headers)  # idempotent: no second audit entry
-    assert len(list(_fresh(db).scalars(select(AuditEvent).where(AuditEvent.action == "approval.expired")))) == 1
+    assert (
+        len(list(_fresh(db).scalars(select(AuditEvent).where(AuditEvent.action == "approval.expired")))) == 1
+    )
 
 
 def test_decision_note_is_redacted_before_storage(client, seeded_org, db):
     paused = _pause_webhook(client, seeded_org)
     note = f"Checked with the team, token {GITHUB_TOKEN} is a test credential"
-    response = client.post(f"/api/v1/approvals/{paused['approval_id']}/decide", json={"approve": True, "note": note},
-                           headers=seeded_org.user_headers)
+    response = client.post(
+        f"/api/v1/approvals/{paused['approval_id']}/decide",
+        json={"approve": True, "note": note},
+        headers=seeded_org.user_headers,
+    )
     assert response.status_code == 200 and GITHUB_TOKEN not in response.text
     db = _fresh(db)
     stored = db.get(Approval, paused["approval_id"]).decision_note
     assert GITHUB_TOKEN not in stored and stored.startswith("Checked with the team")
     entry = db.scalar(select(AuditEvent).where(AuditEvent.action == "approval.decided"))
     assert GITHUB_TOKEN not in json.dumps(entry.details)
-    too_long = client.post(f"/api/v1/approvals/{paused['approval_id']}/decide",
-                           json={"approve": True, "note": "x" * 2001}, headers=seeded_org.user_headers)
+    too_long = client.post(
+        f"/api/v1/approvals/{paused['approval_id']}/decide",
+        json={"approve": True, "note": "x" * 2001},
+        headers=seeded_org.user_headers,
+    )
     assert too_long.status_code == 422
 
 
 def test_run_without_approval_is_reported_in_the_note(client, seeded_org):
     request = tool_requested("WebFetch", WEBHOOK, session="s-ran")
     paused = decide(client, seeded_org.api_headers, request)
-    post_events(client, seeded_org.api_headers, tool_completed("WebFetch", WEBHOOK, "ok",
-                                                               correlation_id=request["correlation_id"],
-                                                               session="s-ran"))
+    post_events(
+        client,
+        seeded_org.api_headers,
+        tool_completed("WebFetch", WEBHOOK, "ok", correlation_id=request["correlation_id"], session="s-ran"),
+    )
     detail = _decide(client, seeded_org, paused["approval_id"], approve=False)
     assert detail["tool_invocation_status"] == "completed"  # a call that already ran keeps its status
     assert "not honoured" in detail["enforcement_note"]
@@ -363,7 +432,9 @@ def test_deciding_requires_the_approve_permission(client, seeded_org, db):
     approval_id = paused["approval_id"]
     for role in (Role.VIEWER, Role.DEVELOPER):
         headers = _member(db, seeded_org.org_id, role)
-        assert client.get(f"/api/v1/approvals/{approval_id}", headers=headers).status_code == 200  # read is fine
+        assert (
+            client.get(f"/api/v1/approvals/{approval_id}", headers=headers).status_code == 200
+        )  # read is fine
         denied = _decide(client, seeded_org, approval_id, approve=True, headers=headers, expect=403)
         assert denied["error"]["code"] == "forbidden"
     # API keys can read the queue but can never decide (no key scope grants "approve").
@@ -379,8 +450,12 @@ def test_deciding_requires_the_approve_permission(client, seeded_org, db):
 def test_other_organisations_cannot_see_or_decide(client, seeded_org, other_org, db):
     paused = _pause_webhook(client, seeded_org)
     approval_id = paused["approval_id"]
-    assert client.get(PENDING, headers=other_org.user_headers).json() == {"items": [], "total": 0, "limit": 50,
-                                                                          "offset": 0}
+    assert client.get(PENDING, headers=other_org.user_headers).json() == {
+        "items": [],
+        "total": 0,
+        "limit": 50,
+        "offset": 0,
+    }
     assert client.get(f"/api/v1/approvals/{approval_id}", headers=other_org.user_headers).status_code == 404
     assert client.get(f"/api/v1/approvals/{approval_id}", headers=other_org.api_headers).status_code == 404
     _decide(client, other_org, approval_id, approve=True, expect=404)
@@ -393,8 +468,17 @@ def test_agent_bound_api_key_sees_only_its_agent(client, seeded_org, db):
     items = client.get(PENDING, headers=seeded_org.user_headers).json()["items"]
     coder_id = next(i["agent"]["id"] for i in items if i["id"] == mine["approval_id"])
     raw, prefix, key_hash = generate_api_key()
-    db.add(ApiKey(id=new_id("api_key"), organization_id=seeded_org.org_id, name="bound", prefix=prefix,
-                  key_hash=key_hash, scopes=["read"], agent_id=coder_id))
+    db.add(
+        ApiKey(
+            id=new_id("api_key"),
+            organization_id=seeded_org.org_id,
+            name="bound",
+            prefix=prefix,
+            key_hash=key_hash,
+            scopes=["read"],
+            agent_id=coder_id,
+        )
+    )
     db.commit()
     bound = {"Authorization": f"Bearer {raw}"}
     listed = client.get(PENDING, headers=bound).json()
@@ -426,9 +510,16 @@ def test_integration_can_cancel_a_pending_approval(client, seeded_org, db, publi
     entry = db.scalar(select(AuditEvent).where(AuditEvent.action == "approval.cancelled"))
     assert entry.actor_type == "api_key" and entry.target_id == approval_id
     assert entry.details["invocation_status_before"] == "pending_approval"
-    assert GITHUB_TOKEN not in json.dumps(entry.details) and "[REDACTED:github_token" in entry.details["reason"]
+    assert (
+        GITHUB_TOKEN not in json.dumps(entry.details) and "[REDACTED:github_token" in entry.details["reason"]
+    )
     assert [m for _o, m in published if m["type"] == "approval.decided"][0]["status"] == "cancelled"
-    assert db.scalar(select(func.count()).select_from(AuditEvent).where(AuditEvent.action == "approval.cancelled")) == 1
+    assert (
+        db.scalar(
+            select(func.count()).select_from(AuditEvent).where(AuditEvent.action == "approval.cancelled")
+        )
+        == 1
+    )
 
     poll = client.get(f"/api/v1/decide/approvals/{approval_id}", headers=seeded_org.api_headers).json()
     assert poll["status"] == "cancelled"
@@ -438,7 +529,9 @@ def test_integration_can_cancel_a_pending_approval(client, seeded_org, db, publi
     _decide(client, seeded_org, approval_id, approve=True, expect=409)
 
 
-def test_cancel_after_a_decision_conflicts_and_needs_the_decide_scope(client, seeded_org, make_org, other_org, db):
+def test_cancel_after_a_decision_conflicts_and_needs_the_decide_scope(
+    client, seeded_org, make_org, other_org, db
+):
     paused = _pause_webhook(client, seeded_org)
     approval_id = paused["approval_id"]
     _decide(client, seeded_org, approval_id, approve=False)
@@ -448,12 +541,25 @@ def test_cancel_after_a_decision_conflicts_and_needs_the_decide_scope(client, se
 
     other = _pause_webhook(client, seeded_org, session="s-2")
     raw, prefix, key_hash = generate_api_key()
-    db.add(ApiKey(id=new_id("api_key"), organization_id=seeded_org.org_id, name="ingest only", prefix=prefix,
-                  key_hash=key_hash, scopes=["ingest", "read"]))
+    db.add(
+        ApiKey(
+            id=new_id("api_key"),
+            organization_id=seeded_org.org_id,
+            name="ingest only",
+            prefix=prefix,
+            key_hash=key_hash,
+            scopes=["ingest", "read"],
+        )
+    )
     db.commit()
     url = f"/api/v1/decide/approvals/{other['approval_id']}/cancel"
     assert client.post(url, headers={"Authorization": f"Bearer {raw}"}).status_code == 403
-    assert client.post(url, json={"reason": "x", "status": "approved"}, headers=seeded_org.api_headers).status_code == 422
+    assert (
+        client.post(
+            url, json={"reason": "x", "status": "approved"}, headers=seeded_org.api_headers
+        ).status_code
+        == 422
+    )
     assert client.post(url, json={"reason": "x" * 501}, headers=seeded_org.api_headers).status_code == 422
     assert _cancel(client, seeded_org.api_headers, other["approval_id"])["status"] == "cancelled"
 
@@ -476,8 +582,11 @@ def test_approved_call_counts_as_a_transfer_once_it_completes(client, seeded_org
     db = _fresh(db)
     assert db.get(Destination, dest.id).transfer_count == 1
     # A repeated result for the same call is not a second transfer.
-    post_events(client, seeded_org.api_headers, tool_completed("WebFetch", WEBHOOK, "ok",
-                                                               correlation_id=request["correlation_id"]))
+    post_events(
+        client,
+        seeded_org.api_headers,
+        tool_completed("WebFetch", WEBHOOK, "ok", correlation_id=request["correlation_id"]),
+    )
     db = _fresh(db)
     assert db.get(Destination, dest.id).transfer_count == 1
 
@@ -489,9 +598,18 @@ def test_held_call_that_fails_is_not_a_transfer(client, seeded_org, db):
     request = tool_requested("WebFetch", WEBHOOK)
     paused = decide(client, seeded_org.api_headers, request)
     _decide(client, seeded_org, paused["approval_id"], approve=True)
-    post_events(client, seeded_org.api_headers, event(
-        "tool.failed", tool={"name": "WebFetch", "provider": "claude_code"}, arguments=WEBHOOK, is_error=True,
-        correlation_id=request["correlation_id"], result="connection refused"))
+    post_events(
+        client,
+        seeded_org.api_headers,
+        event(
+            "tool.failed",
+            tool={"name": "WebFetch", "provider": "claude_code"},
+            arguments=WEBHOOK,
+            is_error=True,
+            correlation_id=request["correlation_id"],
+            result="connection refused",
+        ),
+    )
     db = _fresh(db)
     dest = db.scalar(select(Destination).where(Destination.organization_id == seeded_org.org_id))
     assert dest.transfer_count == 0

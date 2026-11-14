@@ -54,12 +54,32 @@ READ = Depends(require_org_wide(Permission.READ.value))  # bound API keys: 403
 MANAGE = Depends(require(Permission.TRUST_MANAGE.value))
 
 SourceSort = Literal[
-    "last_seen", "-last_seen", "first_seen", "-first_seen", "observations", "-observations", "findings", "-findings",
-    "trust", "-trust", "identifier", "-identifier",
+    "last_seen",
+    "-last_seen",
+    "first_seen",
+    "-first_seen",
+    "observations",
+    "-observations",
+    "findings",
+    "-findings",
+    "trust",
+    "-trust",
+    "identifier",
+    "-identifier",
 ]
 DestinationSort = Literal[
-    "last_seen", "-last_seen", "first_seen", "-first_seen", "transfers", "-transfers", "blocked", "-blocked",
-    "sensitive", "-sensitive", "identifier", "-identifier",
+    "last_seen",
+    "-last_seen",
+    "first_seen",
+    "-first_seen",
+    "transfers",
+    "-transfers",
+    "blocked",
+    "-blocked",
+    "sensitive",
+    "-sensitive",
+    "identifier",
+    "-identifier",
 ]
 
 
@@ -72,12 +92,16 @@ def _actor(db: Session, principal: Principal) -> Actor:
 
 @router.get("/summary", response_model=TrustSummaryOut)
 def get_summary(
-    principal: Principal = READ, db: Session = Depends(get_db),
-    include_simulated: bool = Query(False, description="Count sources and destinations only simulations observed"),
+    principal: Principal = READ,
+    db: Session = Depends(get_db),
+    include_simulated: bool = Query(
+        False, description="Count sources and destinations only simulations observed"
+    ),
 ) -> TrustSummaryOut:
     """Counts per trust level, sources with findings and recent downgrades (from the audit trail)."""
     return TrustSummaryOut.model_validate(
-        trust_service_summary.summary(db, principal.org_id, include_simulated=include_simulated))
+        trust_service_summary.summary(db, principal.org_id, include_simulated=include_simulated)
+    )
 
 
 # ----------------------------------------------------------------------------- rules
@@ -97,27 +121,39 @@ def list_rules(
     rows = trust_service.list_rules(db, principal.org_id, applies_to=applies_to, enabled=enabled, q=q)
     usage = trust_service.rule_usage(db, principal.org_id)
     page = rows[offset : offset + limit]
-    return Page(items=[TrustRuleOut.model_validate(trust_service.rule_out(r, usage)) for r in page],
-                total=len(rows), limit=limit, offset=offset)
+    return Page(
+        items=[TrustRuleOut.model_validate(trust_service.rule_out(r, usage)) for r in page],
+        total=len(rows),
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post("/rules/test", response_model=RuleTestOut)
 def test_rule(body: RuleTestIn, principal: Principal = READ, db: Session = Depends(get_db)) -> RuleTestOut:
     """Dry run: how an identifier would be classified (optionally with an unsaved draft rule)."""
-    return RuleTestOut.model_validate(trust_service_dryrun.run_rule_test(db, principal.org_id, body.model_dump()))
+    return RuleTestOut.model_validate(
+        trust_service_dryrun.run_rule_test(db, principal.org_id, body.model_dump())
+    )
 
 
 @router.post("/rules", response_model=TrustRuleOut, status_code=201)
-def create_rule(body: TrustRuleCreate, principal: Principal = MANAGE, db: Session = Depends(get_db)) -> TrustRuleOut:
+def create_rule(
+    body: TrustRuleCreate, principal: Principal = MANAGE, db: Session = Depends(get_db)
+) -> TrustRuleOut:
     row, result = trust_service.create_rule(db, principal.org_id, _actor(db, principal), body.model_dump())
     db.commit()
-    return TrustRuleOut.model_validate(trust_service.rule_out(row, trust_service.rule_usage(db, principal.org_id), result))
+    return TrustRuleOut.model_validate(
+        trust_service.rule_out(row, trust_service.rule_usage(db, principal.org_id), result)
+    )
 
 
 @router.get("/rules/{rule_id}", response_model=TrustRuleOut)
 def get_rule(rule_id: str, principal: Principal = READ, db: Session = Depends(get_db)) -> TrustRuleOut:
     row = trust_service.get_rule(db, principal.org_id, rule_id)
-    return TrustRuleOut.model_validate(trust_service.rule_out(row, trust_service.rule_usage(db, principal.org_id)))
+    return TrustRuleOut.model_validate(
+        trust_service.rule_out(row, trust_service.rule_usage(db, principal.org_id))
+    )
 
 
 @router.patch("/rules/{rule_id}", response_model=TrustRuleOut)
@@ -125,10 +161,13 @@ def update_rule(
     rule_id: str, body: TrustRulePatch, principal: Principal = MANAGE, db: Session = Depends(get_db)
 ) -> TrustRuleOut:
     row = trust_service.get_rule(db, principal.org_id, rule_id)
-    row, result = trust_service.update_rule(db, principal.org_id, _actor(db, principal), row,
-                                            body.model_dump(exclude_unset=True))
+    row, result = trust_service.update_rule(
+        db, principal.org_id, _actor(db, principal), row, body.model_dump(exclude_unset=True)
+    )
     db.commit()
-    return TrustRuleOut.model_validate(trust_service.rule_out(row, trust_service.rule_usage(db, principal.org_id), result))
+    return TrustRuleOut.model_validate(
+        trust_service.rule_out(row, trust_service.rule_usage(db, principal.org_id), result)
+    )
 
 
 @router.delete("/rules/{rule_id}", response_model=RuleDeleteOut)
@@ -152,22 +191,37 @@ def list_sources(
     manual: bool | None = None,
     has_findings: bool | None = None,
     capability: CapabilityName | None = None,
-    include_simulated: bool = Query(False, description="Include sources only Simulation Lab traffic has observed"),
+    include_simulated: bool = Query(
+        False, description="Include sources only Simulation Lab traffic has observed"
+    ),
     sort: SourceSort = "-last_seen",
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> Page[TrustSourceOut]:
     rows, total = trust_service_sources.list_sources(
-        db, principal.org_id, trust_levels=list(trust_level or []), source_type=source_type, q=q, manual=manual,
-        has_findings=has_findings, capability=capability, include_simulated=include_simulated, sort=sort,
-        limit=limit, offset=offset,
+        db,
+        principal.org_id,
+        trust_levels=list(trust_level or []),
+        source_type=source_type,
+        q=q,
+        manual=manual,
+        has_findings=has_findings,
+        capability=capability,
+        include_simulated=include_simulated,
+        sort=sort,
+        limit=limit,
+        offset=offset,
     )
     items = trust_service_sources.sources_out(db, principal.org_id, rows)
-    return Page(items=[TrustSourceOut.model_validate(i) for i in items], total=total, limit=limit, offset=offset)
+    return Page(
+        items=[TrustSourceOut.model_validate(i) for i in items], total=total, limit=limit, offset=offset
+    )
 
 
 @router.get("/sources/{source_id}", response_model=TrustSourceDetailOut)
-def get_source(source_id: str, principal: Principal = READ, db: Session = Depends(get_db)) -> TrustSourceDetailOut:
+def get_source(
+    source_id: str, principal: Principal = READ, db: Session = Depends(get_db)
+) -> TrustSourceDetailOut:
     row = trust_service_sources.get_source(db, principal.org_id, source_id)
     return TrustSourceDetailOut.model_validate(trust_service_sources.source_detail(db, principal.org_id, row))
 
@@ -178,19 +232,31 @@ def classify_source(
 ) -> TrustSourceDetailOut:
     """Manual classification. Overrides trust rules; recorded evidence can still keep it SUSPICIOUS."""
     row = trust_service_sources.get_source(db, principal.org_id, source_id)
-    trust_service_sources.classify_source(db, principal.org_id, _actor(db, principal), row, level=body.trust_level,
-                                          capabilities=body.capabilities, note=body.note)
+    trust_service_sources.classify_source(
+        db,
+        principal.org_id,
+        _actor(db, principal),
+        row,
+        level=body.trust_level,
+        capabilities=body.capabilities,
+        note=body.note,
+    )
     db.commit()
     return TrustSourceDetailOut.model_validate(trust_service_sources.source_detail(db, principal.org_id, row))
 
 
 @router.post("/sources/{source_id}/reassess", response_model=TrustSourceDetailOut)
 def reassess_source(
-    source_id: str, principal: Principal = MANAGE, db: Session = Depends(get_db), reset_manual: bool = False,
+    source_id: str,
+    principal: Principal = MANAGE,
+    db: Session = Depends(get_db),
+    reset_manual: bool = False,
 ) -> TrustSourceDetailOut:
     """Re-run the classification with current rules and findings (``reset_manual`` clears a manual classification)."""
     row = trust_service_sources.get_source(db, principal.org_id, source_id)
-    trust_service_sources.reassess_source(db, principal.org_id, _actor(db, principal), row, reset_manual=reset_manual)
+    trust_service_sources.reassess_source(
+        db, principal.org_id, _actor(db, principal), row, reset_manual=reset_manual
+    )
     db.commit()
     return TrustSourceDetailOut.model_validate(trust_service_sources.source_detail(db, principal.org_id, row))
 
@@ -216,17 +282,29 @@ def list_destinations(
     kind: DestinationKindName | None = None,
     q: str | None = Query(None, max_length=200),
     has_blocked: bool | None = None,
-    include_simulated: bool = Query(False, description="Include destinations only simulated calls were sent to"),
+    include_simulated: bool = Query(
+        False, description="Include destinations only simulated calls were sent to"
+    ),
     sort: DestinationSort = "-last_seen",
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> Page[TrustDestinationOut]:
     rows, total = trust_service_destinations.list_destinations(
-        db, principal.org_id, classifications=list(classification or []), kind=kind, q=q, has_blocked=has_blocked,
-        include_simulated=include_simulated, sort=sort, limit=limit, offset=offset,
+        db,
+        principal.org_id,
+        classifications=list(classification or []),
+        kind=kind,
+        q=q,
+        has_blocked=has_blocked,
+        include_simulated=include_simulated,
+        sort=sort,
+        limit=limit,
+        offset=offset,
     )
     items = trust_service_destinations.destinations_out(db, principal.org_id, rows)
-    return Page(items=[TrustDestinationOut.model_validate(i) for i in items], total=total, limit=limit, offset=offset)
+    return Page(
+        items=[TrustDestinationOut.model_validate(i) for i in items], total=total, limit=limit, offset=offset
+    )
 
 
 @router.get("/destinations/{destination_id}", response_model=TrustDestinationDetailOut)
@@ -234,17 +312,24 @@ def get_destination(
     destination_id: str, principal: Principal = READ, db: Session = Depends(get_db)
 ) -> TrustDestinationDetailOut:
     row = trust_service_destinations.get_destination(db, principal.org_id, destination_id)
-    return TrustDestinationDetailOut.model_validate(trust_service_destinations.destination_detail(db, principal.org_id, row))
+    return TrustDestinationDetailOut.model_validate(
+        trust_service_destinations.destination_detail(db, principal.org_id, row)
+    )
 
 
 @router.patch("/destinations/{destination_id}", response_model=TrustDestinationDetailOut)
 def classify_destination(
-    destination_id: str, body: DestinationClassifyIn, principal: Principal = MANAGE, db: Session = Depends(get_db)
+    destination_id: str,
+    body: DestinationClassifyIn,
+    principal: Principal = MANAGE,
+    db: Session = Depends(get_db),
 ) -> TrustDestinationDetailOut:
     """Pin the classification with an exact-match destination rule (created or updated)."""
     row = trust_service_destinations.get_destination(db, principal.org_id, destination_id)
-    trust_service_destinations.classify_destination(db, principal.org_id, _actor(db, principal), row,
-                                                    classification=body.classification, note=body.note)
+    trust_service_destinations.classify_destination(
+        db, principal.org_id, _actor(db, principal), row, classification=body.classification, note=body.note
+    )
     db.commit()
-    return TrustDestinationDetailOut.model_validate(trust_service_destinations.destination_detail(db, principal.org_id, row))
-
+    return TrustDestinationDetailOut.model_validate(
+        trust_service_destinations.destination_detail(db, principal.org_id, row)
+    )

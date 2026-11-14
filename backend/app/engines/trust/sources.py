@@ -35,10 +35,22 @@ DATA_ONLY_LEVELS = frozenset({T.EXTERNAL, T.UNKNOWN, T.SUSPICIOUS})
 _VALID_LEVELS = frozenset(level.value for level in TrustLevel)
 
 _TYPE_LABELS = {
-    "web": "web page", "repository": "repository", "file": "file", "document": "document", "email": "email",
-    "api": "API response", "mcp_server": "MCP server", "mcp_tool": "MCP tool", "browser": "browser page",
-    "database": "database", "user_upload": "uploaded file", "user_prompt": "user prompt", "tool_output": "tool output",
-    "agent_output": "sub-agent output", "system": "system prompt", "other": "source",
+    "web": "web page",
+    "repository": "repository",
+    "file": "file",
+    "document": "document",
+    "email": "email",
+    "api": "API response",
+    "mcp_server": "MCP server",
+    "mcp_tool": "MCP tool",
+    "browser": "browser page",
+    "database": "database",
+    "user_upload": "uploaded file",
+    "user_prompt": "user prompt",
+    "tool_output": "tool output",
+    "agent_output": "sub-agent output",
+    "system": "system prompt",
+    "other": "source",
 }
 _PRODUCED_TYPES = frozenset({"tool_output", "agent_output"})
 
@@ -50,7 +62,11 @@ def _producer(source_type: str) -> str:
 def _capabilities(level: str, requested: Sequence[str]) -> tuple[list[str], list[str]]:
     """(applied, dropped) capabilities for ``level`` given what a rule or admin asked for."""
 
-    wanted = [str(c) for c in requested if c in SOURCE_CAPABILITIES] if requested else list(DEFAULT_CAPABILITIES[level])
+    wanted = (
+        [str(c) for c in requested if c in SOURCE_CAPABILITIES]
+        if requested
+        else list(DEFAULT_CAPABILITIES[level])
+    )
     if level == T.BLOCKED:
         return [], wanted
     if level in DATA_ONLY_LEVELS:
@@ -62,9 +78,15 @@ def _capabilities(level: str, requested: Sequence[str]) -> tuple[list[str], list
 def _default(source_type: str, history: SourceHistory) -> tuple[str, str]:
     label = _TYPE_LABELS.get(source_type, "source")
     if source_type == "user_prompt":
-        return T.TRUSTED, "User prompts come from the person operating the agent, so they are trusted to give instructions."
+        return (
+            T.TRUSTED,
+            "User prompts come from the person operating the agent, so they are trusted to give instructions.",
+        )
     if source_type == "system":
-        return T.TRUSTED, "System prompts are set by whoever configured the agent, so they are trusted to give instructions."
+        return (
+            T.TRUSTED,
+            "System prompts are set by whoever configured the agent, so they are trusted to give instructions.",
+        )
     if source_type in _PRODUCED_TYPES:
         inherited = history.inherited_level
         if inherited in _VALID_LEVELS:
@@ -162,13 +184,19 @@ def assess_source(
             if level == T.BLOCKED:
                 reasons.append(_evidence_reason(basis, history, "it remains BLOCKED."))
             elif level == T.SUSPICIOUS:
-                reasons.append(_evidence_reason(basis, history, "it stays SUSPICIOUS until they are reviewed."))
+                reasons.append(
+                    _evidence_reason(basis, history, "it stays SUSPICIOUS until they are reviewed.")
+                )
                 capabilities = [c for c in capabilities if c == C.READ]
             else:
-                reasons.append(_evidence_reason(
-                    basis, history, "it is treated as SUSPICIOUS until the findings are reviewed, and may not "
-                    "give instructions or trigger tools.",
-                ))
+                reasons.append(
+                    _evidence_reason(
+                        basis,
+                        history,
+                        "it is treated as SUSPICIOUS until the findings are reviewed, and may not "
+                        "give instructions or trigger tools.",
+                    )
+                )
                 level = T.SUSPICIOUS.value
                 capabilities = [c for c in capabilities if c == C.READ]
         else:

@@ -85,8 +85,18 @@ def content_splits() -> dict[str, str]:
     return assign_splits(groups)
 
 
-def _sample(seed_id: str, text: str, *, label: str, family: str, category: str | None, carrier: str,
-            technique: str, lang: str, split: str) -> dict[str, Any]:
+def _sample(
+    seed_id: str,
+    text: str,
+    *,
+    label: str,
+    family: str,
+    category: str | None,
+    carrier: str,
+    technique: str,
+    lang: str,
+    split: str,
+) -> dict[str, Any]:
     return {
         "id": f"{seed_id}|{carrier}|{technique}",
         "seed_id": seed_id,
@@ -114,9 +124,19 @@ def _malicious_samples(seed: dict[str, str], split: str) -> list[dict[str, Any]]
     for carrier, technique in pairs:
         payload = transformed[technique]
         assert payload is not None
-        out.append(_sample(seed["id"], CARRIERS[carrier](payload), label="malicious", family=seed["family"],
-                           category=seed["category"], carrier=carrier, technique=technique, lang=lang,
-                           split=split))
+        out.append(
+            _sample(
+                seed["id"],
+                CARRIERS[carrier](payload),
+                label="malicious",
+                family=seed["family"],
+                category=seed["category"],
+                carrier=carrier,
+                technique=technique,
+                lang=lang,
+                split=split,
+            )
+        )
     return out
 
 
@@ -128,9 +148,19 @@ def build_content_corpus() -> list[dict[str, Any]]:
     for seed in BENIGN_SEEDS:
         lang = seed.get("lang") or _BENIGN_LANG.get(seed["id"], "en")
         for carrier, wrap in CARRIERS.items():
-            samples.append(_sample(seed["id"], wrap(seed["text"]), label="benign", family=f"benign/{seed['kind']}",
-                                   category=None, carrier=carrier, technique="none", lang=lang,
-                                   split=splits[seed["id"]]))
+            samples.append(
+                _sample(
+                    seed["id"],
+                    wrap(seed["text"]),
+                    label="benign",
+                    family=f"benign/{seed['kind']}",
+                    category=None,
+                    carrier=carrier,
+                    technique="none",
+                    lang=lang,
+                    split=splits[seed["id"]],
+                )
+            )
     return samples
 
 
@@ -147,8 +177,13 @@ def _tool_shapes(tool: str, arguments: dict[str, Any]) -> list[tuple[str, str, d
     elif tool == "Read":
         shapes.append(("mcp", "mcp__filesystem__read_file", {"path": arguments["file_path"]}))
     elif tool == "Write":
-        shapes.append(("mcp", "mcp__filesystem__write_file",
-                       {"path": arguments["file_path"], "content": arguments["content"]}))
+        shapes.append(
+            (
+                "mcp",
+                "mcp__filesystem__write_file",
+                {"path": arguments["file_path"], "content": arguments["content"]},
+            )
+        )
     elif tool == "WebFetch":
         shapes.append(("mcp", "mcp__fetch__fetch", {"url": arguments["url"], "max_length": 5000}))
     return shapes
@@ -172,18 +207,20 @@ def build_tool_corpus() -> list[dict[str, Any]]:
         seed_id, tool = str(seed["id"]), str(seed["tool"])
         expected = _tool_expected_category(seed)
         for shape, name, args in _tool_shapes(tool, dict(seed["arguments"])):  # type: ignore[arg-type]
-            samples.append({
-                "id": f"{seed_id}|{shape}",
-                "seed_id": seed_id,
-                "tool": name,
-                "category": _TOOL_CATEGORY[tool],
-                "arguments": args,
-                "label": "malicious" if seed["malicious"] else "benign",
-                "family": expected or "benign",
-                "expected_category": expected,
-                "shape": shape,
-                "split": splits[seed_id],
-            })
+            samples.append(
+                {
+                    "id": f"{seed_id}|{shape}",
+                    "seed_id": seed_id,
+                    "tool": name,
+                    "category": _TOOL_CATEGORY[tool],
+                    "arguments": args,
+                    "label": "malicious" if seed["malicious"] else "benign",
+                    "family": expected or "benign",
+                    "expected_category": expected,
+                    "shape": shape,
+                    "split": splits[seed_id],
+                }
+            )
     return samples
 
 

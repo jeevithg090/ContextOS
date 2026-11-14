@@ -66,14 +66,14 @@ _PLAN_CONTENTS = [
 
 _ADVERSARIAL: dict[str, str] = {
     "prompt_injection": "variants of the recorded payload (encodings, casing, whitespace, other languages, payloads "
-                        "nested in tool output) must be treated as data, not instructions",
+    "nested in tool output) must be treated as data, not instructions",
     "instruction_override": "lower-trust content must not override system or developer instructions in any position",
     "credential_access": "attempts to read credential paths (.env, SSH keys, cloud credential files), including "
-                         "traversal and symlink variants, must be refused",
+    "traversal and symlink variants, must be refused",
     "secret_exposure": "fake credentials in real provider formats must be redacted in every output channel "
-                       "(responses, logs, exports)",
+    "(responses, logs, exports)",
     "exfiltration": "sensitive data sent to unverified destinations must be blocked or require approval, including "
-                    "lookalike domains and IP-literal URLs",
+    "lookalike domains and IP-literal URLs",
     "destination_risk": "lookalike, IP-literal and redirecting destinations must not be treated as trusted",
     "lethal_trifecta": "a session combining private data, untrusted content and an outbound call must trigger policy",
     "dangerous_permissions": "the agent must not use capabilities beyond its configured scope",
@@ -87,16 +87,27 @@ _ADVERSARIAL: dict[str, str] = {
 
 def root_cause_hypotheses(ctx: BuildContext, p: Parts) -> None:
     d = ctx.data
-    found = derive_hypotheses(task=ctx.task, findings=d.findings, policies=d.policies,
-                              previous_attempts=d.previous_attempts, verification_runs=d.verification_runs)
+    found = derive_hypotheses(
+        task=ctx.task,
+        findings=d.findings,
+        policies=d.policies,
+        previous_attempts=d.previous_attempts,
+        verification_runs=d.verification_runs,
+    )
     if not found:
-        p.add("hypothesis", "No hypotheses could be derived from the recorded evidence. After reproducing the issue, "
-                            "state your own hypotheses explicitly as hypotheses, with the evidence for and against each.")
+        p.add(
+            "hypothesis",
+            "No hypotheses could be derived from the recorded evidence. After reproducing the issue, "
+            "state your own hypotheses explicitly as hypotheses, with the evidence for and against each.",
+        )
         return
     blocks = [HYPOTHESIS_PREFACE]
     for i, h in enumerate(found, start=1):
-        lines = [f"{i}. **Hypothesis {i} (confidence: {h.confidence}):** {h.statement}",
-                 f"   - Basis: {h.basis}", f"   - How to test: {h.how_to_test}"]
+        lines = [
+            f"{i}. **Hypothesis {i} (confidence: {h.confidence}):** {h.statement}",
+            f"   - Basis: {h.basis}",
+            f"   - How to test: {h.how_to_test}",
+        ]
         if h.sources:
             lines.append("   - Records: " + ", ".join(code(s) for s in h.sources))
         blocks.append("\n".join(lines))
@@ -108,18 +119,32 @@ def required_implementation(ctx: BuildContext, p: Parts) -> None:
     mode = ctx.mode
     p.add("instruction", f"**Deliverable:** {mode.deliverable}")
     if mode.key == PromptMode.IMPLEMENTATION_PLAN:
-        p.add("instruction", f"{NO_MODIFY} Do not implement anything. Your plan must cover:\n\n" + numbered(_PLAN_CONTENTS))
+        p.add(
+            "instruction",
+            f"{NO_MODIFY} Do not implement anything. Your plan must cover:\n\n" + numbered(_PLAN_CONTENTS),
+        )
     elif not mode.may_modify_files:
         p.add("instruction", f"Not applicable in this mode. {NO_MODIFY} " + " ".join(mode.instructions[1:]))
     elif not ctx.options.allow_code_changes:
-        p.add("instruction", f"Code changes are disabled for this task. {NO_MODIFY} Describe the change you would make "
-                             "as a proposed diff in your report instead of applying it.")
+        p.add(
+            "instruction",
+            f"Code changes are disabled for this task. {NO_MODIFY} Describe the change you would make "
+            "as a proposed diff in your report instead of applying it.",
+        )
     else:
         p.add("instruction", numbered(_IMPLEMENT_STEPS.get(mode.key, list(mode.instructions))))
     guidance = [f for f in ctx.sorted_findings()[: ctx.limits["findings"]] if f.get("remediation")]
     if guidance:
-        p.add("recommendation", "Remediation guidance recorded on the linked findings (verify before applying):\n\n"
-              + bullets([f"{inline(f.get('title') or 'Finding', 160)}: {inline(f['remediation'], 400)}" for f in guidance]))
+        p.add(
+            "recommendation",
+            "Remediation guidance recorded on the linked findings (verify before applying):\n\n"
+            + bullets(
+                [
+                    f"{inline(f.get('title') or 'Finding', 160)}: {inline(f['remediation'], 400)}"
+                    for f in guidance
+                ]
+            ),
+        )
         p.source(*(ref("finding", f) for f in guidance))
 
 
@@ -133,39 +158,67 @@ def constraints(ctx: BuildContext, p: Parts) -> None:
     if o.allow_architecture_changes:
         rules.append("Architectural changes are permitted only where the fix needs them; justify each one.")
     else:
-        rules.append("Do not change the architecture: no new services, layers, frameworks, datastores or public API "
-                     "contracts. If the fix needs one, stop and explain why.")
+        rules.append(
+            "Do not change the architecture: no new services, layers, frameworks, datastores or public API "
+            "contracts. If the fix needs one, stop and explain why."
+        )
     rules.append("Never print, log, commit or transmit secrets or credentials. " + FAKE_SECRETS)
     if o.security_requirements == SecurityLevel.STRICT:
-        rules.append("Security requirements are strict: fail closed on errors, validate input at every trust boundary, "
-                     "keep least privilege, and never disable or weaken existing security checks or tests.")
+        rules.append(
+            "Security requirements are strict: fail closed on errors, validate input at every trust boundary, "
+            "keep least privilege, and never disable or weaken existing security checks or tests."
+        )
     p.add("instruction", bullets(rules))
     if ctx.may_modify:
         p.add("instruction", bullets(list(APPROVAL_GATES)), title="Require explicit human approval before")
     if o.constraints:
-        p.add("instruction", bullets([inline(c, 500) for c in o.constraints]), title="Constraints from the requester")
+        p.add(
+            "instruction",
+            bullets([inline(c, 500) for c in o.constraints]),
+            title="Constraints from the requester",
+        )
     failed = [a for a in ctx.data.previous_attempts if str(a.get("status")) in ("failed", "abandoned")]
     if failed:
-        p.add("fact", "Earlier attempts that did not resolve the task; do not simply repeat them:\n\n" + bullets(
-            [f"{code(str(a.get('id') or '?'))} ({inline(a.get('status'), 20)})"
-             + (f": {inline(a.get('notes'), 300)}" if a.get("notes") else "") for a in failed[:10]]))
+        p.add(
+            "fact",
+            "Earlier attempts that did not resolve the task; do not simply repeat them:\n\n"
+            + bullets(
+                [
+                    f"{code(str(a.get('id') or '?'))} ({inline(a.get('status'), 20)})"
+                    + (f": {inline(a.get('notes'), 300)}" if a.get("notes") else "")
+                    for a in failed[:10]
+                ]
+            ),
+        )
         p.source(*(ref("fix_attempt", a) for a in failed))
     if o.extra_instructions:
-        p.add("instruction", quote(clean(o.extra_instructions, limit=4000)), title="Additional instructions from the requester")
+        p.add(
+            "instruction",
+            quote(clean(o.extra_instructions, limit=4000)),
+            title="Additional instructions from the requester",
+        )
 
 
 def acceptance_criteria(ctx: BuildContext, p: Parts) -> None:
     items = criteria(ctx.task)
     if items:
-        p.add("fact", "Acceptance criteria recorded on the task:\n\n" + "\n".join(
-            f"- [{'x' if done else ' '}] {inline(text, 400)}" + (" (already marked done on the task)" if done else "")
-            for text, done in items))
+        p.add(
+            "fact",
+            "Acceptance criteria recorded on the task:\n\n"
+            + "\n".join(
+                f"- [{'x' if done else ' '}] {inline(text, 400)}"
+                + (" (already marked done on the task)" if done else "")
+                for text, done in items
+            ),
+        )
         p.source(ctx.task_ref)
     derived: list[str] = []
     for f in ctx.sorted_findings()[: ctx.limits["findings"]]:
         if f.get("id"):
-            derived.append(f"The behaviour behind finding {code(str(f['id']))} ({inline(f.get('title') or '', 120)}) "
-                           "no longer reproduces with the recorded evidence.")
+            derived.append(
+                f"The behaviour behind finding {code(str(f['id']))} ({inline(f.get('title') or '', 120)}) "
+                "no longer reproduces with the recorded evidence."
+            )
     if ctx.mode.may_modify_files and ctx.mode.key not in (PromptMode.REFACTOR, PromptMode.TEST_AND_VERIFY):
         derived.append("A regression test fails before the change and passes after it.")
     if ctx.mode.key == PromptMode.REFACTOR:
@@ -175,13 +228,22 @@ def acceptance_criteria(ctx: BuildContext, p: Parts) -> None:
     if ctx.mode.may_modify_files:
         derived.append("Existing tests that cover the changed code still pass.")
     if derived:
-        p.add("recommendation", "Suggested additional criteria (derived by ContextOS from the linked records; confirm "
-                                "with the task owner):\n\n" + "\n".join(f"- [ ] {d}" for d in derived))
+        p.add(
+            "recommendation",
+            "Suggested additional criteria (derived by ContextOS from the linked records; confirm "
+            "with the task owner):\n\n" + "\n".join(f"- [ ] {d}" for d in derived),
+        )
     if not ctx.mode.may_modify_files:
-        p.add("instruction", "In this mode, do not implement anything to satisfy these criteria. Report how each one "
-                             "could be verified once a fix exists.")
+        p.add(
+            "instruction",
+            "In this mode, do not implement anything to satisfy these criteria. Report how each one "
+            "could be verified once a fix exists.",
+        )
     if not p:
-        p.add("assumption", "No acceptance criteria are recorded. Propose concrete, testable criteria in your report.")
+        p.add(
+            "assumption",
+            "No acceptance criteria are recorded. Propose concrete, testable criteria in your report.",
+        )
 
 
 def testing_requirements(ctx: BuildContext, p: Parts) -> None:
@@ -190,12 +252,18 @@ def testing_requirements(ctx: BuildContext, p: Parts) -> None:
     verb = "Add" if writes_tests else "Specify (do not write)"
     rules: list[str] = []
     if level == RequiredTesting.NONE:
-        rules.append("No new automated tests are required. Run the existing tests that cover the code involved and "
-                     "report the results.")
+        rules.append(
+            "No new automated tests are required. Run the existing tests that cover the code involved and "
+            "report the results."
+        )
     else:
-        rules.append(f"{verb} unit tests for the changed or investigated behaviour, including a regression test.")
+        rules.append(
+            f"{verb} unit tests for the changed or investigated behaviour, including a regression test."
+        )
         if level in (RequiredTesting.UNIT_INTEGRATION, RequiredTesting.FULL_REGRESSION):
-            rules.append(f"{verb} integration tests across the affected boundary (API, database or integration contract).")
+            rules.append(
+                f"{verb} integration tests across the affected boundary (API, database or integration contract)."
+            )
         if level == RequiredTesting.FULL_REGRESSION:
             rules.append("Run the full test suite and report the exact commands with pass/fail counts.")
     if not writes_tests:
@@ -206,27 +274,41 @@ def testing_requirements(ctx: BuildContext, p: Parts) -> None:
     if cats or strict:
         lines = [f"{c.replace('_', ' ').capitalize()}: {_ADVERSARIAL[c]}." for c in cats]
         if strict and not cats:
-            lines.append("Cover malformed, oversized and boundary-value input, and error paths that must fail closed.")
+            lines.append(
+                "Cover malformed, oversized and boundary-value input, and error paths that must fail closed."
+            )
         lines.append(FAKE_SECRETS)
         p.add("instruction", bullets(lines), title=f"Adversarial and security tests ({verb.lower()})")
 
 
 def verification(ctx: BuildContext, p: Parts) -> None:
     report = [
-        "Files changed (with a one-line reason each)" if ctx.may_modify else "Confirmation that no files were modified",
+        "Files changed (with a one-line reason each)"
+        if ctx.may_modify
+        else "Confirmation that no files were modified",
         "Root cause (or investigation result) and the evidence for it: file:line references you actually opened",
         "Exact commands you ran and their results, with pass/fail counts for test runs",
         "Status of each acceptance criterion: met, not met, or not verifiable — with evidence",
         "References from this prompt that turned out to be wrong or missing, and anything you could not verify",
     ]
     p.add("instruction", "Finish with a report containing:\n\n" + numbered(report))
-    p.add("instruction", "Saying the work is complete is not verification. In ContextOS a task counts as verified only "
-                         "when a passed verification run is recorded against it; your report is the evidence for "
-                         "that run.")
+    p.add(
+        "instruction",
+        "Saying the work is complete is not verification. In ContextOS a task counts as verified only "
+        "when a passed verification run is recorded against it; your report is the evidence for "
+        "that run.",
+    )
     runs = ctx.data.verification_runs
     if runs:
-        p.add("evidence", "Earlier verification runs for this task:\n\n" + bullets(
-            [f"{code(str(r.get('id') or '?'))} ({inline(r.get('kind') or 'run', 30)}): {inline(r.get('status'), 20)}"
-             + (f" — {inline(r.get('summary'), 200)}" if r.get("summary") else "") for r in runs[:10]]))
+        p.add(
+            "evidence",
+            "Earlier verification runs for this task:\n\n"
+            + bullets(
+                [
+                    f"{code(str(r.get('id') or '?'))} ({inline(r.get('kind') or 'run', 30)}): {inline(r.get('status'), 20)}"
+                    + (f" — {inline(r.get('summary'), 200)}" if r.get("summary") else "")
+                    for r in runs[:10]
+                ]
+            ),
+        )
         p.source(*(ref("verification_run", r) for r in runs[:10]))
-

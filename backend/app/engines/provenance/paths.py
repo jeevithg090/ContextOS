@@ -168,7 +168,11 @@ def find_risky_paths(
     candidates: list[Assessment] = []
     for origin in origins:
         walks = walks_from(
-            index, origin, max_depth=max_depth, limit=_MAX_WALKS_PER_ORIGIN, is_sink=lambda inv: analyze(inv).risky
+            index,
+            origin,
+            max_depth=max_depth,
+            limit=_MAX_WALKS_PER_ORIGIN,
+            is_sink=lambda inv: analyze(inv).risky,
         )
         candidates.extend(assess(index, walk, analyze(walk.sink), analyze) for walk in walks)
         if len(candidates) >= _MAX_CANDIDATES:

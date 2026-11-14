@@ -53,7 +53,9 @@ def bucketed(
 ) -> dict[Any, list[int]]:
     """``{group value: [count per bucket]}`` (key ``None`` when ungrouped)."""
     pairs = list(zip(window.edges[:-1], window.edges[1:], strict=True))
-    sums = [func.coalesce(func.sum(case((and_(column >= lo, column < hi), 1), else_=0)), 0) for lo, hi in pairs]
+    sums = [
+        func.coalesce(func.sum(case((and_(column >= lo, column < hi), 1), else_=0)), 0) for lo, hi in pairs
+    ]
     where = [*conditions, column >= window.since, column < window.until]
     if group_by is None:
         row = db.execute(select(*sums).where(*where)).one()

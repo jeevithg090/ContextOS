@@ -32,21 +32,37 @@ def list_suites(db: Session, org_id: str, *, limit: int, offset: int) -> tuple[l
         .group_by(SimulationRun.suite_run_id)
     )
     total = db.scalar(select(func.count()).select_from(grouped.subquery())) or 0
-    rows = db.execute(grouped.order_by(func.min(SimulationRun.started_at).desc()).limit(limit).offset(offset)).all()
+    rows = db.execute(
+        grouped.order_by(func.min(SimulationRun.started_at).desc()).limit(limit).offset(offset)
+    ).all()
     return [_summary_row(r) for r in rows], int(total)
 
 
 def _summary_row(r: Any) -> dict[str, Any]:
     passed = int(r.passed_count or 0)
-    return {"suite_run_id": r.suite_run_id, "run_count": int(r.run_count), "passed_count": passed,
-            "failed_count": int(r.run_count) - passed, "started_at": r.started_at, "completed_at": r.completed_at,
-            "agent_id": r.agent_id, "agent_version": r.agent_version}
+    return {
+        "suite_run_id": r.suite_run_id,
+        "run_count": int(r.run_count),
+        "passed_count": passed,
+        "failed_count": int(r.run_count) - passed,
+        "started_at": r.started_at,
+        "completed_at": r.completed_at,
+        "agent_id": r.agent_id,
+        "agent_version": r.agent_version,
+    }
 
 
 def suite_runs(db: Session, org_id: str, suite_run_id: str) -> list[SimulationRun]:
-    runs = list(db.scalars(select(SimulationRun).where(
-        SimulationRun.organization_id == org_id, SimulationRun.suite_run_id == suite_run_id,
-    ).order_by(SimulationRun.started_at, SimulationRun.id)))
+    runs = list(
+        db.scalars(
+            select(SimulationRun)
+            .where(
+                SimulationRun.organization_id == org_id,
+                SimulationRun.suite_run_id == suite_run_id,
+            )
+            .order_by(SimulationRun.started_at, SimulationRun.id)
+        )
+    )
     if not runs:
         raise NotFoundError(f"Simulation suite '{suite_run_id}' not found")
     return runs
@@ -55,10 +71,14 @@ def suite_runs(db: Session, org_id: str, suite_run_id: str) -> list[SimulationRu
 def suite_summary(runs: list[SimulationRun]) -> dict[str, Any]:
     passed = sum(1 for r in runs if r.passed)
     return {
-        "suite_run_id": runs[0].suite_run_id, "run_count": len(runs), "passed_count": passed,
-        "failed_count": len(runs) - passed, "started_at": min(r.started_at for r in runs),
+        "suite_run_id": runs[0].suite_run_id,
+        "run_count": len(runs),
+        "passed_count": passed,
+        "failed_count": len(runs) - passed,
+        "started_at": min(r.started_at for r in runs),
         "completed_at": max((r.completed_at for r in runs if r.completed_at), default=None),
-        "agent_id": runs[0].agent_id, "agent_version": runs[0].agent_version,
+        "agent_id": runs[0].agent_id,
+        "agent_version": runs[0].agent_version,
     }
 
 
@@ -74,16 +94,27 @@ def _finding_categories(db: Session, org_id: str, run: SimulationRun | None) -> 
     """Finding categories raised in every session of a run (the main session and any delegated child)."""
     if run is None:
         return set()
-    sessions = list(db.scalars(select(AgentSession.id).where(
-        AgentSession.organization_id == org_id, AgentSession.simulation_run_id == run.id)))
+    sessions = list(
+        db.scalars(
+            select(AgentSession.id).where(
+                AgentSession.organization_id == org_id, AgentSession.simulation_run_id == run.id
+            )
+        )
+    )
     if not sessions:
         return set()
-    return set(db.scalars(select(SecurityFinding.category).where(
-        SecurityFinding.organization_id == org_id, SecurityFinding.session_id.in_(sessions))))
+    return set(
+        db.scalars(
+            select(SecurityFinding.category).where(
+                SecurityFinding.organization_id == org_id, SecurityFinding.session_id.in_(sessions)
+            )
+        )
+    )
 
 
-def _scenario_diff(db: Session, org_id: str, sid: str, base: SimulationRun | None,
-                   head: SimulationRun | None) -> dict[str, Any]:
+def _scenario_diff(
+    db: Session, org_id: str, sid: str, base: SimulationRun | None, head: SimulationRun | None
+) -> dict[str, Any]:
     if base is None or head is None:
         status = "added" if base is None else "removed"
     elif base.passed and not head.passed:
@@ -98,9 +129,16 @@ def _scenario_diff(db: Session, org_id: str, sid: str, base: SimulationRun | Non
         bc, hc = _checks(base), _checks(head)
         for key in [k for k in hc if k in bc]:
             if bool(bc[key]["passed"]) != bool(hc[key]["passed"]):
-                check_changes.append({"check": key, "expectation": hc[key]["expectation"],
-                                      "base_passed": bc[key]["passed"], "head_passed": hc[key]["passed"],
-                                      "base_actual": bc[key]["actual"], "head_actual": hc[key]["actual"]})
+                check_changes.append(
+                    {
+                        "check": key,
+                        "expectation": hc[key]["expectation"],
+                        "base_passed": bc[key]["passed"],
+                        "head_passed": hc[key]["passed"],
+                        "base_actual": bc[key]["actual"],
+                        "head_actual": hc[key]["actual"],
+                    }
+                )
         bd, hd = _decisions(base), _decisions(head)
         for step in [s for s in hd if s in bd]:
             if bd[step] != hd[step]:
@@ -108,10 +146,15 @@ def _scenario_diff(db: Session, org_id: str, sid: str, base: SimulationRun | Non
     base_cats, head_cats = _finding_categories(db, org_id, base), _finding_categories(db, org_id, head)
     name = (head or base).scenario_name if (head or base) else sid
     return {
-        "scenario_id": sid, "scenario_name": name, "status": status,
-        "base_run_id": base.id if base else None, "head_run_id": head.id if head else None,
-        "base_passed": base.passed if base else None, "head_passed": head.passed if head else None,
-        "check_changes": check_changes, "decision_changes": decision_changes,
+        "scenario_id": sid,
+        "scenario_name": name,
+        "status": status,
+        "base_run_id": base.id if base else None,
+        "head_run_id": head.id if head else None,
+        "base_passed": base.passed if base else None,
+        "head_passed": head.passed if head else None,
+        "check_changes": check_changes,
+        "decision_changes": decision_changes,
         "new_finding_categories": sorted(head_cats - base_cats),
         "resolved_finding_categories": sorted(base_cats - head_cats),
     }
@@ -126,10 +169,15 @@ def _policy_changes(base: list[dict[str, Any]], head: list[dict[str, Any]]) -> l
         if old is None or new is None:
             ref = new or old
             assert ref is not None
-            out.append({"policy_id": pid, "name": ref.get("name"), "change": "added" if old is None else "removed"})
+            out.append(
+                {"policy_id": pid, "name": ref.get("name"), "change": "added" if old is None else "removed"}
+            )
             continue
-        changes = [f"{k}: {old.get(k)} → {new.get(k)}" for k in ("enabled", "mode", "version", "outcome")
-                   if old.get(k) != new.get(k)]
+        changes = [
+            f"{k}: {old.get(k)} → {new.get(k)}"
+            for k in ("enabled", "mode", "version", "outcome")
+            if old.get(k) != new.get(k)
+        ]
         if changes:
             out.append({"policy_id": pid, "name": new.get("name"), "change": "; ".join(changes)})
     return out
@@ -145,9 +193,14 @@ def compare_suites(db: Session, org_id: str, base_id: str, head_id: str) -> dict
     for s in scenarios:
         counts[s["status"]] = counts.get(s["status"], 0) + 1
     return {
-        "base": suite_summary(base_runs), "head": suite_summary(head_runs), "scenarios": scenarios,
-        "counts": counts, "regressions": counts.get("regressed", 0),
-        "policy_changes": _policy_changes(base_runs[0].policy_snapshot or [], head_runs[0].policy_snapshot or []),
+        "base": suite_summary(base_runs),
+        "head": suite_summary(head_runs),
+        "scenarios": scenarios,
+        "counts": counts,
+        "regressions": counts.get("regressed", 0),
+        "policy_changes": _policy_changes(
+            base_runs[0].policy_snapshot or [], head_runs[0].policy_snapshot or []
+        ),
         "note": "Both suites ran the same synthetic scenarios through the real pipeline; differences reflect "
-                "configuration or agent changes between the runs, not proof of causation.",
+        "configuration or agent changes between the runs, not proof of causation.",
     }

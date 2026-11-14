@@ -62,14 +62,22 @@ def _query(org_id: str) -> Select[Any]:
     return (
         select(Approval, Agent, AgentSession, ToolInvocation, Tool, PolicyDecision, Destination, User)
         .outerjoin(Agent, and_(Agent.id == Approval.agent_id, Agent.organization_id == org_id))
-        .outerjoin(AgentSession, and_(AgentSession.id == Approval.session_id, AgentSession.organization_id == org_id))
-        .outerjoin(ToolInvocation, and_(ToolInvocation.id == Approval.tool_invocation_id,
-                                        ToolInvocation.organization_id == org_id))
+        .outerjoin(
+            AgentSession, and_(AgentSession.id == Approval.session_id, AgentSession.organization_id == org_id)
+        )
+        .outerjoin(
+            ToolInvocation,
+            and_(ToolInvocation.id == Approval.tool_invocation_id, ToolInvocation.organization_id == org_id),
+        )
         .outerjoin(Tool, and_(Tool.id == ToolInvocation.tool_id, Tool.organization_id == org_id))
-        .outerjoin(PolicyDecision, and_(PolicyDecision.id == Approval.policy_decision_id,
-                                        PolicyDecision.organization_id == org_id))
-        .outerjoin(Destination, and_(Destination.id == ToolInvocation.destination_id,
-                                     Destination.organization_id == org_id))
+        .outerjoin(
+            PolicyDecision,
+            and_(PolicyDecision.id == Approval.policy_decision_id, PolicyDecision.organization_id == org_id),
+        )
+        .outerjoin(
+            Destination,
+            and_(Destination.id == ToolInvocation.destination_id, Destination.organization_id == org_id),
+        )
         .outerjoin(User, User.id == Approval.decided_by_user_id)
         .where(Approval.organization_id == org_id)
     )
@@ -112,8 +120,12 @@ def list_approvals(
 def _resource(raw: Any) -> dict[str, Any] | None:
     if not isinstance(raw, dict) or raw.get("id") is None:
         return None
-    return {"kind": str(raw.get("kind") or "other"), "id": str(raw["id"])[:2048],
-            "sensitive": bool(raw.get("sensitive")), "reason": raw.get("reason")}
+    return {
+        "kind": str(raw.get("kind") or "other"),
+        "id": str(raw["id"])[:2048],
+        "sensitive": bool(raw.get("sensitive")),
+        "reason": raw.get("reason"),
+    }
 
 
 def _resources(inv: ToolInvocation | None) -> list[dict[str, Any]]:
@@ -139,11 +151,15 @@ def _confirmation(approval_risk: dict[str, Any], dest: dict[str, Any] | None) ->
             reasons.append(f"The destination {dest['identifier']} is classified {sorted(levels)[0]}.")
     if approval_risk["secrets_in_arguments"]:
         n = approval_risk["secrets_in_arguments"]
-        reasons.append(f"The arguments contain {n} credential{'s' if n != 1 else ''} (shown redacted here; "
-                       "the agent would send the real value).")
+        reasons.append(
+            f"The arguments contain {n} credential{'s' if n != 1 else ''} (shown redacted here; "
+            "the agent would send the real value)."
+        )
     if approval_risk["session_secret_matches"]:
-        reasons.append("A credential in the arguments was previously seen in this session's context, so approving "
-                       "may let it leave the environment.")
+        reasons.append(
+            "A credential in the arguments was previously seen in this session's context, so approving "
+            "may let it leave the environment."
+        )
     return reasons
 
 
@@ -156,60 +172,102 @@ def _item(row: Any, now: datetime) -> dict[str, Any]:
     risk = risk_summary(approval.risk_summary or {})
     destination = None
     if dest is not None:
-        destination = {"id": dest.id, "kind": dest.kind, "identifier": dest.identifier,
-                       "classification": dest.classification,
-                       "classification_at_decision": (snapshot.get("destination") or {}).get("classification")
-                       or risk["destination_classification"]}
+        destination = {
+            "id": dest.id,
+            "kind": dest.kind,
+            "identifier": dest.identifier,
+            "classification": dest.classification,
+            "classification_at_decision": (snapshot.get("destination") or {}).get("classification")
+            or risk["destination_classification"],
+        }
     primary = _primary_target(dest, resources)
     tool_name = tool.name if tool is not None else snap_tool.get("name")
-    category = (tool.category if tool is not None else None) or snap_tool.get("category") or risk["tool_category"]
+    category = (
+        (tool.category if tool is not None else None) or snap_tool.get("category") or risk["tool_category"]
+    )
     matched = [matched_policy(m) for m in (decision.matched_policies or [])] if decision is not None else []
     reasons = _confirmation(risk, destination)
     remaining = None
     if approval.status == ApprovalStatus.PENDING and approval.expires_at is not None:
         remaining = max(0, int((approval.expires_at - now).total_seconds()))
     return {
-        "id": approval.id, "status": approval.status, "summary": approval.summary,
-        "action": describe_action(tool_name, category, inv.arguments_redacted if inv is not None else {}, primary,
-                                  destination=dest.identifier if dest is not None else None),
-        "agent": {"id": approval.agent_id, "name": agent.name if agent else None,
-                  "environment": agent.environment if agent else None},
-        "session": {"id": approval.session_id, "external_session_id": session.external_session_id if session else None,
-                    "status": session.status if session else None},
-        "tool": {"name": tool_name, "category": category,
-                 "provider": tool.provider if tool is not None else snap_tool.get("provider"),
-                 "server": tool.server if tool is not None else snap_tool.get("server"),
-                 "risk_level": snap_tool.get("risk_level") or (tool.risk_level if tool is not None else None)},
+        "id": approval.id,
+        "status": approval.status,
+        "summary": approval.summary,
+        "action": describe_action(
+            tool_name,
+            category,
+            inv.arguments_redacted if inv is not None else {},
+            primary,
+            destination=dest.identifier if dest is not None else None,
+        ),
+        "agent": {
+            "id": approval.agent_id,
+            "name": agent.name if agent else None,
+            "environment": agent.environment if agent else None,
+        },
+        "session": {
+            "id": approval.session_id,
+            "external_session_id": session.external_session_id if session else None,
+            "status": session.status if session else None,
+        },
+        "tool": {
+            "name": tool_name,
+            "category": category,
+            "provider": tool.provider if tool is not None else snap_tool.get("provider"),
+            "server": tool.server if tool is not None else snap_tool.get("server"),
+            "risk_level": snap_tool.get("risk_level") or (tool.risk_level if tool is not None else None),
+        },
         "tool_invocation_id": approval.tool_invocation_id,
         "tool_invocation_status": inv.status if inv is not None else None,
-        "target": {"primary": primary, "destination": destination, "resources": resources[:LIST_RESOURCES],
-                   "resource_count": len(resources),
-                   "sensitive_resource_count": sum(1 for r in resources if r["sensitive"])},
-        "policy_decision": None if decision is None else {
-            "id": decision.id, "decision": decision.decision, "enforcement": decision.enforcement,
-            "explanation": decision.explanation, "evaluated_at": decision.evaluated_at,
-            "deciding_policy": matched[0] if matched else None, "matched_policies": matched,
+        "target": {
+            "primary": primary,
+            "destination": destination,
+            "resources": resources[:LIST_RESOURCES],
+            "resource_count": len(resources),
+            "sensitive_resource_count": sum(1 for r in resources if r["sensitive"]),
+        },
+        "policy_decision": None
+        if decision is None
+        else {
+            "id": decision.id,
+            "decision": decision.decision,
+            "enforcement": decision.enforcement,
+            "explanation": decision.explanation,
+            "evaluated_at": decision.evaluated_at,
+            "deciding_policy": matched[0] if matched else None,
+            "matched_policies": matched,
         },
         "risk": risk,
-        "requires_confirmation": bool(reasons), "confirmation_reasons": reasons,
-        "requested_at": approval.requested_at, "expires_at": approval.expires_at, "seconds_remaining": remaining,
+        "requires_confirmation": bool(reasons),
+        "confirmation_reasons": reasons,
+        "requested_at": approval.requested_at,
+        "expires_at": approval.expires_at,
+        "seconds_remaining": remaining,
         "decided_at": approval.decided_at,
         "decided_by": {"id": user.id, "name": user.name, "email": user.email} if user is not None else None,
-        "decision_note": approval.decision_note, "is_simulation": bool(approval.is_simulation),
+        "decision_note": approval.decision_note,
+        "is_simulation": bool(approval.is_simulation),
     }
 
 
 # -- detail ----------------------------------------------------------------------------------------
 
 
-def load_approval(db: Session, org_id: str, approval_id: str, *, bound_agent_id: str | None = None) -> Approval:
-    approval = db.scalar(select(Approval).where(Approval.organization_id == org_id, Approval.id == approval_id))
+def load_approval(
+    db: Session, org_id: str, approval_id: str, *, bound_agent_id: str | None = None
+) -> Approval:
+    approval = db.scalar(
+        select(Approval).where(Approval.organization_id == org_id, Approval.id == approval_id)
+    )
     if approval is None or (bound_agent_id and approval.agent_id != bound_agent_id):
         raise NotFoundError(f"Approval '{approval_id}' not found")
     return approval
 
 
-def approval_detail(db: Session, org_id: str, approval_id: str, *, bound_agent_id: str | None = None) -> dict[str, Any]:
+def approval_detail(
+    db: Session, org_id: str, approval_id: str, *, bound_agent_id: str | None = None
+) -> dict[str, Any]:
     row = db.execute(_query(org_id).where(Approval.id == approval_id)).first()
     if row is None or (bound_agent_id and row[0].agent_id != bound_agent_id):
         raise NotFoundError(f"Approval '{approval_id}' not found")
@@ -223,7 +281,8 @@ def approval_detail(db: Session, org_id: str, approval_id: str, *, bound_agent_i
 
     policies = _policy_rows(db, org_id, decision)
     for match in ([out["policy_decision"]["deciding_policy"]] if out["policy_decision"] else []) + (
-            out["policy_decision"]["matched_policies"] if out["policy_decision"] else []):
+        out["policy_decision"]["matched_policies"] if out["policy_decision"] else []
+    ):
         if match is not None:
             _annotate(match, policies)
     monitor = [matched_policy(m) for m in (decision.monitor_matches or [])] if decision is not None else []
@@ -237,24 +296,40 @@ def approval_detail(db: Session, org_id: str, approval_id: str, *, bound_agent_i
         resources=resources,
         destination=_destination_detail(dest, out["target"]["destination"]),
         secrets={
-            "in_arguments": [{"type": str(s.get("type") or "secret")} for s in snapshot.get("secrets_in_arguments") or []
-                             if isinstance(s, dict)],
+            "in_arguments": [
+                {"type": str(s.get("type") or "secret")}
+                for s in snapshot.get("secrets_in_arguments") or []
+                if isinstance(s, dict)
+            ],
             "from_session_context": [
                 {"type": str(m.get("type") or "secret"), "context_item_id": m.get("context_item_id")}
-                for m in ((inv.matched_session_fingerprints or []) if inv is not None else []) if isinstance(m, dict)],
+                for m in ((inv.matched_session_fingerprints or []) if inv is not None else [])
+                if isinstance(m, dict)
+            ],
         },
-        detection={"rule_ids": list((snapshot.get("detection") or {}).get("rule_ids") or []),
-                   "max_severity": (snapshot.get("detection") or {}).get("max_severity"),
-                   "categories": list((snapshot.get("detection") or {}).get("categories") or [])},
+        detection={
+            "rule_ids": list((snapshot.get("detection") or {}).get("rule_ids") or []),
+            "max_severity": (snapshot.get("detection") or {}).get("max_severity"),
+            "categories": list((snapshot.get("detection") or {}).get("categories") or []),
+        },
         monitor_matches=monitor,
-        session_risk=session_risk(snapshot, session.risk_state if session is not None else None,
-                                  session.risk_score if session is not None else 0),
+        session_risk=session_risk(
+            snapshot,
+            session.risk_state if session is not None else None,
+            session.risk_score if session is not None else 0,
+        ),
         enforcement_note=enforcement_note(
-            status=approval.status, enforcement=decision.enforcement if decision is not None else None,
+            status=approval.status,
+            enforcement=decision.enforcement if decision is not None else None,
             integration=(snapshot.get("integration") or {}).get("kind"),
             invocation_status=inv.status if inv is not None else None,
-            ran_before_decision=bool(inv is not None and inv.completed_at is not None and approval.decided_at is not None
-                                     and inv.completed_at < approval.decided_at)),
+            ran_before_decision=bool(
+                inv is not None
+                and inv.completed_at is not None
+                and approval.decided_at is not None
+                and inv.completed_at < approval.decided_at
+            ),
+        ),
         activity=_activity(db, org_id, approval),
     )
     out["recent_context"], out["context_total"] = _recent_context(db, org_id, approval)
@@ -265,12 +340,16 @@ def approval_detail(db: Session, org_id: str, approval_id: str, *, bound_agent_i
 def _policy_rows(db: Session, org_id: str, decision: PolicyDecision | None) -> dict[str, SecurityPolicy]:
     if decision is None:
         return {}
-    ids = {str(m.get("policy_id")) for m in [*(decision.matched_policies or []), *(decision.monitor_matches or [])]
-           if isinstance(m, dict) and m.get("policy_id")}
+    ids = {
+        str(m.get("policy_id"))
+        for m in [*(decision.matched_policies or []), *(decision.monitor_matches or [])]
+        if isinstance(m, dict) and m.get("policy_id")
+    }
     if not ids:
         return {}
-    rows = db.scalars(select(SecurityPolicy).where(SecurityPolicy.organization_id == org_id,
-                                                   SecurityPolicy.id.in_(ids)))
+    rows = db.scalars(
+        select(SecurityPolicy).where(SecurityPolicy.organization_id == org_id, SecurityPolicy.id.in_(ids))
+    )
     return {p.id: p for p in rows}
 
 
@@ -283,23 +362,43 @@ def _annotate(match: dict[str, Any], policies: dict[str, SecurityPolicy]) -> Non
 def _destination_detail(dest: Destination | None, ref: dict[str, Any] | None) -> dict[str, Any] | None:
     if dest is None or ref is None:
         return None
-    checks = [{"check": str(c.get("check") or "check"), "result": str(c.get("result") or "unknown"),
-               "detail": c.get("detail")} for c in (dest.verification or []) if isinstance(c, dict)]
-    return {**ref, "display_name": dest.display_name, "checks": checks, "transfer_count": dest.transfer_count or 0,
-            "blocked_count": dest.blocked_count or 0, "sensitive_transfer_count": dest.sensitive_transfer_count or 0,
-            "first_seen_at": dest.first_seen_at}
+    checks = [
+        {
+            "check": str(c.get("check") or "check"),
+            "result": str(c.get("result") or "unknown"),
+            "detail": c.get("detail"),
+        }
+        for c in (dest.verification or [])
+        if isinstance(c, dict)
+    ]
+    return {
+        **ref,
+        "display_name": dest.display_name,
+        "checks": checks,
+        "transfer_count": dest.transfer_count or 0,
+        "blocked_count": dest.blocked_count or 0,
+        "sensitive_transfer_count": dest.sensitive_transfer_count or 0,
+        "first_seen_at": dest.first_seen_at,
+    }
 
 
 def _recent_context(db: Session, org_id: str, approval: Approval) -> tuple[list[dict[str, Any]], int]:
     """Context the agent had received when it asked (items up to the request time), newest first."""
-    conds = (ContextItem.organization_id == org_id, ContextItem.session_id == approval.session_id,
-             ContextItem.received_at <= approval.requested_at)
+    conds = (
+        ContextItem.organization_id == org_id,
+        ContextItem.session_id == approval.session_id,
+        ContextItem.received_at <= approval.requested_at,
+    )
     total = int(db.scalar(select(func.count()).select_from(ContextItem).where(*conds)) or 0)
     rows = db.execute(
         select(ContextItem, ContextSource)
-        .outerjoin(ContextSource, and_(ContextSource.id == ContextItem.source_id,
-                                       ContextSource.organization_id == org_id))
-        .where(*conds).order_by(ContextItem.received_at.desc(), ContextItem.id.desc()).limit(RECENT_CONTEXT)
+        .outerjoin(
+            ContextSource,
+            and_(ContextSource.id == ContextItem.source_id, ContextSource.organization_id == org_id),
+        )
+        .where(*conds)
+        .order_by(ContextItem.received_at.desc(), ContextItem.id.desc())
+        .limit(RECENT_CONTEXT)
     ).all()
     items = []
     for item, source in rows:
@@ -307,22 +406,31 @@ def _recent_context(db: Session, org_id: str, approval: Approval) -> tuple[list[
         preview = item.redacted_preview
         if preview and len(preview) > PREVIEW_CHARS:
             preview = preview[: PREVIEW_CHARS - 1] + "…"
-        items.append({
-            "id": item.id, "source_id": item.source_id,
-            "source_identifier": source.identifier if source else None,
-            "source_display_name": source.display_name if source else None,
-            "source_type": source.source_type if source else None,
-            "source_trust_level": source.trust_level if source else None,
-            "trust_level": item.trust_level, "collected_via": item.collected_via, "received_at": item.received_at,
-            "sensitivity": item.sensitivity, "contains_secrets": bool(item.contains_secrets),
-            "detection_max_severity": summary.get("max_severity"),
-            "detection_hit_count": int(summary.get("hit_count") or 0), "preview": preview,
-            "tool_invocation_id": item.tool_invocation_id,
-        })
+        items.append(
+            {
+                "id": item.id,
+                "source_id": item.source_id,
+                "source_identifier": source.identifier if source else None,
+                "source_display_name": source.display_name if source else None,
+                "source_type": source.source_type if source else None,
+                "source_trust_level": source.trust_level if source else None,
+                "trust_level": item.trust_level,
+                "collected_via": item.collected_via,
+                "received_at": item.received_at,
+                "sensitivity": item.sensitivity,
+                "contains_secrets": bool(item.contains_secrets),
+                "detection_max_severity": summary.get("max_severity"),
+                "detection_hit_count": int(summary.get("hit_count") or 0),
+                "preview": preview,
+                "tool_invocation_id": item.tool_invocation_id,
+            }
+        )
     return items, total
 
 
-def _related_findings(db: Session, org_id: str, approval: Approval, decision: PolicyDecision | None) -> list[dict[str, Any]]:
+def _related_findings(
+    db: Session, org_id: str, approval: Approval, decision: PolicyDecision | None
+) -> list[dict[str, Any]]:
     linked_conds = []
     if approval.tool_invocation_id:
         linked_conds.append(SecurityFinding.tool_invocation_id == approval.tool_invocation_id)
@@ -330,32 +438,59 @@ def _related_findings(db: Session, org_id: str, approval: Approval, decision: Po
         linked_conds.append(SecurityFinding.policy_decision_id == decision.id)
     linked = or_(*linked_conds) if linked_conds else None
     severity = case({k: v for k, v in SEVERITY_RANK.items()}, value=SecurityFinding.severity, else_=0)
-    query = select(SecurityFinding).where(SecurityFinding.organization_id == org_id,
-                                          SecurityFinding.session_id == approval.session_id)
+    query = select(SecurityFinding).where(
+        SecurityFinding.organization_id == org_id, SecurityFinding.session_id == approval.session_id
+    )
     order = [severity.desc(), SecurityFinding.last_seen_at.desc()]
     if linked is not None:
         order.insert(0, case((linked, 1), else_=0).desc())
     rows = db.scalars(query.order_by(*order).limit(RELATED_FINDINGS)).all()
     decision_id = decision.id if decision is not None else None
-    return [{
-        "id": f.id, "title": f.title, "category": f.category, "severity": f.severity, "status": f.status,
-        "last_seen_at": f.last_seen_at,
-        "linked_to_this_call": bool((approval.tool_invocation_id and f.tool_invocation_id == approval.tool_invocation_id)
-                                    or (decision_id and f.policy_decision_id == decision_id)),
-    } for f in rows]
+    return [
+        {
+            "id": f.id,
+            "title": f.title,
+            "category": f.category,
+            "severity": f.severity,
+            "status": f.status,
+            "last_seen_at": f.last_seen_at,
+            "linked_to_this_call": bool(
+                (approval.tool_invocation_id and f.tool_invocation_id == approval.tool_invocation_id)
+                or (decision_id and f.policy_decision_id == decision_id)
+            ),
+        }
+        for f in rows
+    ]
 
 
 def _activity(db: Session, org_id: str, approval: Approval) -> list[dict[str, Any]]:
     """Audit entries for this approval: the pause, then the human decision or the expiry."""
     targets = [and_(AuditEvent.target_type == "approval", AuditEvent.target_id == approval.id)]
     if approval.tool_invocation_id:
-        targets.append(and_(AuditEvent.target_type == "tool_invocation",
-                            AuditEvent.target_id == approval.tool_invocation_id,
-                            AuditEvent.action == "tool.approval_required"))
-    rows = db.scalars(select(AuditEvent).where(AuditEvent.organization_id == org_id, or_(*targets))
-                      .order_by(AuditEvent.seq)).all()
+        targets.append(
+            and_(
+                AuditEvent.target_type == "tool_invocation",
+                AuditEvent.target_id == approval.tool_invocation_id,
+                AuditEvent.action == "tool.approval_required",
+            )
+        )
+    rows = db.scalars(
+        select(AuditEvent).where(AuditEvent.organization_id == org_id, or_(*targets)).order_by(AuditEvent.seq)
+    ).all()
     user_ids = {r.actor_id for r in rows if r.actor_type == "user" and r.actor_id}
-    names = dict(db.execute(select(User.id, User.name).where(User.id.in_(user_ids))).all()) if user_ids else {}
-    return [{"id": r.id, "seq": r.seq, "occurred_at": r.occurred_at, "action": r.action, "actor_type": r.actor_type,
-             "actor_id": r.actor_id, "actor_name": names.get(r.actor_id) if r.actor_id else None,
-             "details": r.details or {}} for r in rows]
+    names = (
+        dict(db.execute(select(User.id, User.name).where(User.id.in_(user_ids))).all()) if user_ids else {}
+    )
+    return [
+        {
+            "id": r.id,
+            "seq": r.seq,
+            "occurred_at": r.occurred_at,
+            "action": r.action,
+            "actor_type": r.actor_type,
+            "actor_id": r.actor_id,
+            "actor_name": names.get(r.actor_id) if r.actor_id else None,
+            "details": r.details or {},
+        }
+        for r in rows
+    ]

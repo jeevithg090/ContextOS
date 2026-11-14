@@ -15,19 +15,32 @@ AGENT = "payments-agent"
 
 
 def ok(response, status: int = 200) -> Any:
-    assert response.status_code == status, f"{response.request.method} {response.request.url}: {response.text}"
+    assert response.status_code == status, (
+        f"{response.request.method} {response.request.url}: {response.text}"
+    )
     return response.json()
 
 
 def event(event_type: str, session: str, **fields: Any) -> dict[str, Any]:
-    return {"event_id": f"evt-{uuid.uuid4().hex}", "event_type": event_type,
-            "timestamp": "2026-11-11T10:00:00+00:00", "agent": {"name": AGENT, "framework": "claude_code"},
-            "session_id": session, "integration": "claude_code", **fields}
+    return {
+        "event_id": f"evt-{uuid.uuid4().hex}",
+        "event_type": event_type,
+        "timestamp": "2026-11-11T10:00:00+00:00",
+        "agent": {"name": AGENT, "framework": "claude_code"},
+        "session_id": session,
+        "integration": "claude_code",
+        **fields,
+    }
 
 
 def tool(session: str, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-    return event("tool.requested", session, tool={"name": name, "provider": "claude_code"}, arguments=arguments,
-                  correlation_id=f"tu-{uuid.uuid4().hex[:12]}")
+    return event(
+        "tool.requested",
+        session,
+        tool={"name": name, "provider": "claude_code"},
+        arguments=arguments,
+        correlation_id=f"tu-{uuid.uuid4().hex[:12]}",
+    )
 
 
 class Flow:

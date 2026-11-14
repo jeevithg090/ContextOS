@@ -72,19 +72,29 @@ class EventEnvelope(_Strict):
     event_id: str = Field(pattern=_ID_PATTERN, description="Client-generated idempotency key")
     event_type: EventType
     schema_version: Literal["1.0"] = SCHEMA_VERSION
-    timestamp: datetime = Field(description="Client-observed time (display only; server time is authoritative)")
+    timestamp: datetime = Field(
+        description="Client-observed time (display only; server time is authoritative)"
+    )
     agent: AgentRef
     session_id: str = Field(pattern=_ID_PATTERN, description="Integration's session id")
     parent_session_id: str | None = Field(default=None, pattern=_ID_PATTERN)
-    correlation_id: str | None = Field(default=None, max_length=200, description="Pairs tool.requested/tool.completed")
-    integration: str | None = Field(default=None, max_length=64, description="e.g. claude_code, mcp_gateway, python_sdk")
-    collected_via: str | None = Field(default=None, max_length=200, description="Hook / callback that observed this")
+    correlation_id: str | None = Field(
+        default=None, max_length=200, description="Pairs tool.requested/tool.completed"
+    )
+    integration: str | None = Field(
+        default=None, max_length=64, description="e.g. claude_code, mcp_gateway, python_sdk"
+    )
+    collected_via: str | None = Field(
+        default=None, max_length=200, description="Hook / callback that observed this"
+    )
 
     source: SourceRef | None = None
     tool: ToolRef | None = None
     destination: DestinationRef | None = None
 
-    content: str | None = Field(default=None, description="Context text to inspect (redacted before persistence)")
+    content: str | None = Field(
+        default=None, description="Context text to inspect (redacted before persistence)"
+    )
     content_type: str = Field(default="text/plain", max_length=64)
     arguments: dict[str, Any] | None = None
     result: str | dict[str, Any] | list[Any] | None = None
@@ -100,7 +110,10 @@ class EventEnvelope(_Strict):
             raise ValueError("context.ingested requires 'source' and 'content'")
         if t == EventType.PROMPT_SUBMITTED and self.content is None:
             raise ValueError("prompt.submitted requires 'content'")
-        if t in (EventType.TOOL_REQUESTED, EventType.TOOL_COMPLETED, EventType.TOOL_FAILED) and self.tool is None:
+        if (
+            t in (EventType.TOOL_REQUESTED, EventType.TOOL_COMPLETED, EventType.TOOL_FAILED)
+            and self.tool is None
+        ):
             raise ValueError(f"{t} requires 'tool'")
         if t == EventType.AGENT_DELEGATED and self.delegation is None:
             raise ValueError("agent.delegated requires 'delegation'")

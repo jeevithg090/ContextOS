@@ -136,23 +136,33 @@ def describe(status: SchemaStatus, url: str) -> str:
         return f"{where} has no ContextOS schema. {run} to create it, then start the server again."
     if status.state == "outdated":
         if status.unknown_revisions:
-            return (f"{where} is at revision {', '.join(status.unknown_revisions)}, which this build of ContextOS "
-                    f"does not know (latest here: {heads}). It was probably migrated by a newer version; run that "
-                    "version, or restore a backup taken before the upgrade.")
+            return (
+                f"{where} is at revision {', '.join(status.unknown_revisions)}, which this build of ContextOS "
+                f"does not know (latest here: {heads}). It was probably migrated by a newer version; run that "
+                "version, or restore a backup taken before the upgrade."
+            )
         current = ", ".join(status.current)
-        return (f"{where} is at revision {current} but this build needs {heads}. {run} to apply the pending "
-                "migrations, then start the server again.")
+        return (
+            f"{where} is at revision {current} but this build needs {heads}. {run} to apply the pending "
+            "migrations, then start the server again."
+        )
     if status.state == "incomplete":
         missing = ", ".join(status.missing_tables[:8]) + (" …" if len(status.missing_tables) > 8 else "")
         if status.current:
-            return (f"{where} records revision {', '.join(status.current)} but is missing ContextOS tables ({missing}); "
-                    "it was changed outside the migrations. Restore those tables from a backup, or back the data up "
-                    f"and recreate the database with `{MIGRATE_COMMAND}`.")
-        return (f"{where} is missing ContextOS tables ({missing}) and has no migration history. Back it up and "
-                f"recreate it with `{MIGRATE_COMMAND}` on an empty database.")
+            return (
+                f"{where} records revision {', '.join(status.current)} but is missing ContextOS tables ({missing}); "
+                "it was changed outside the migrations. Restore those tables from a backup, or back the data up "
+                f"and recreate the database with `{MIGRATE_COMMAND}`."
+            )
+        return (
+            f"{where} is missing ContextOS tables ({missing}) and has no migration history. Back it up and "
+            f"recreate it with `{MIGRATE_COMMAND}` on an empty database."
+        )
     if status.state == "unversioned":
-        return (f"{where} was created without migrations (no alembic_version table). {run}: it adopts the "
-                "schema when it matches this version exactly, or explains what differs.")
+        return (
+            f"{where} was created without migrations (no alembic_version table). {run}: it adopts the "
+            "schema when it matches this version exactly, or explains what differs."
+        )
     return f"{where} is at the latest revision ({heads})."
 
 
@@ -188,8 +198,10 @@ def upgrade_to_head(engine: Engine, database_url: str, *, configure_logging: boo
     from alembic import command
 
     if not migration_files():
-        raise SchemaNotReadyError(f"No Alembic migrations found under {SCRIPT_LOCATION / 'versions'}; this "
-                                  "installation is incomplete (the alembic/ directory must ship with the server).")
+        raise SchemaNotReadyError(
+            f"No Alembic migrations found under {SCRIPT_LOCATION / 'versions'}; this "
+            "installation is incomplete (the alembic/ directory must ship with the server)."
+        )
     status = schema_status(engine)
     config = alembic_config(database_url, configure_logging=configure_logging)
     if status.state == "unversioned":
@@ -199,7 +211,9 @@ def upgrade_to_head(engine: Engine, database_url: str, *, configure_logging: boo
             raise SchemaNotReadyError(
                 f"The database {display_url(database_url)} was created without migrations and differs from this "
                 f"version's schema ({shown}). Back it up and recreate it with `{MIGRATE_COMMAND}` on an empty "
-                "database, or migrate it by hand and then run `alembic stamp head`.", status)
+                "database, or migrate it by hand and then run `alembic stamp head`.",
+                status,
+            )
         command.stamp(config, "head")
         return UpgradeResult("adopted", status.current, head_revisions())
     if status.state == "incomplete" or (status.state == "outdated" and status.unknown_revisions):

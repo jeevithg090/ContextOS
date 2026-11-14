@@ -64,15 +64,21 @@ def validate_restrictions(restrictions: Any, *, outcome: str | None = None) -> l
             if problem:
                 errors.append(f"restrictions: {problem}")
     if restrictions.get("allowed_path_globs") == []:
-        errors.append("restrictions: allowed_path_globs is empty, which allows no path at all; use a DENY policy")
+        errors.append(
+            "restrictions: allowed_path_globs is empty, which allows no path at all; use a DENY policy"
+        )
     if "max_argument_bytes" in restrictions:
         size = restrictions["max_argument_bytes"]
         if isinstance(size, bool) or not isinstance(size, int) or not 0 < size <= MAX_ARGUMENT_BYTES_LIMIT:
-            errors.append(f"restrictions: max_argument_bytes must be an integer between 1 and "
-                          f"{MAX_ARGUMENT_BYTES_LIMIT}")
+            errors.append(
+                f"restrictions: max_argument_bytes must be an integer between 1 and "
+                f"{MAX_ARGUMENT_BYTES_LIMIT}"
+            )
     if outcome is not None:
         out = str(outcome).upper()
-        effective = [k for k in RESTRICTION_KEYS if k in restrictions and restrictions[k] not in (False, None)]
+        effective = [
+            k for k in RESTRICTION_KEYS if k in restrictions and restrictions[k] not in (False, None)
+        ]
         if out == Decision.RESTRICT and not effective:
             errors.append("restrictions: a RESTRICT policy must define at least one restriction")
         elif out != Decision.RESTRICT and restrictions:

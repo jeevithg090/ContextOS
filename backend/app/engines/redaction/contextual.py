@@ -172,7 +172,9 @@ def _assignment(text: str, key_start: int) -> tuple[Candidate | None, int]:
     if confidence is None:
         return None, key_start
     start = m.start(group)
-    return Candidate(_TYPE_BY_CATEGORY[category], start, start + len(value), value, confidence, SPEC_GENERIC), m.end()
+    return Candidate(
+        _TYPE_BY_CATEGORY[category], start, start + len(value), value, confidence, SPEC_GENERIC
+    ), m.end()
 
 
 def _env_line(text: str, key_start: int) -> Candidate | None:
@@ -229,7 +231,9 @@ def scan_assignments(text: str, lower: str) -> Iterator[Candidate]:
 
 # --- curl -u user:password ---------------------------------------------------------------------
 
-_CURL_USER_RE = re.compile(r"(?:-u|--user)[ \t]+[\"']?(?P<user>[^\s:\"'$]{1,128}):(?P<secret>[^\s\"']{3,512})")
+_CURL_USER_RE = re.compile(
+    r"(?:-u|--user)[ \t]+[\"']?(?P<user>[^\s:\"'$]{1,128}):(?P<secret>[^\s\"']{3,512})"
+)
 _HTTP_CLIENTS = ("curl", "wget", "http ", "https ", "httpie", "xh ")
 
 
@@ -321,16 +325,29 @@ def _aws_secret_candidates(text: str, lower: str) -> Iterator[Candidate]:
             yield Candidate("aws_secret_key", *m.span("secret"), m.group("secret"), 0.7, SPEC_CONTEXTUAL)
 
 
-def _near(text: str, lower: str, anchors: tuple[str, ...], regex: re.Pattern[str],
-          boundary: frozenset[str], *, anchor_left: frozenset[str] | None = None) -> Iterator[re.Match[str]]:
+def _near(
+    text: str,
+    lower: str,
+    anchors: tuple[str, ...],
+    regex: re.Pattern[str],
+    boundary: frozenset[str],
+    *,
+    anchor_left: frozenset[str] | None = None,
+) -> Iterator[re.Match[str]]:
     """Matches of ``regex`` starting within 200 characters after any anchor word (each once).
 
     ``anchor_left`` (optional) lists characters that may not precede an anchor, so an anchor that
     is only a fragment of a longer token (e.g. "akia" inside a base64 blob) does not count.
     Overlapping windows are merged so dense anchors ("awsawsaws...") stay linear.
     """
-    positions = sorted({p for anchor in anchors for p in iter_needle(lower, anchor)
-                        if anchor_left is None or left_ok(text, p, anchor_left)})
+    positions = sorted(
+        {
+            p
+            for anchor in anchors
+            for p in iter_needle(lower, anchor)
+            if anchor_left is None or left_ok(text, p, anchor_left)
+        }
+    )
     if len(positions) > _MAX_ANCHORS:
         yield from regex.finditer(text)  # anchor-dense input: everything is "near"; one linear pass
         return

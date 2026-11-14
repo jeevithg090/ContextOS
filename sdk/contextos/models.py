@@ -187,7 +187,10 @@ class EventEnvelope(_Strict):
             raise ValueError("context.ingested requires 'source' and 'content'")
         if t == EventType.PROMPT_SUBMITTED and self.content is None:
             raise ValueError("prompt.submitted requires 'content'")
-        if t in (EventType.TOOL_REQUESTED, EventType.TOOL_COMPLETED, EventType.TOOL_FAILED) and self.tool is None:
+        if (
+            t in (EventType.TOOL_REQUESTED, EventType.TOOL_COMPLETED, EventType.TOOL_FAILED)
+            and self.tool is None
+        ):
             raise ValueError(f"{t} requires 'tool'")
         if t == EventType.AGENT_DELEGATED and self.delegation is None:
             raise ValueError("agent.delegated requires 'delegation'")

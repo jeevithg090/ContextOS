@@ -35,8 +35,13 @@ def test_ids_are_prefixed_uuid4_and_valid_for_the_server_pattern() -> None:
 
 
 def test_wire_format_omits_none_and_keeps_schema_version() -> None:
-    env = EventEnvelope(event_type=EventType.TOOL_REQUESTED, agent=AGENT, session_id="ses_1",
-                        tool=ToolRef(name="send_email", category_hint="email"), arguments={"to": "a@b.co"})
+    env = EventEnvelope(
+        event_type=EventType.TOOL_REQUESTED,
+        agent=AGENT,
+        session_id="ses_1",
+        tool=ToolRef(name="send_email", category_hint="email"),
+        arguments={"to": "a@b.co"},
+    )
     wire = env.to_wire()
     assert wire["schema_version"] == "1.0"
     assert wire["event_type"] == "tool.requested"
@@ -77,8 +82,16 @@ def test_session_id_pattern_and_content_limit() -> None:
 
 
 def test_response_models_ignore_unknown_server_fields() -> None:
-    d = DecisionResponse.model_validate({"decision": "DENY", "enforcement": "enforced", "reason": "r",
-                                         "policy_decision_id": "pd", "tool_invocation_id": "ti", "new_field": 1})
+    d = DecisionResponse.model_validate(
+        {
+            "decision": "DENY",
+            "enforcement": "enforced",
+            "reason": "r",
+            "policy_decision_id": "pd",
+            "tool_invocation_id": "ti",
+            "new_field": 1,
+        }
+    )
     assert d.decision == "DENY" and d.restrictions == {}
     r = EventResult.model_validate({"event_id": "e", "status": "duplicate", "future": True})
     assert r.status == "duplicate"

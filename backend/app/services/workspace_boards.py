@@ -46,7 +46,15 @@ ENGINEERING_BOARD = ("Engineering", DEFAULT_TEMPLATE)
 REMEDIATION_TEMPLATE = "security_remediation"
 REMEDIATION_BOARD = ("Security Remediation", REMEDIATION_TEMPLATE)
 AUTOMATION_TRIGGERS = ("pr_linked", "verification_passed", "verification_failed", "fix_attempt_started")
-_COLUMN_FIELDS = ("name", "description", "color", "status_key", "wip_limit", "is_done_column", "requires_verification")
+_COLUMN_FIELDS = (
+    "name",
+    "description",
+    "color",
+    "status_key",
+    "wip_limit",
+    "is_done_column",
+    "requires_verification",
+)
 MAX_COLUMNS = 30
 
 
@@ -60,7 +68,9 @@ def get_board(db: Session, org_id: str, board_id: str) -> Board:
 def get_active_board(db: Session, org_id: str, board_id: str) -> Board:
     board = get_board(db, org_id, board_id)
     if board.archived_at is not None:
-        raise ConflictError(f"Board '{board.name}' is archived. Restore it before adding or moving work on it.")
+        raise ConflictError(
+            f"Board '{board.name}' is archived. Restore it before adding or moving work on it."
+        )
     return board
 
 
@@ -72,7 +82,13 @@ def list_boards(db: Session, org_id: str, *, include_archived: bool = False) -> 
 
 
 def _create_from_template(
-    db: Session, org_id: str, *, name: str, template: str, description: str | None, created_by: str | None,
+    db: Session,
+    org_id: str,
+    *,
+    name: str,
+    template: str,
+    description: str | None,
+    created_by: str | None,
     is_default: bool = False,
 ) -> Board:
     try:
@@ -80,20 +96,35 @@ def _create_from_template(
     except KeyError as exc:
         raise ValidationFailedError(str(exc.args[0])) from exc
     board = Board(
-        id=new_id("board"), organization_id=org_id, name=name, description=description or tpl["description"],
-        template=template, is_default=is_default, config={}, created_by=created_by,
+        id=new_id("board"),
+        organization_id=org_id,
+        name=name,
+        description=description or tpl["description"],
+        template=template,
+        is_default=is_default,
+        config={},
+        created_by=created_by,
     )
     db.add(board)
     db.flush()
     for position, spec in enumerate(tpl["columns"]):
-        db.add(BoardColumn(id=new_id("board_column"), organization_id=org_id, board_id=board.id, position=position,
-                           automation=[], **{k: spec[k] for k in _COLUMN_FIELDS}))
+        db.add(
+            BoardColumn(
+                id=new_id("board_column"),
+                organization_id=org_id,
+                board_id=board.id,
+                position=position,
+                automation=[],
+                **{k: spec[k] for k in _COLUMN_FIELDS},
+            )
+        )
     db.flush()
     return board
 
 
 def seed_default_board(db: Session, org_id: str, created_by: str | None = None) -> list[Board]:
     """Create the Engineering and Security Remediation boards when the organisation has no boards."""
+
     def has_boards() -> bool:
         return bool(db.scalar(select(func.count()).select_from(Board).where(Board.organization_id == org_id)))
 
@@ -103,10 +134,23 @@ def seed_default_board(db: Session, org_id: str, created_by: str | None = None) 
     if has_boards():
         return []
     boards = [
-        _create_from_template(db, org_id, name=ENGINEERING_BOARD[0], template=ENGINEERING_BOARD[1], description=None,
-                              created_by=created_by, is_default=True),
-        _create_from_template(db, org_id, name=REMEDIATION_BOARD[0], template=REMEDIATION_BOARD[1], description=None,
-                              created_by=created_by),
+        _create_from_template(
+            db,
+            org_id,
+            name=ENGINEERING_BOARD[0],
+            template=ENGINEERING_BOARD[1],
+            description=None,
+            created_by=created_by,
+            is_default=True,
+        ),
+        _create_from_template(
+            db,
+            org_id,
+            name=REMEDIATION_BOARD[0],
+            template=REMEDIATION_BOARD[1],
+            description=None,
+            created_by=created_by,
+        ),
     ]
     return boards
 
@@ -114,9 +158,11 @@ def seed_default_board(db: Session, org_id: str, created_by: str | None = None) 
 def default_board(db: Session, org_id: str, created_by: str | None = None) -> Board:
     """The organisation's default board (seeding the defaults when the organisation has no boards)."""
     seed_default_board(db, org_id, created_by)
-    board = db.scalars(select(Board).where(
-        Board.organization_id == org_id, Board.archived_at.is_(None)
-    ).order_by(Board.is_default.desc(), Board.created_at)).first()
+    board = db.scalars(
+        select(Board)
+        .where(Board.organization_id == org_id, Board.archived_at.is_(None))
+        .order_by(Board.is_default.desc(), Board.created_at)
+    ).first()
     if board is None:
         raise ConflictError("Every board is archived. Restore or create a board first.")
     return board
@@ -125,13 +171,25 @@ def default_board(db: Session, org_id: str, created_by: str | None = None) -> Bo
 def remediation_board(db: Session, org_id: str, created_by: str | None = None) -> Board:
     """The oldest active Security Remediation board, created from its template when none exists."""
     seed_default_board(db, org_id, created_by)
-    board = db.scalars(select(Board).where(
-        Board.organization_id == org_id, Board.archived_at.is_(None), Board.template == REMEDIATION_TEMPLATE,
-    ).order_by(Board.created_at)).first()
+    board = db.scalars(
+        select(Board)
+        .where(
+            Board.organization_id == org_id,
+            Board.archived_at.is_(None),
+            Board.template == REMEDIATION_TEMPLATE,
+        )
+        .order_by(Board.created_at)
+    ).first()
     if board is not None:
         return board
-    return _create_from_template(db, org_id, name=REMEDIATION_BOARD[0], template=REMEDIATION_TEMPLATE,
-                                 description=None, created_by=created_by)
+    return _create_from_template(
+        db,
+        org_id,
+        name=REMEDIATION_BOARD[0],
+        template=REMEDIATION_TEMPLATE,
+        description=None,
+        created_by=created_by,
+    )
 
 
 # ----------------------------------------------------------------------------- boards
@@ -153,8 +211,12 @@ def _validate_config(config: dict[str, Any]) -> dict[str, Any]:
 
 def create_board(db: Session, actor: Actor, *, name: str, template: str, description: str | None) -> Board:
     board = _create_from_template(
-        db, actor.org_id, name=clean_text(name, 200), template=template,
-        description=clean_optional(description, 4000), created_by=actor.user_id,
+        db,
+        actor.org_id,
+        name=clean_text(name, 200),
+        template=template,
+        description=clean_optional(description, 4000),
+        created_by=actor.user_id,
         is_default=not list_boards(db, actor.org_id),
     )
     audit_board(db, actor, board.id, "created", {"name": board.name, "template": template})
@@ -162,9 +224,11 @@ def create_board(db: Session, actor: Actor, *, name: str, template: str, descrip
 
 
 def _clear_other_defaults(db: Session, board: Board) -> None:
-    for other in db.scalars(select(Board).where(
-        Board.organization_id == board.organization_id, Board.is_default.is_(True), Board.id != board.id
-    )):
+    for other in db.scalars(
+        select(Board).where(
+            Board.organization_id == board.organization_id, Board.is_default.is_(True), Board.id != board.id
+        )
+    ):
         other.is_default = False
 
 
@@ -195,7 +259,9 @@ def update_board(db: Session, actor: Actor, board: Board, changes: dict[str, Any
         _clear_other_defaults(db, board)
         board.is_default, changed = True, [*changed, "is_default"]
     elif changes.get("is_default") is False and board.is_default:
-        raise ConflictError("The organisation always has one default board. Make another board the default instead.")
+        raise ConflictError(
+            "The organisation always has one default board. Make another board the default instead."
+        )
     if changed:
         audit_board(db, actor, board.id, "updated", {"fields": changed})
     return changed
@@ -217,21 +283,34 @@ def archive_board(db: Session, actor: Actor, board: Board) -> None:
 def duplicate_board(db: Session, actor: Actor, board: Board, name: str | None) -> Board:
     """Copy the board's settings and column layout (with automation rules remapped). Tasks are not copied."""
     copy = Board(
-        id=new_id("board"), organization_id=board.organization_id,
-        name=clean_text(name, 200) if name else f"{board.name} (copy)"[:200], description=board.description,
-        template=board.template, is_default=False, config=dict(board.config or {}), created_by=actor.user_id,
+        id=new_id("board"),
+        organization_id=board.organization_id,
+        name=clean_text(name, 200) if name else f"{board.name} (copy)"[:200],
+        description=board.description,
+        template=board.template,
+        is_default=False,
+        config=dict(board.config or {}),
+        created_by=actor.user_id,
     )
     db.add(copy)
     db.flush()
     columns = board_columns(db, board.organization_id, board.id)
     id_map = {col.id: new_id("board_column") for col in columns}
     for col in columns:
-        db.add(BoardColumn(
-            id=id_map[col.id], organization_id=col.organization_id, board_id=copy.id, position=col.position,
-            automation=[{"trigger": r["trigger"], "move_to_column_id": id_map[r["move_to_column_id"]]}
-                        for r in (col.automation or []) if r.get("move_to_column_id") in id_map],
-            **{k: getattr(col, k) for k in _COLUMN_FIELDS},
-        ))
+        db.add(
+            BoardColumn(
+                id=id_map[col.id],
+                organization_id=col.organization_id,
+                board_id=copy.id,
+                position=col.position,
+                automation=[
+                    {"trigger": r["trigger"], "move_to_column_id": id_map[r["move_to_column_id"]]}
+                    for r in (col.automation or [])
+                    if r.get("move_to_column_id") in id_map
+                ],
+                **{k: getattr(col, k) for k in _COLUMN_FIELDS},
+            )
+        )
     db.flush()
     audit_board(db, actor, copy.id, "duplicated", {"source_board_id": board.id, "name": copy.name})
     return copy
@@ -267,8 +346,9 @@ def _automation_errors(rules: list[dict[str, Any]], column_id: str, board_column
 
 def _raise_if(errors: list[str]) -> None:
     if errors:
-        raise ValidationFailedError(errors[0] if len(errors) == 1 else "The column layout is invalid.",
-                                    details={"errors": errors})
+        raise ValidationFailedError(
+            errors[0] if len(errors) == 1 else "The column layout is invalid.", details={"errors": errors}
+        )
 
 
 def _as_layout(columns: list[BoardColumn]) -> list[dict[str, Any]]:
@@ -293,13 +373,19 @@ def get_board_column(db: Session, board: Board, column_id: str) -> BoardColumn:
 
 def add_column(db: Session, actor: Actor, board: Board, data: dict[str, Any]) -> BoardColumn:
     columns = board_columns(db, board.organization_id, board.id)
-    column = BoardColumn(id=new_id("board_column"), organization_id=board.organization_id, board_id=board.id,
-                         automation=[], **_column_values(data))
+    column = BoardColumn(
+        id=new_id("board_column"),
+        organization_id=board.organization_id,
+        board_id=board.id,
+        automation=[],
+        **_column_values(data),
+    )
     rules = [dict(r) for r in data.get("automation") or []]
     index = len(columns) if data.get("position") is None else min(int(data["position"]), len(columns))
     columns.insert(index, column)
-    _raise_if(_layout_errors(_as_layout(columns))
-              + _automation_errors(rules, column.id, {c.id for c in columns}))
+    _raise_if(
+        _layout_errors(_as_layout(columns)) + _automation_errors(rules, column.id, {c.id for c in columns})
+    )
     column.automation = rules
     db.add(column)
     for position, col in enumerate(columns):
@@ -309,7 +395,9 @@ def add_column(db: Session, actor: Actor, board: Board, data: dict[str, Any]) ->
     return column
 
 
-def update_column(db: Session, actor: Actor, board: Board, column: BoardColumn, changes: dict[str, Any]) -> list[str]:
+def update_column(
+    db: Session, actor: Actor, board: Board, column: BoardColumn, changes: dict[str, Any]
+) -> list[str]:
     columns = board_columns(db, board.organization_id, board.id)
     values = _column_values(changes)
     if values.get("name") is None:
@@ -317,7 +405,10 @@ def update_column(db: Session, actor: Actor, board: Board, column: BoardColumn, 
     for key in ("color", "status_key", "is_done_column", "requires_verification"):
         if key in values and values[key] is None:
             values.pop(key)
-    layout = [{**{k: getattr(c, k) for k in _COLUMN_FIELDS}, **(values if c.id == column.id else {})} for c in columns]
+    layout = [
+        {**{k: getattr(c, k) for k in _COLUMN_FIELDS}, **(values if c.id == column.id else {})}
+        for c in columns
+    ]
     errors = _layout_errors(layout)
     rules = None
     if changes.get("automation") is not None:
@@ -334,15 +425,23 @@ def update_column(db: Session, actor: Actor, board: Board, column: BoardColumn, 
     affected = _sync_completion(db, column) if column.is_done_column != was_done else 0
     if changed:
         db.flush()
-        audit_board(db, actor, board.id, "column_updated",
-                    {"column_id": column.id, "fields": changed, "tasks_completion_updated": affected})
+        audit_board(
+            db,
+            actor,
+            board.id,
+            "column_updated",
+            {"column_id": column.id, "fields": changed, "tasks_completion_updated": affected},
+        )
     return changed
 
 
 def _sync_completion(db: Session, column: BoardColumn) -> int:
     """Keep ``completed_at`` consistent when a column's done flag is changed (configuration, not a reopen)."""
-    tasks = list(db.scalars(select(Task).where(Task.organization_id == column.organization_id,
-                                               Task.column_id == column.id)))
+    tasks = list(
+        db.scalars(
+            select(Task).where(Task.organization_id == column.organization_id, Task.column_id == column.id)
+        )
+    )
     now = utcnow()
     for task in tasks:
         task.completed_at = (task.completed_at or now) if column.is_done_column else None
@@ -350,15 +449,25 @@ def _sync_completion(db: Session, column: BoardColumn) -> int:
 
 
 def delete_column(
-    db: Session, actor: Actor, board: Board, column: BoardColumn, *, move_to: str | None, override_wip: bool = False
+    db: Session,
+    actor: Actor,
+    board: Board,
+    column: BoardColumn,
+    *,
+    move_to: str | None,
+    override_wip: bool = False,
 ) -> dict[str, Any]:
     """Delete a column. Active tasks block deletion unless ``move_to`` names another column of the board."""
     columns = board_columns(db, board.organization_id, board.id)
     remaining = [c for c in columns if c.id != column.id]
     _raise_if(_layout_errors(_as_layout(remaining)))
-    tasks = list(db.scalars(select(Task).where(
-        Task.organization_id == board.organization_id, Task.column_id == column.id
-    ).order_by(Task.position, Task.number)))
+    tasks = list(
+        db.scalars(
+            select(Task)
+            .where(Task.organization_id == board.organization_id, Task.column_id == column.id)
+            .order_by(Task.position, Task.number)
+        )
+    )
     active = [t for t in tasks if t.archived_at is None]
     if active and not move_to:
         raise ConflictError(
@@ -374,20 +483,46 @@ def delete_column(
         blocked = [t for t in active if t.verification_status != "passed"]
         if gate is not None and blocked:
             raise ConflictError(
-                verification_block_message(f"{len(blocked)} task(s) including {task_key(blocked[0])}", target, gate,
-                                           blocked[0].verification_status),
-                details={"reason": "verification_required", "column_id": target.id, "gate_column_id": gate.id,
-                         "task_ids": [t.id for t in blocked]},
+                verification_block_message(
+                    f"{len(blocked)} task(s) including {task_key(blocked[0])}",
+                    target,
+                    gate,
+                    blocked[0].verification_status,
+                ),
+                details={
+                    "reason": "verification_required",
+                    "column_id": target.id,
+                    "gate_column_id": gate.id,
+                    "task_ids": [t.id for t in blocked],
+                },
             )
-        overridden = check_entry(db, target, label=f"{len(active)} task(s)", verification_status="passed",
-                                 task_id=None, override_wip=override_wip, incoming=len(active))
+        overridden = check_entry(
+            db,
+            target,
+            label=f"{len(active)} task(s)",
+            verification_status="passed",
+            task_id=None,
+            override_wip=override_wip,
+            incoming=len(active),
+        )
         for task in active:
             apply_done_transition(task, column, target)
             task.column_id = target.id
             reposition(db, task, target, None)
-            record_activity(db, task, actor.user_id, "moved", from_value=column.name, to_value=target.name,
-                            details={"from_column_id": column.id, "to_column_id": target.id,
-                                     "reason": "column_deleted", "wip_override": overridden})
+            record_activity(
+                db,
+                task,
+                actor.user_id,
+                "moved",
+                from_value=column.name,
+                to_value=target.name,
+                details={
+                    "from_column_id": column.id,
+                    "to_column_id": target.id,
+                    "reason": "column_deleted",
+                    "wip_override": overridden,
+                },
+            )
             db.flush()
     for task in tasks:
         if task.archived_at is not None:
@@ -404,8 +539,12 @@ def delete_column(
     for position, col in enumerate(remaining):
         col.position = position
     db.flush()
-    result = {"deleted_column_id": column.id, "moved_task_count": len(active),
-              "moved_to_column_id": target.id if active else None, "removed_automation_rules": removed_rules}
+    result = {
+        "deleted_column_id": column.id,
+        "moved_task_count": len(active),
+        "moved_to_column_id": target.id if active else None,
+        "removed_automation_rules": removed_rules,
+    }
     audit_board(db, actor, board.id, "column_deleted", {"name": column.name, **result})
     return result
 
@@ -416,8 +555,10 @@ def reorder_columns(db: Session, actor: Actor, board: Board, column_ids: list[st
     if len(column_ids) != len(set(column_ids)) or set(column_ids) != set(by_id):
         raise ValidationFailedError(
             "column_ids must list every column of the board exactly once.",
-            details={"errors": ["column_ids must list every column of the board exactly once"],
-                     "expected": sorted(by_id)},
+            details={
+                "errors": ["column_ids must list every column of the board exactly once"],
+                "expected": sorted(by_id),
+            },
         )
     for position, column_id in enumerate(column_ids):
         by_id[column_id].position = position

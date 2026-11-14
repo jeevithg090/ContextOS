@@ -15,23 +15,93 @@ _EMAIL_RE = re.compile(
     r"(?<![A-Za-z0-9._%+\-])[A-Za-z0-9._%+\-]{1,64}@(?P<domain>[A-Za-z0-9\-]{1,63}(?:\.[A-Za-z0-9\-]{1,63})*\.[A-Za-z]{2,24})"
     r"(?![A-Za-z0-9\-])"
 )
-_EXAMPLE_DOMAINS = ("example.com", "example.org", "example.net", "test.com", "localhost", "users.noreply.github.com")
+_EXAMPLE_DOMAINS = (
+    "example.com",
+    "example.org",
+    "example.net",
+    "test.com",
+    "localhost",
+    "users.noreply.github.com",
+)
 
 _CARD_RE = re.compile(r"(?<![\d.\-])\d(?:[ \-]?\d){12,18}(?![\d\-]|\.\d)")
-_IBAN_RE = re.compile(r"(?<![A-Za-z0-9])[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?(?![A-Za-z0-9])")
+_IBAN_RE = re.compile(
+    r"(?<![A-Za-z0-9])[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?(?![A-Za-z0-9])"
+)
 _SSN_RE = re.compile(
     r"(?i)\b(?:ssn|social\s+security(?:\s+(?:number|no\.?))?|soc\.?\s*sec\.?)\b[^0-9\n]{0,20}"
     r"(?P<ssn>\d{3}-\d{2}-\d{4})\b"
 )
 
 _IBAN_LENGTHS = {
-    "AD": 24, "AE": 23, "AT": 20, "AZ": 28, "BA": 20, "BE": 16, "BG": 22, "BH": 22, "BR": 29, "CH": 21,
-    "CR": 22, "CY": 28, "CZ": 24, "DE": 22, "DK": 18, "DO": 28, "EE": 20, "EG": 29, "ES": 24, "FI": 18,
-    "FO": 18, "FR": 27, "GB": 22, "GE": 22, "GI": 23, "GL": 18, "GR": 27, "GT": 28, "HR": 21, "HU": 28,
-    "IE": 22, "IL": 23, "IS": 26, "IT": 27, "JO": 30, "KW": 30, "KZ": 20, "LB": 28, "LI": 21, "LT": 20,
-    "LU": 20, "LV": 21, "MC": 27, "MD": 24, "ME": 22, "MK": 19, "MR": 27, "MT": 31, "MU": 30, "NL": 18,
-    "NO": 15, "PK": 24, "PL": 28, "PS": 29, "PT": 25, "QA": 29, "RO": 24, "RS": 22, "SA": 24, "SE": 24,
-    "SI": 19, "SK": 24, "SM": 27, "TN": 24, "TR": 26, "UA": 29, "VG": 24, "XK": 20,
+    "AD": 24,
+    "AE": 23,
+    "AT": 20,
+    "AZ": 28,
+    "BA": 20,
+    "BE": 16,
+    "BG": 22,
+    "BH": 22,
+    "BR": 29,
+    "CH": 21,
+    "CR": 22,
+    "CY": 28,
+    "CZ": 24,
+    "DE": 22,
+    "DK": 18,
+    "DO": 28,
+    "EE": 20,
+    "EG": 29,
+    "ES": 24,
+    "FI": 18,
+    "FO": 18,
+    "FR": 27,
+    "GB": 22,
+    "GE": 22,
+    "GI": 23,
+    "GL": 18,
+    "GR": 27,
+    "GT": 28,
+    "HR": 21,
+    "HU": 28,
+    "IE": 22,
+    "IL": 23,
+    "IS": 26,
+    "IT": 27,
+    "JO": 30,
+    "KW": 30,
+    "KZ": 20,
+    "LB": 28,
+    "LI": 21,
+    "LT": 20,
+    "LU": 20,
+    "LV": 21,
+    "MC": 27,
+    "MD": 24,
+    "ME": 22,
+    "MK": 19,
+    "MR": 27,
+    "MT": 31,
+    "MU": 30,
+    "NL": 18,
+    "NO": 15,
+    "PK": 24,
+    "PL": 28,
+    "PS": 29,
+    "PT": 25,
+    "QA": 29,
+    "RO": 24,
+    "RS": 22,
+    "SA": 24,
+    "SE": 24,
+    "SI": 19,
+    "SK": 24,
+    "SM": 27,
+    "TN": 24,
+    "TR": 26,
+    "UA": 29,
+    "VG": 24,
+    "XK": 20,
 }
 
 

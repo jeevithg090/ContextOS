@@ -14,8 +14,18 @@ AGENT = AgentRef(name="billing-bot", framework="python_sdk")
 
 server = pytest.importorskip("app.events.envelope")
 
-PAIRS = ["AgentRef", "SourceRef", "ToolRef", "DestinationRef", "DelegationRef", "MessageRef", "EventEnvelope",
-         "EventBatch", "EventResult", "DecisionResponse"]
+PAIRS = [
+    "AgentRef",
+    "SourceRef",
+    "ToolRef",
+    "DestinationRef",
+    "DelegationRef",
+    "MessageRef",
+    "EventEnvelope",
+    "EventBatch",
+    "EventResult",
+    "DecisionResponse",
+]
 
 
 @pytest.mark.parametrize("name", PAIRS)
@@ -28,10 +38,22 @@ def test_field_names_match_the_server(name: str) -> None:
 
 def test_sdk_wire_events_validate_against_the_server_model() -> None:
     envs = [
-        EventEnvelope(event_type="context.ingested", agent=AGENT, session_id="ses_1",
-                      source=SourceRef(type="web", identifier="https://example.com"), content="hello"),
-        EventEnvelope(event_type="tool.completed", agent=AGENT, session_id="ses_1", correlation_id="cor_1",
-                      tool=ToolRef(name="t"), result={"ok": True}, metadata={"duration_ms": 1.5}),
+        EventEnvelope(
+            event_type="context.ingested",
+            agent=AGENT,
+            session_id="ses_1",
+            source=SourceRef(type="web", identifier="https://example.com"),
+            content="hello",
+        ),
+        EventEnvelope(
+            event_type="tool.completed",
+            agent=AGENT,
+            session_id="ses_1",
+            correlation_id="cor_1",
+            tool=ToolRef(name="t"),
+            result={"ok": True},
+            metadata={"duration_ms": 1.5},
+        ),
     ]
     for env in envs:
         parsed = server.EventEnvelope.model_validate(env.to_wire())

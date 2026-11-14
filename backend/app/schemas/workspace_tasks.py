@@ -66,7 +66,9 @@ class TaskPatch(_TaskFields):
 
 class TaskMove(Strict):
     column_id: str
-    position: int | None = Field(default=None, ge=0, description="Index within the target column; default end")
+    position: int | None = Field(
+        default=None, ge=0, description="Index within the target column; default end"
+    )
     override_wip: bool = False
 
 

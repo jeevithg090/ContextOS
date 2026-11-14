@@ -28,7 +28,10 @@ def _event_query(org_id: str, bound_agent_id: str | None) -> Select[Any]:
     query = (
         select(*_EVENT_COLUMNS)
         .outerjoin(Agent, (Agent.id == IngestedEvent.agent_id) & (Agent.organization_id == org_id))
-        .outerjoin(AgentSession, (AgentSession.id == IngestedEvent.session_id) & (AgentSession.organization_id == org_id))
+        .outerjoin(
+            AgentSession,
+            (AgentSession.id == IngestedEvent.session_id) & (AgentSession.organization_id == org_id),
+        )
         .where(IngestedEvent.organization_id == org_id)
     )
     if bound_agent_id:
@@ -39,12 +42,23 @@ def _event_query(org_id: str, bound_agent_id: str | None) -> Select[Any]:
 def _event_dict(row: Any, *, detail: bool) -> dict[str, Any]:
     event: IngestedEvent = row[0]
     out: dict[str, Any] = {
-        "id": event.id, "client_event_id": event.client_event_id, "event_type": event.event_type,
-        "schema_version": event.schema_version, "sequence": event.sequence, "agent_id": event.agent_id,
-        "agent_name": row[1], "session_id": event.session_id, "external_session_id": row[2],
-        "correlation_id": event.correlation_id, "integration": event.integration, "occurred_at": event.occurred_at,
-        "received_at": event.received_at, "refs": event.refs or {}, "processing_status": event.processing_status,
-        "processing_error": event.processing_error, "api_key_id": event.api_key_id,
+        "id": event.id,
+        "client_event_id": event.client_event_id,
+        "event_type": event.event_type,
+        "schema_version": event.schema_version,
+        "sequence": event.sequence,
+        "agent_id": event.agent_id,
+        "agent_name": row[1],
+        "session_id": event.session_id,
+        "external_session_id": row[2],
+        "correlation_id": event.correlation_id,
+        "integration": event.integration,
+        "occurred_at": event.occurred_at,
+        "received_at": event.received_at,
+        "refs": event.refs or {},
+        "processing_status": event.processing_status,
+        "processing_error": event.processing_error,
+        "api_key_id": event.api_key_id,
         "is_simulation": bool(event.is_simulation),
     }
     if detail:
@@ -54,16 +68,26 @@ def _event_dict(row: Any, *, detail: bool) -> dict[str, Any]:
 
 
 def list_events(
-    db: Session, org_id: str, *, bound_agent_id: str | None = None, agent_id: str | None = None,
-    session_id: str | None = None, event_type: str | None = None, since: datetime | None = None,
-    processing_status: str | None = None, is_simulation: bool | None = None, limit: int = 50, offset: int = 0,
+    db: Session,
+    org_id: str,
+    *,
+    bound_agent_id: str | None = None,
+    agent_id: str | None = None,
+    session_id: str | None = None,
+    event_type: str | None = None,
+    since: datetime | None = None,
+    processing_status: str | None = None,
+    is_simulation: bool | None = None,
+    limit: int = 50,
+    offset: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
     query = _event_query(org_id, bound_agent_id)
     if agent_id:
         query = query.where(IngestedEvent.agent_id == agent_id)
     if session_id:  # the server session id, or the integration's own session id (e.g. Claude Code's)
-        query = query.where(or_(IngestedEvent.session_id == session_id,
-                                AgentSession.external_session_id == session_id))
+        query = query.where(
+            or_(IngestedEvent.session_id == session_id, AgentSession.external_session_id == session_id)
+        )
     if event_type:
         query = query.where(IngestedEvent.event_type == event_type)
     if since is not None:
@@ -82,14 +106,18 @@ def paginate_count(db: Session, query: Select[Any]) -> int:
     return int(db.scalar(select(func.count()).select_from(query.order_by(None).subquery())) or 0)
 
 
-def get_event(db: Session, org_id: str, event_id: str, *, bound_agent_id: str | None = None) -> dict[str, Any]:
+def get_event(
+    db: Session, org_id: str, event_id: str, *, bound_agent_id: str | None = None
+) -> dict[str, Any]:
     row = db.execute(_event_query(org_id, bound_agent_id).where(IngestedEvent.id == event_id)).first()
     if row is None:
         raise NotFoundError(f"Event '{event_id}' not found")
     return _event_dict(row, detail=True)
 
 
-def poll_approval(db: Session, org_id: str, approval_id: str, *, bound_agent_id: str | None = None) -> Approval:
+def poll_approval(
+    db: Session, org_id: str, approval_id: str, *, bound_agent_id: str | None = None
+) -> Approval:
     approval = get_approval_status(db, org_id, approval_id)
     if bound_agent_id and approval.agent_id != bound_agent_id:
         raise NotFoundError(f"Approval '{approval_id}' not found")
@@ -108,17 +136,26 @@ def scan_content(content: str, *, source_type: str | None, content_type: str | N
     result = analyze_content(content, source_type=source_type, content_type=content_type)
     summary = result.to_summary()
     hits = [
-        {"rule_id": h.rule_id, "category": h.category, "title": h.title, "severity": h.severity,
-         "confidence": h.confidence, "explanation": h.explanation, "technique": h.technique,
-         "excerpt": scrub_fragments(h.excerpt, raw_secrets)}
+        {
+            "rule_id": h.rule_id,
+            "category": h.category,
+            "title": h.title,
+            "severity": h.severity,
+            "confidence": h.confidence,
+            "explanation": h.explanation,
+            "technique": h.technique,
+            "excerpt": scrub_fragments(h.excerpt, raw_secrets),
+        }
         for h in result.hits
     ]
     summary["hits"] = hits
     return {
         "detection": summary,
         "hits": hits,
-        "secrets": [{"type": m.secret_type, "start": m.start, "end": m.end, "confidence": m.confidence}
-                    for m in redaction.matches],
+        "secrets": [
+            {"type": m.secret_type, "start": m.start, "end": m.end, "confidence": m.confidence}
+            for m in redaction.matches
+        ],
         "sensitivity": str(classify_sensitivity(content, redaction.matches)),
         "content_length": len(content),
         "content_sha256": sha256_hex(content),

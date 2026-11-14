@@ -21,28 +21,59 @@ def _seg(value: str) -> str:
 
 class ReadAPIMixin:
     if TYPE_CHECKING:  # provided by ContextOSClient
-        def _request(self, method: str, path: str, *, json_body: Any = None, params: dict[str, Any] | None = None,
-                     retry: Literal["all", "connect", "none"] = "all", auth: bool = True) -> Any: ...
 
-    def list_agents(self, *, limit: int = 50, offset: int = 0, search: str | None = None,
-                    include_simulated: bool = False) -> Any:
-        params = {"limit": limit, "offset": offset, "q": search,  # the server's search parameter is ``q``
-                  "include_simulated": "true" if include_simulated else None}
+        def _request(
+            self,
+            method: str,
+            path: str,
+            *,
+            json_body: Any = None,
+            params: dict[str, Any] | None = None,
+            retry: Literal["all", "connect", "none"] = "all",
+            auth: bool = True,
+        ) -> Any: ...
+
+    def list_agents(
+        self, *, limit: int = 50, offset: int = 0, search: str | None = None, include_simulated: bool = False
+    ) -> Any:
+        params = {
+            "limit": limit,
+            "offset": offset,
+            "q": search,  # the server's search parameter is ``q``
+            "include_simulated": "true" if include_simulated else None,
+        }
         return self._request("GET", "/agents", params=params)
 
-    def list_events(self, *, session_id: str | None = None, event_type: str | None = None,
-                    limit: int = 50, offset: int = 0, include_simulated: bool = False) -> Any:
-        params = {"session_id": session_id, "event_type": event_type, "limit": limit, "offset": offset,
-                  "include_simulated": "true" if include_simulated else None}
+    def list_events(
+        self,
+        *,
+        session_id: str | None = None,
+        event_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        include_simulated: bool = False,
+    ) -> Any:
+        params = {
+            "session_id": session_id,
+            "event_type": event_type,
+            "limit": limit,
+            "offset": offset,
+            "include_simulated": "true" if include_simulated else None,
+        }
         return self._request("GET", "/events", params=params)
 
     def list_policies(self, *, limit: int = 200, offset: int = 0) -> Any:
         return self._request("GET", "/policies", params={"limit": limit, "offset": offset})
 
-    def list_incidents(self, *, status: str | None = None, limit: int = 50, offset: int = 0,
-                       include_simulated: bool = False) -> Any:
-        params = {"status": status, "limit": limit, "offset": offset,
-                  "include_simulated": "true" if include_simulated else None}
+    def list_incidents(
+        self, *, status: str | None = None, limit: int = 50, offset: int = 0, include_simulated: bool = False
+    ) -> Any:
+        params = {
+            "status": status,
+            "limit": limit,
+            "offset": offset,
+            "include_simulated": "true" if include_simulated else None,
+        }
         return self._request("GET", "/incidents", params=params)
 
     def get_session(self, session_id: str) -> Any:
@@ -57,13 +88,17 @@ class ReadAPIMixin:
         except APIError as exc:
             if exc.status_code != 404:
                 raise
-        page = self._request("GET", "/sessions", params={"q": session_ref, "include_simulated": "true",
-                                                         "limit": 50})
+        page = self._request(
+            "GET", "/sessions", params={"q": session_ref, "include_simulated": "true", "limit": 50}
+        )
         for item in (page or {}).get("items", []) if isinstance(page, dict) else []:
             if isinstance(item, dict) and item.get("external_session_id") == session_ref and item.get("id"):
                 return self.get_session(str(item["id"]))
-        raise APIError(404, "not_found", f"No session '{session_ref}' (neither a ContextOS session id nor an "
-                                         "integration session id)")
+        raise APIError(
+            404,
+            "not_found",
+            f"No session '{session_ref}' (neither a ContextOS session id nor an integration session id)",
+        )
 
     def session_timeline(self, session_id: str) -> Any:
         return self._request("GET", f"/sessions/{_seg(session_id)}/timeline")

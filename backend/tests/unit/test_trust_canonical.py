@@ -64,16 +64,28 @@ def test_fullwidth_host_is_normalised() -> None:
 @pytest.mark.parametrize(
     ("source_type", "identifier", "expected"),
     [
-        ("web", "https://GitHub.com/Acme/API/blob/Main/README.md?plain=1#L3", "github.com/acme/api/blob/Main/README.md"),
+        (
+            "web",
+            "https://GitHub.com/Acme/API/blob/Main/README.md?plain=1#L3",
+            "github.com/acme/api/blob/Main/README.md",
+        ),
         ("web", "https://www.github.com/acme/api/", "github.com/acme/api"),
-        ("web", "https://raw.githubusercontent.com/Acme/API/main/src/x.py", "github.com/acme/api/blob/main/src/x.py"),
+        (
+            "web",
+            "https://raw.githubusercontent.com/Acme/API/main/src/x.py",
+            "github.com/acme/api/blob/main/src/x.py",
+        ),
         ("api", "https://api.github.com/repos/Acme/API/issues/1", "github.com/acme/api/issues/1"),
         ("repository", "git@github.com:Acme/API.git", "github.com/acme/api"),
         ("repository", "ssh://git@github.com/acme/api.git", "github.com/acme/api"),
         ("repository", "https://x-access-token:ghp_secret@github.com/acme/api.git", "github.com/acme/api"),
         ("repository", "Acme/API", "github.com/acme/api"),
         ("repository", "github.com/acme/api/tree/main/docs", "github.com/acme/api/tree/main/docs"),
-        ("repository", "https://gitlab.com/Group/Sub/Proj/-/blob/main/X.md", "gitlab.com/group/sub/proj/-/blob/main/X.md"),
+        (
+            "repository",
+            "https://gitlab.com/Group/Sub/Proj/-/blob/main/X.md",
+            "gitlab.com/group/sub/proj/-/blob/main/X.md",
+        ),
         ("repository", "https://git.acme.internal/Team/Repo.git", "git.acme.internal/Team/Repo"),
     ],
 )
@@ -124,7 +136,8 @@ def test_remote_mcp_server_url_keeps_domain() -> None:
 
 
 @pytest.mark.parametrize(
-    "identifier", ["Alice@Example.CO.UK", "Alice Smith <alice@example.co.uk>", "mailto:ALICE@example.co.uk?subject=hi"]
+    "identifier",
+    ["Alice@Example.CO.UK", "Alice Smith <alice@example.co.uk>", "mailto:ALICE@example.co.uk?subject=hi"],
 )
 def test_email_forms(identifier: str) -> None:
     assert canonicalize_source("email", identifier) == ("alice@example.co.uk", "example.co.uk")

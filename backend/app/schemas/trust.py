@@ -19,8 +19,22 @@ MatchFieldName = Literal["identifier", "domain"]
 CapabilityName = Literal["read", "instruct", "execute", "credential_access", "send"]
 DestinationKindName = Literal["domain", "ip", "email", "service", "agent", "unknown"]
 SourceTypeName = Literal[
-    "web", "repository", "file", "document", "email", "api", "mcp_server", "mcp_tool", "browser", "database",
-    "user_upload", "user_prompt", "tool_output", "agent_output", "system", "other",
+    "web",
+    "repository",
+    "file",
+    "document",
+    "email",
+    "api",
+    "mcp_server",
+    "mcp_tool",
+    "browser",
+    "database",
+    "user_upload",
+    "user_prompt",
+    "tool_output",
+    "agent_output",
+    "system",
+    "other",
 ]  # == domain.enums.SourceType
 CheckResultName = Literal["pass", "warn", "fail", "unknown"]
 
@@ -102,9 +116,12 @@ class AssessmentOut(BaseModel):
     kind: str | None = Field(default=None, description="Destinations: the resolved destination kind")
     matched_rule: RuleRefOut | None = None
     matching_rules: list[RuleRefOut] = Field(
-        default_factory=list, description="Every enabled rule that matches, in precedence order (the first decides)"
+        default_factory=list,
+        description="Every enabled rule that matches, in precedence order (the first decides)",
     )
-    checks: list[CheckOut] = Field(default_factory=list, description="Destinations: checks actually performed")
+    checks: list[CheckOut] = Field(
+        default_factory=list, description="Destinations: checks actually performed"
+    )
     not_verified: list[str] = Field(default_factory=list, description="Destinations: what was NOT verified")
 
 
@@ -142,7 +159,9 @@ class TrustRuleOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     is_default: bool = Field(description="One of the default rules installed for new organisations")
-    is_override: bool = Field(description="An exact-match destination rule created by classifying a destination")
+    is_override: bool = Field(
+        description="An exact-match destination rule created by classifying a destination"
+    )
     classified_sources: int = Field(description="Sources currently classified by this rule")
     classified_destinations: int = Field(description="Destinations currently classified by this rule")
     reassessment: ReassessSummaryOut | None = Field(
@@ -161,7 +180,8 @@ class TrustRuleCreate(BaseModel):
     pattern: str = Field(min_length=1, max_length=PATTERN_MAX)
     trust_level: TrustLevelName
     capabilities: list[CapabilityName] | None = Field(
-        default=None, description="Omit to use the level's defaults (e.g. TRUSTED sources: read, instruct, execute)"
+        default=None,
+        description="Omit to use the level's defaults (e.g. TRUSTED sources: read, instruct, execute)",
     )
     priority: int = Field(default=100, ge=0, le=PRIORITY_MAX)
     enabled: bool = True
@@ -202,17 +222,23 @@ class RuleTestIn(BaseModel):
 
     applies_to: ScopeName = "source"
     source_type: SourceTypeName = Field(default="web", description="Sources: the type of source to classify")
-    kind: DestinationKindName = Field(default="unknown", description="Destinations: kind as an integration reports it")
+    kind: DestinationKindName = Field(
+        default="unknown", description="Destinations: kind as an integration reports it"
+    )
     identifier: str = Field(min_length=1, max_length=2048)
     draft: TrustRuleCreate | None = Field(default=None, description="Evaluate as if this rule were saved")
     replace_rule_id: str | None = Field(
-        default=None, max_length=40, description="When editing a saved rule, leave its saved version out of the test"
+        default=None,
+        max_length=40,
+        description="When editing a saved rule, leave its saved version out of the test",
     )
 
 
 class RuleTestOut(BaseModel):
     assessment: AssessmentOut = Field(description="Rules only: no recorded history is taken into account")
-    draft_errors: list[str] = Field(default_factory=list, description="Why the draft could not be saved as it is")
+    draft_errors: list[str] = Field(
+        default_factory=list, description="Why the draft could not be saved as it is"
+    )
     draft_matches: bool | None = Field(default=None, description="Whether the draft's pattern matches at all")
     draft_decides: bool | None = Field(default=None, description="Whether the draft is the deciding rule")
     existing: ExistingRecordOut | None = None
@@ -234,7 +260,9 @@ class TrustSourceOut(BaseModel):
     trust_rule_name: str | None
     manually_classified: bool
     observation_count: int
-    finding_count: int = Field(description="Findings recorded for this source that are not marked false positive")
+    finding_count: int = Field(
+        description="Findings recorded for this source that are not marked false positive"
+    )
     max_finding_severity: str | None
     first_seen_at: datetime
     last_seen_at: datetime
@@ -311,7 +339,9 @@ class SourceClassifyIn(BaseModel):
     model_config = _STRICT
 
     trust_level: TrustLevelName
-    capabilities: list[CapabilityName] | None = Field(default=None, description="Omit to use the level's defaults")
+    capabilities: list[CapabilityName] | None = Field(
+        default=None, description="Omit to use the level's defaults"
+    )
     note: str = Field(min_length=1, max_length=NOTE_MAX, description="Why; recorded in the audit trail")
 
     _note = field_validator("note")(lambda v: _required_text(v))
@@ -335,7 +365,9 @@ class TrustDestinationOut(BaseModel):
     classification: str
     trust_rule_id: str | None
     trust_rule_name: str | None
-    override_rule_id: str | None = Field(description="Exact-match rule that pins this destination's classification")
+    override_rule_id: str | None = Field(
+        description="Exact-match rule that pins this destination's classification"
+    )
     transfer_count: int
     blocked_count: int = Field(description="Calls DENIED at an enforcing integration")
     sensitive_transfer_count: int
@@ -376,7 +408,9 @@ class DestinationClassifyIn(BaseModel):
     model_config = _STRICT
 
     classification: TrustLevelName
-    note: str = Field(min_length=1, max_length=NOTE_MAX, description="Why; recorded on the rule and in the audit trail")
+    note: str = Field(
+        min_length=1, max_length=NOTE_MAX, description="Why; recorded on the rule and in the audit trail"
+    )
 
     _note = field_validator("note")(lambda v: _required_text(v))
 

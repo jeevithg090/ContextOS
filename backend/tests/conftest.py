@@ -47,8 +47,9 @@ def _external_test_engine(url: str) -> Engine:
     if parsed.get_backend_name() == "postgresql":
         # Fail a test that waits on a lock (e.g. a fixture session holding a row lock a request needs)
         # instead of hanging the whole run.
-        return create_engine(url, pool_pre_ping=True,
-                             connect_args={"options": "-c lock_timeout=30s -c statement_timeout=300s"})
+        return create_engine(
+            url, pool_pre_ping=True, connect_args={"options": "-c lock_timeout=30s -c statement_timeout=300s"}
+        )
     return make_engine(url)
 
 
@@ -60,7 +61,9 @@ def _reset_tables(eng: Engine) -> None:
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() "
                 "AND pid <> pg_backend_pid() AND state IN ('idle in transaction', 'idle in transaction (aborted)')"
             )
-            names = ", ".join(conn.dialect.identifier_preparer.quote(t.name) for t in Base.metadata.sorted_tables)
+            names = ", ".join(
+                conn.dialect.identifier_preparer.quote(t.name) for t in Base.metadata.sorted_tables
+            )
             conn.exec_driver_sql(f"TRUNCATE {names} RESTART IDENTITY CASCADE")
         else:
             for table in reversed(Base.metadata.sorted_tables):
@@ -150,19 +153,40 @@ class OrgCtx:
 def _make_org(db: Session, *, name: str, role: str = Role.OWNER, scopes: list[str] | None = None) -> OrgCtx:
     from datetime import timedelta
 
-    org = models.Organization(id=new_id("organization"), name=name, slug=name.lower().replace(" ", "-") + "-" + new_id("x")[-6:].lower(), settings={})
+    org = models.Organization(
+        id=new_id("organization"),
+        name=name,
+        slug=name.lower().replace(" ", "-") + "-" + new_id("x")[-6:].lower(),
+        settings={},
+    )
     db.add(org)
     db.flush()
     email = f"{org.slug}@example.test"
     password = "correct-horse-battery-staple"
-    user = models.User(id=new_id("user"), email=email, name=f"{name} Owner", password_hash=hash_password(password))
+    user = models.User(
+        id=new_id("user"), email=email, name=f"{name} Owner", password_hash=hash_password(password)
+    )
     db.add(user)
     db.flush()
     db.add(models.Membership(id=new_id("membership"), organization_id=org.id, user_id=user.id, role=role))
     token, token_hash = generate_session_token()
-    db.add(models.AuthSession(id=new_id("auth_session"), user_id=user.id, token_hash=token_hash, expires_at=utcnow() + timedelta(hours=1)))
+    db.add(
+        models.AuthSession(
+            id=new_id("auth_session"),
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=utcnow() + timedelta(hours=1),
+        )
+    )
     raw_key, prefix, key_hash = generate_api_key()
-    key = models.ApiKey(id=new_id("api_key"), organization_id=org.id, name="test key", prefix=prefix, key_hash=key_hash, scopes=scopes or ["ingest", "decide", "read"])
+    key = models.ApiKey(
+        id=new_id("api_key"),
+        organization_id=org.id,
+        name="test key",
+        prefix=prefix,
+        key_hash=key_hash,
+        scopes=scopes or ["ingest", "decide", "read"],
+    )
     db.add(key)
     db.commit()
     return OrgCtx(org.id, user.id, email, password, token, raw_key, key.id, role)

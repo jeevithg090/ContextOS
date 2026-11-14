@@ -86,15 +86,19 @@ def list_sources(
         stmt = stmt.where(ContextSource.source_type == source_type)
     if q and q.strip():
         needle = _like(q)
-        stmt = stmt.where(or_(
-            func.lower(ContextSource.identifier).like(needle, escape="\\"),
-            func.lower(ContextSource.display_name).like(needle, escape="\\"),
-            func.lower(ContextSource.domain).like(needle, escape="\\"),
-        ))
+        stmt = stmt.where(
+            or_(
+                func.lower(ContextSource.identifier).like(needle, escape="\\"),
+                func.lower(ContextSource.display_name).like(needle, escape="\\"),
+                func.lower(ContextSource.domain).like(needle, escape="\\"),
+            )
+        )
     if manual is not None:
         stmt = stmt.where(ContextSource.manually_classified.is_(manual))
     if has_findings is not None:
-        stmt = stmt.where(ContextSource.finding_count > 0 if has_findings else ContextSource.finding_count == 0)
+        stmt = stmt.where(
+            ContextSource.finding_count > 0 if has_findings else ContextSource.finding_count == 0
+        )
     if capability:
         stmt = stmt.where(capability_filter(capability))
     descending = sort.startswith("-")
@@ -142,8 +146,13 @@ def _manual_reason(manual: dict[str, Any]) -> str | None:
     )
 
 
-def _evidence_downgrade(row: ContextSource, rules: list[Any], ctx: Any, manual: tuple[str, list[str]] | None) -> dict[str, Any] | None:
-    if ctx.evidence.count == 0 or SEVERITY_RANK.get(ctx.evidence.max_severity or "", -1) < SEVERITY_RANK[Severity.HIGH]:
+def _evidence_downgrade(
+    row: ContextSource, rules: list[Any], ctx: Any, manual: tuple[str, list[str]] | None
+) -> dict[str, Any] | None:
+    if (
+        ctx.evidence.count == 0
+        or SEVERITY_RANK.get(ctx.evidence.max_severity or "", -1) < SEVERITY_RANK[Severity.HIGH]
+    ):
         return None
     with_evidence = assess_source_row(row, rules, ctx, manual=manual)
     without = assess_source_row(row, rules, ctx, manual=manual, ignore_evidence=True)
@@ -176,15 +185,19 @@ def source_detail(db: Session, org_id: str, row: ContextSource) -> dict[str, Any
         reasons.insert(0, manual_reason)
 
     findings_q = scoped(SecurityFinding, org_id).where(SecurityFinding.source_id == row.id)
-    findings = list(db.scalars(findings_q.order_by(SecurityFinding.last_seen_at.desc()).limit(FINDINGS_SHOWN)))
+    findings = list(
+        db.scalars(findings_q.order_by(SecurityFinding.last_seen_at.desc()).limit(FINDINGS_SHOWN))
+    )
     findings_total = int(db.scalar(select(func.count()).select_from(findings_q.subquery())) or 0)
-    items = list(db.execute(
-        select(ContextItem, Agent.name)
-        .outerjoin(Agent, (Agent.id == ContextItem.agent_id) & (Agent.organization_id == org_id))
-        .where(ContextItem.organization_id == org_id, ContextItem.source_id == row.id)
-        .order_by(ContextItem.received_at.desc())
-        .limit(ITEMS_SHOWN)
-    ))
+    items = list(
+        db.execute(
+            select(ContextItem, Agent.name)
+            .outerjoin(Agent, (Agent.id == ContextItem.agent_id) & (Agent.organization_id == org_id))
+            .where(ContextItem.organization_id == org_id, ContextItem.source_id == row.id)
+            .order_by(ContextItem.received_at.desc())
+            .limit(ITEMS_SHOWN)
+        )
+    )
     return {
         **source_out(row, {rule.id: rule.name} if rule else {}),
         "trust_reasons": reasons,
@@ -198,8 +211,13 @@ def source_detail(db: Session, org_id: str, row: ContextSource) -> dict[str, Any
         "findings_total": findings_total,
         "recent_items": [
             {
-                "id": item.id, "session_id": item.session_id, "agent_id": item.agent_id, "agent_name": agent_name,
-                "collected_via": item.collected_via, "received_at": item.received_at, "trust_level": item.trust_level,
+                "id": item.id,
+                "session_id": item.session_id,
+                "agent_id": item.agent_id,
+                "agent_name": agent_name,
+                "collected_via": item.collected_via,
+                "received_at": item.received_at,
+                "trust_level": item.trust_level,
                 "max_severity": (item.detection_summary or {}).get("max_severity"),
                 "is_simulation": bool(item.is_simulation),
             }
@@ -210,8 +228,14 @@ def source_detail(db: Session, org_id: str, row: ContextSource) -> dict[str, Any
 
 def finding_ref(f: SecurityFinding) -> dict[str, Any]:
     return {
-        "id": f.id, "title": f.title, "category": f.category, "severity": f.severity, "status": f.status,
-        "session_id": f.session_id, "occurrence_count": f.occurrence_count or 1, "last_seen_at": f.last_seen_at,
+        "id": f.id,
+        "title": f.title,
+        "category": f.category,
+        "severity": f.severity,
+        "status": f.status,
+        "session_id": f.session_id,
+        "occurrence_count": f.occurrence_count or 1,
+        "last_seen_at": f.last_seen_at,
         "is_simulation": bool(f.is_simulation),
     }
 
@@ -220,8 +244,14 @@ def finding_ref(f: SecurityFinding) -> dict[str, Any]:
 
 
 def classify_source(
-    db: Session, org_id: str, actor: Actor, row: ContextSource, *, level: str,
-    capabilities: list[str] | None, note: str,
+    db: Session,
+    org_id: str,
+    actor: Actor,
+    row: ContextSource,
+    *,
+    level: str,
+    capabilities: list[str] | None,
+    note: str,
 ) -> ContextSource:
     """Manual classification: overrides rules (not evidence), audited with the administrator's note."""
     caps = normalise_capabilities(capabilities, level, "source")
@@ -238,17 +268,31 @@ def classify_source(
     prior = store_source_assessment(row, assessment, ctx)
     db.flush()
     append_audit(
-        db, org_id, action="trust.source_classified", actor_type=actor.type, actor_id=actor.id,
-        target_type=SOURCE_TARGET, target_id=row.id,
-        details={"from": prior, "to": row.trust_level, "requested_level": level, "requested_capabilities": caps,
-                 "capabilities": list(row.trust_capabilities or []), "note": note_text, "reason": reason,
-                 "source_type": row.source_type},
+        db,
+        org_id,
+        action="trust.source_classified",
+        actor_type=actor.type,
+        actor_id=actor.id,
+        target_type=SOURCE_TARGET,
+        target_id=row.id,
+        details={
+            "from": prior,
+            "to": row.trust_level,
+            "requested_level": level,
+            "requested_capabilities": caps,
+            "capabilities": list(row.trust_capabilities or []),
+            "note": note_text,
+            "reason": reason,
+            "source_type": row.source_type,
+        },
     )
     notify(db, org_id, "trust.updated", id=row.id, kind="source")
     return row
 
 
-def reassess_source(db: Session, org_id: str, actor: Actor, row: ContextSource, *, reset_manual: bool) -> ContextSource:
+def reassess_source(
+    db: Session, org_id: str, actor: Actor, row: ContextSource, *, reset_manual: bool
+) -> ContextSource:
     """Re-run the engine with current rules and evidence; optionally clear the manual classification."""
     was_manual = bool(row.manually_classified)
     manual = manual_details(db, org_id, row) if was_manual and not reset_manual else None
@@ -264,10 +308,20 @@ def reassess_source(db: Session, org_id: str, actor: Actor, row: ContextSource, 
     prior = store_source_assessment(row, assessment, ctx)
     db.flush()
     append_audit(
-        db, org_id, action="trust.source_reassessed", actor_type=actor.type, actor_id=actor.id,
-        target_type=SOURCE_TARGET, target_id=row.id,
-        details={"from": prior, "to": row.trust_level, "reset_manual": bool(reset_manual and was_manual),
-                 "finding_count": ctx.evidence.count, "reason": row.trust_reasons[-1] if row.trust_reasons else None},
+        db,
+        org_id,
+        action="trust.source_reassessed",
+        actor_type=actor.type,
+        actor_id=actor.id,
+        target_type=SOURCE_TARGET,
+        target_id=row.id,
+        details={
+            "from": prior,
+            "to": row.trust_level,
+            "reset_manual": bool(reset_manual and was_manual),
+            "finding_count": ctx.evidence.count,
+            "reason": row.trust_reasons[-1] if row.trust_reasons else None,
+        },
     )
     notify(db, org_id, "trust.updated", id=row.id, kind="source")
     return row

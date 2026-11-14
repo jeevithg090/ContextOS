@@ -32,7 +32,10 @@ def test_async_allow_runs_and_reports(tmp_path: Path) -> None:
     assert asyncio.iscoroutinefunction(fetch_url)
     result = asyncio.run(fetch_url("https://api.example.com/v1/items"))
     assert result == {"status": 200, "url": "https://api.example.com/v1/items"}
-    assert server.bodies("POST", "/api/v1/decide")[0]["destination"] == {"kind": "domain", "identifier": "api.example.com"}
+    assert server.bodies("POST", "/api/v1/decide")[0]["destination"] == {
+        "kind": "domain",
+        "identifier": "api.example.com",
+    }
     assert server.events_of("tool.completed")[0]["result"] == result
 
 
@@ -100,8 +103,10 @@ def test_async_session_scopes_concurrent_tasks(tmp_path: Path) -> None:
 
     ids = asyncio.run(main())
     assert len(set(ids)) == 2
-    decided = {json.loads(r.content)["arguments"]["q"]: json.loads(r.content)["session_id"]
-               for r in server.calls("POST", "/api/v1/decide")}
+    decided = {
+        json.loads(r.content)["arguments"]["q"]: json.loads(r.content)["session_id"]
+        for r in server.calls("POST", "/api/v1/decide")
+    }
     assert decided == {"a": ids[0], "b": ids[1]}
     assert current_session() is None
 
@@ -117,8 +122,12 @@ def test_session_reporting_helpers(tmp_path: Path) -> None:
             child.prompt("go")
     ingested = server.events_of("context.ingested")[0]
     assert len(ingested["content"]) == 200_000 and ingested["metadata"]["content_truncated"] is True
-    assert ingested["source"] == {"type": "web", "identifier": "https://example.com/page", "display_name": "Example",
-                                  "metadata": {}}
+    assert ingested["source"] == {
+        "type": "web",
+        "identifier": "https://example.com/page",
+        "display_name": "Example",
+        "metadata": {},
+    }
     message = server.events_of("agent.message")[0]["message"]
     assert message["from_agent"] == "planner" and message["to_agent"] == "test-agent"
     delegated = server.events_of("agent.delegated")[0]["delegation"]
@@ -134,4 +143,7 @@ def test_session_records_errors_without_hiding_them(tmp_path: Path) -> None:
     client = server.client(tmp_path)
     with pytest.raises(ValueError), AgentSession(client):
         raise ValueError("agent crashed")
-    assert server.events_of("session.ended")[0]["metadata"] == {"outcome": "error", "error_type": "ValueError"}
+    assert server.events_of("session.ended")[0]["metadata"] == {
+        "outcome": "error",
+        "error_type": "ValueError",
+    }

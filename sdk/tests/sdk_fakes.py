@@ -42,11 +42,14 @@ class FakeServer:
         self.route("GET", "/api/v1/health", {"status": "ok"})
         self.route("POST", "/api/v1/events", handler=self._accept_events)
 
-    def route(self, method: str, path: str, body: Any = None, *, status: int = 200,
-              handler: Responder | None = None) -> None:
+    def route(
+        self, method: str, path: str, body: Any = None, *, status: int = 200, handler: Responder | None = None
+    ) -> None:
         if handler is None:
+
             def handler(_: httpx.Request, body: Any = body, status: int = status) -> httpx.Response:
                 return httpx.Response(status, json=body)
+
         self.routes[(method, path)] = handler
 
     def sequence(self, method: str, path: str, responses: list[tuple[int, Any]]) -> None:
@@ -64,8 +67,10 @@ class FakeServer:
     @staticmethod
     def _accept_events(request: httpx.Request) -> httpx.Response:
         events = json.loads(request.content)["events"]
-        results = [{"event_id": e["event_id"], "status": "accepted", "ingested_event_id": f"ie_{i}"}
-                   for i, e in enumerate(events)]
+        results = [
+            {"event_id": e["event_id"], "status": "accepted", "ingested_event_id": f"ie_{i}"}
+            for i, e in enumerate(events)
+        ]
         return httpx.Response(200, json={"results": results})
 
     def handle(self, request: httpx.Request) -> httpx.Response:
@@ -75,7 +80,9 @@ class FakeServer:
         self.requests.append(request)
         responder = self.routes.get((request.method, request.url.path))
         if responder is None:
-            return httpx.Response(404, json={"error": {"code": "not_found", "message": "Not found", "details": None}})
+            return httpx.Response(
+                404, json={"error": {"code": "not_found", "message": "Not found", "details": None}}
+            )
         return responder(request)
 
     def transport(self) -> httpx.MockTransport:

@@ -109,7 +109,9 @@ class AgentSession:
         await asyncio.to_thread(self.start)
         return self
 
-    async def __aexit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: object) -> None:
+    async def __aexit__(
+        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: object
+    ) -> None:
         try:
             await asyncio.to_thread(self.end, error=exc)
         finally:
@@ -136,8 +138,13 @@ class AgentSession:
         """
         meta = dict(metadata or {})
         source = SourceRef(type=SourceType(source_type), identifier=identifier, display_name=display_name)
-        return self._emit(EventType.CONTEXT_INGESTED, source=source, content=_fit(content, meta),
-                          content_type=content_type, metadata=meta)
+        return self._emit(
+            EventType.CONTEXT_INGESTED,
+            source=source,
+            content=_fit(content, meta),
+            content_type=content_type,
+            metadata=meta,
+        )
 
     def prompt(self, content: str, *, metadata: dict[str, Any] | None = None) -> SendResult | None:
         """Report a user/system prompt submitted to the agent."""
@@ -155,8 +162,12 @@ class AgentSession:
     ) -> SendResult | None:
         """Report a message this agent received from another agent (cross-agent context)."""
         meta = dict(metadata or {})
-        ref = MessageRef(from_agent=from_agent, from_session_id=from_session_id,
-                         to_agent=to_agent or self.agent.name, content=_fit(content, meta))
+        ref = MessageRef(
+            from_agent=from_agent,
+            from_session_id=from_session_id,
+            to_agent=to_agent or self.agent.name,
+            content=_fit(content, meta),
+        )
         return self._emit(EventType.AGENT_MESSAGE, message=ref, metadata=meta)
 
     def delegate(
@@ -168,26 +179,45 @@ class AgentSession:
         metadata: dict[str, Any] | None = None,
     ) -> str:
         """Report that this session handed work to another agent. Returns the child session id."""
-        child = child_agent if isinstance(child_agent, AgentRef) else AgentRef(name=child_agent, framework=self.agent.framework)
+        child = (
+            child_agent
+            if isinstance(child_agent, AgentRef)
+            else AgentRef(name=child_agent, framework=self.agent.framework)
+        )
         child_id = child_session_id or new_session_id()
         task_text = task[:20_000] if task else None
-        self._emit(EventType.AGENT_DELEGATED,
-                   delegation=DelegationRef(child_agent=child, child_session_id=child_id, task=task_text),
-                   metadata=dict(metadata or {}))
+        self._emit(
+            EventType.AGENT_DELEGATED,
+            delegation=DelegationRef(child_agent=child, child_session_id=child_id, task=task_text),
+            metadata=dict(metadata or {}),
+        )
         return child_id
 
     def child_session(self, child_agent: AgentRef | str, task: str | None = None) -> AgentSession:
         """Report a delegation and return the (not yet started) child :class:`AgentSession`."""
-        child = child_agent if isinstance(child_agent, AgentRef) else AgentRef(name=child_agent, framework=self.agent.framework)
+        child = (
+            child_agent
+            if isinstance(child_agent, AgentRef)
+            else AgentRef(name=child_agent, framework=self.agent.framework)
+        )
         child_id = self.delegate(child, task=task)
-        return AgentSession(self.client, session_id=child_id, parent_session_id=self.session_id, agent=child,
-                            collected_via=self.collected_via)
+        return AgentSession(
+            self.client,
+            session_id=child_id,
+            parent_session_id=self.session_id,
+            agent=child,
+            collected_via=self.collected_via,
+        )
 
     def _emit(self, event_type: EventType, **fields: Any) -> SendResult | None:
         try:
             event = self.client.new_event(
-                event_type, self.session_id, agent=self.agent, parent_session_id=self.parent_session_id,
-                collected_via=self.collected_via, **fields,
+                event_type,
+                self.session_id,
+                agent=self.agent,
+                parent_session_id=self.parent_session_id,
+                collected_via=self.collected_via,
+                **fields,
             )
             return self.client.send_event(event)
         except ContextOSError as exc:

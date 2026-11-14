@@ -36,8 +36,9 @@ from contextos.redact import mask_text
 
 log = logging.getLogger("contextos.hookkit")
 
-DECIDED = frozenset({ApprovalStatus.APPROVED, ApprovalStatus.REJECTED, ApprovalStatus.EXPIRED,
-                     ApprovalStatus.CANCELLED})
+DECIDED = frozenset(
+    {ApprovalStatus.APPROVED, ApprovalStatus.REJECTED, ApprovalStatus.EXPIRED, ApprovalStatus.CANCELLED}
+)
 MAX_RECORD_AGE_S = 24 * 3600
 _LOGGING_READY: set[str] = set()
 
@@ -70,7 +71,9 @@ def read_stdin(stream: IO[bytes], limit: int, error: type[Exception]) -> bytes:
     return data
 
 
-def run_with_budget(fn: Callable[[], Any], budget_s: float, *, name: str = "contextos-hook") -> tuple[bool, Any]:
+def run_with_budget(
+    fn: Callable[[], Any], budget_s: float, *, name: str = "contextos-hook"
+) -> tuple[bool, Any]:
     """Run ``fn`` in a daemon thread; ``(finished, result)``. Exceptions propagate to the caller."""
     box: dict[str, Any] = {}
 
@@ -98,8 +101,11 @@ def clip(text: str, limit: int) -> str:
 
 def policies_text(decision: DecisionResponse) -> str:
     """The enforce-mode policies that produced this decision (an AUDIT match did not block anything)."""
-    enforced = [m for m in decision.matched_policies
-                if isinstance(m, dict) and m.get("name") and m.get("mode", "enforce") == "enforce"]
+    enforced = [
+        m
+        for m in decision.matched_policies
+        if isinstance(m, dict) and m.get("name") and m.get("mode", "enforce") == "enforce"
+    ]
     wanted = (decision.decision or "").upper()
     if any(m.get("outcome") for m in enforced):
         deciding = [m for m in enforced if str(m.get("outcome") or "").upper() == wanted]
@@ -130,7 +136,9 @@ class ApprovalOutcome:
         return self.status == ApprovalStatus.APPROVED
 
 
-def await_approval(client: ContextOSClient, approval_id: str, wait_s: float, poll_s: float = 1.5) -> ApprovalOutcome:
+def await_approval(
+    client: ContextOSClient, approval_id: str, wait_s: float, poll_s: float = 1.5
+) -> ApprovalOutcome:
     """Wait up to ``wait_s`` for a person to decide in the Approval Centre. Never raises."""
     try:
         if wait_s <= 0:

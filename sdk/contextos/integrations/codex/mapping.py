@@ -65,7 +65,14 @@ from .results import bounded_arguments, extract_result
 INTEGRATION = "openai_codex"
 FRAMEWORK = "openai_codex"
 PROVIDER = "openai_codex"
-SUPPORTED_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "SubagentStop", "SessionEnd")
+SUPPORTED_EVENTS = (
+    "SessionStart",
+    "UserPromptSubmit",
+    "PreToolUse",
+    "PostToolUse",
+    "SubagentStop",
+    "SessionEnd",
+)
 DELEGATION_TOOLS = frozenset({"spawn_agent"})
 MAX_TASK_CHARS = 20_000
 MAX_PROMPT_CHARS = 200_000
@@ -158,7 +165,9 @@ class HookInput:
             except json.JSONDecodeError:
                 return None
         if isinstance(response, list):  # content items: [{"type": "input_text", "text": "{...}"}]
-            texts = [i.get("text") for i in response if isinstance(i, Mapping) and isinstance(i.get("text"), str)]
+            texts = [
+                i.get("text") for i in response if isinstance(i, Mapping) and isinstance(i.get("text"), str)
+            ]
             try:
                 response = json.loads("".join(texts)) if texts else None
             except json.JSONDecodeError:
@@ -236,7 +245,9 @@ def base_metadata(h: HookInput) -> dict[str, Any]:
 
 
 def agent_ref(name: str, environment: str | None = None) -> AgentRef:
-    return AgentRef(name=name[:200], framework=FRAMEWORK, environment=(environment or None) and environment[:32])
+    return AgentRef(
+        name=name[:200], framework=FRAMEWORK, environment=(environment or None) and environment[:32]
+    )
 
 
 def child_agent(agent: AgentRef, h: HookInput) -> AgentRef:
@@ -251,8 +262,15 @@ def child_session_id(h: HookInput) -> str:
 
 def _new(h: HookInput, agent: AgentRef, event_type: EventType, kind: str, **fields: Any) -> EventEnvelope:
     fields.setdefault("metadata", base_metadata(h))
-    return EventEnvelope(event_id=h.event_id(kind), event_type=event_type, agent=agent, session_id=h.session_id,
-                         integration=INTEGRATION, collected_via=collected_via(h), **fields)
+    return EventEnvelope(
+        event_id=h.event_id(kind),
+        event_type=event_type,
+        agent=agent,
+        session_id=h.session_id,
+        integration=INTEGRATION,
+        collected_via=collected_via(h),
+        **fields,
+    )
 
 
 # -- builders -------------------------------------------------------------------------------------
@@ -260,8 +278,15 @@ def _new(h: HookInput, agent: AgentRef, event_type: EventType, kind: str, **fiel
 
 def tool_request(h: HookInput, agent: AgentRef) -> EventEnvelope:
     """``tool.requested`` for ``POST /decide``: the FULL tool input, never truncated."""
-    return _new(h, agent, EventType.TOOL_REQUESTED, "tool.requested", correlation_id=h.correlation_id,
-                tool=tool_ref(h), arguments=h.tool_input)
+    return _new(
+        h,
+        agent,
+        EventType.TOOL_REQUESTED,
+        "tool.requested",
+        correlation_id=h.correlation_id,
+        tool=tool_ref(h),
+        arguments=h.tool_input,
+    )
 
 
 def _delegated_task(h: HookInput) -> str | None:
@@ -282,26 +307,49 @@ def delegation(h: HookInput, agent: AgentRef) -> EventEnvelope:
     for key in ("agent_type", "model", "reasoning_effort", "fork_context"):
         if key in h.tool_input:
             meta[f"delegation_{key}"] = _short(h.tool_input[key], 400)
-    return _new(h, agent, EventType.AGENT_DELEGATED, "delegation", correlation_id=h.correlation_id,
-                delegation=DelegationRef(child_agent=child_agent(agent, h), child_session_id=child_session_id(h),
-                                         task=_truncate(task, MAX_TASK_CHARS) if task is not None else None),
-                metadata=meta)
+    return _new(
+        h,
+        agent,
+        EventType.AGENT_DELEGATED,
+        "delegation",
+        correlation_id=h.correlation_id,
+        delegation=DelegationRef(
+            child_agent=child_agent(agent, h),
+            child_session_id=child_session_id(h),
+            task=_truncate(task, MAX_TASK_CHARS) if task is not None else None,
+        ),
+        metadata=meta,
+    )
 
 
 def tool_result(h: HookInput, agent: AgentRef, *, max_result_chars: int) -> EventEnvelope:
     """``tool.completed`` (Codex has no hook for failed calls)."""
     result = extract_result(h.tool_name, h.data.get("tool_response"), max_result_chars)
-    return _new(h, agent, EventType.TOOL_COMPLETED, "tool.completed", correlation_id=h.correlation_id,
-                tool=tool_ref(h), arguments=bounded_arguments(h.tool_input), result=result,
-                metadata=base_metadata(h))
+    return _new(
+        h,
+        agent,
+        EventType.TOOL_COMPLETED,
+        "tool.completed",
+        correlation_id=h.correlation_id,
+        tool=tool_ref(h),
+        arguments=bounded_arguments(h.tool_input),
+        result=result,
+        metadata=base_metadata(h),
+    )
 
 
 def child_session_closed(h: HookInput, child: AgentRef, child_session: str, reason: str) -> EventEnvelope:
     """``session.ended`` for a delegated sub-agent's child session."""
     meta = {**base_metadata(h), "reason": reason}
-    return EventEnvelope(event_type=EventType.SESSION_ENDED, agent=child, session_id=child_session,
-                         parent_session_id=h.session_id, integration=INTEGRATION, collected_via=collected_via(h),
-                         metadata=meta)
+    return EventEnvelope(
+        event_type=EventType.SESSION_ENDED,
+        agent=child,
+        session_id=child_session,
+        parent_session_id=h.session_id,
+        integration=INTEGRATION,
+        collected_via=collected_via(h),
+        metadata=meta,
+    )
 
 
 def session_started(h: HookInput, agent: AgentRef) -> EventEnvelope:
@@ -318,7 +366,9 @@ def session_ended(h: HookInput, agent: AgentRef) -> EventEnvelope:
     return _new(h, agent, EventType.SESSION_ENDED, "session.ended", metadata=meta)
 
 
-def prompt_submitted(h: HookInput, agent: AgentRef, *, sub_agent: AgentRef | None = None) -> EventEnvelope | None:
+def prompt_submitted(
+    h: HookInput, agent: AgentRef, *, sub_agent: AgentRef | None = None
+) -> EventEnvelope | None:
     """A person's prompt, or — inside a sub-agent thread — the task its parent sent (``agent.message``)."""
     prompt = h.data.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip():
@@ -327,9 +377,12 @@ def prompt_submitted(h: HookInput, agent: AgentRef, *, sub_agent: AgentRef | Non
     meta = base_metadata(h)
     if h.subagent_id:
         meta["codex_turn"] = "subagent_input"
-        message = MessageRef(from_agent=agent.name, from_session_id=h.session_id,
-                             to_agent=(sub_agent.name if sub_agent else f"{agent.name}/subagent")[:200],
-                             content=prompt)
+        message = MessageRef(
+            from_agent=agent.name,
+            from_session_id=h.session_id,
+            to_agent=(sub_agent.name if sub_agent else f"{agent.name}/subagent")[:200],
+            content=prompt,
+        )
         return _new(h, agent, EventType.AGENT_MESSAGE, "prompt", message=message, metadata=meta)
     return _new(h, agent, EventType.PROMPT_SUBMITTED, "prompt", content=prompt, metadata=meta)
 

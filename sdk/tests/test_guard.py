@@ -90,8 +90,15 @@ def test_unknown_decision_fails_closed(server: FakeServer, client) -> None:
 
 def test_require_approval_waits_and_runs_when_approved(server: FakeServer, client) -> None:
     _decide(server, "REQUIRE_APPROVAL", approval_id="apr_1", approval_status="pending")
-    server.sequence("GET", "/api/v1/decide/approvals/apr_1", [(200, {"status": "pending"}), (200, {"status": "approved"})])
-    assert guard("deploy", client=client, approval_timeout_s=30, poll_s=0.01)(lambda env: f"deployed {env}")("prod") == "deployed prod"
+    server.sequence(
+        "GET", "/api/v1/decide/approvals/apr_1", [(200, {"status": "pending"}), (200, {"status": "approved"})]
+    )
+    assert (
+        guard("deploy", client=client, approval_timeout_s=30, poll_s=0.01)(lambda env: f"deployed {env}")(
+            "prod"
+        )
+        == "deployed prod"
+    )
     assert len(server.calls("GET", "/api/v1/decide/approvals/apr_1")) == 2
 
 
@@ -110,18 +117,27 @@ def test_require_approval_times_out_closed(server: FakeServer, tmp_path: Path) -
     server.route("GET", "/api/v1/decide/approvals/apr_1", {"status": "pending"})
     now = [0.0]
     client = server.client(tmp_path, sleep=lambda s: now.__setitem__(0, now[0] + s), clock=lambda: now[0])
-    server.route("POST", "/api/v1/decide/approvals/apr_1/cancel", {"approval_id": "apr_1", "status": "cancelled"})
-    with pytest.raises(ToolDenied, match=r"no approval decision within 10s \(approval apr_1\); the request was withdrawn"):
+    server.route(
+        "POST", "/api/v1/decide/approvals/apr_1/cancel", {"approval_id": "apr_1", "status": "cancelled"}
+    )
+    with pytest.raises(
+        ToolDenied, match=r"no approval decision within 10s \(approval apr_1\); the request was withdrawn"
+    ):
         guard("deploy", client=client, approval_timeout_s=10, poll_s=2)(lambda: "ran")()
     assert server.bodies("POST", "/api/v1/decide/approvals/apr_1/cancel") == [
-        {"reason": "guard() for 'deploy' stopped waiting after 10s."}]
+        {"reason": "guard() for 'deploy' stopped waiting after 10s."}
+    ]
 
 
 def test_an_approval_granted_as_the_wait_ends_still_runs(server: FakeServer, tmp_path: Path) -> None:
     _decide(server, "REQUIRE_APPROVAL", approval_id="apr_1", approval_status="pending")
     server.route("GET", "/api/v1/decide/approvals/apr_1", {"status": "pending"})
-    server.route("POST", "/api/v1/decide/approvals/apr_1/cancel",
-                 {"error": {"code": "conflict", "message": "decided", "details": {"status": "approved"}}}, status=409)
+    server.route(
+        "POST",
+        "/api/v1/decide/approvals/apr_1/cancel",
+        {"error": {"code": "conflict", "message": "decided", "details": {"status": "approved"}}},
+        status=409,
+    )
     now = [0.0]
     client = server.client(tmp_path, sleep=lambda s: now.__setitem__(0, now[0] + s), clock=lambda: now[0])
     assert guard("deploy", client=client, approval_timeout_s=4, poll_s=2)(lambda: "ran")() == "ran"
@@ -171,7 +187,12 @@ def test_server_error_uses_the_fail_mode(server: FakeServer, client) -> None:
 
 
 def test_rejected_key_fails_closed_even_in_open_mode(server: FakeServer, client) -> None:
-    server.route("POST", "/api/v1/decide", {"error": {"code": "unauthenticated", "message": "Invalid or revoked API key"}}, status=401)
+    server.route(
+        "POST",
+        "/api/v1/decide",
+        {"error": {"code": "unauthenticated", "message": "Invalid or revoked API key"}},
+        status=401,
+    )
     with pytest.raises(ToolDenied, match="rejected the API key"):
         guard("shell", client=client, fail_mode="open")(lambda: "ran")()
 
@@ -235,7 +256,9 @@ def test_methods_do_not_report_self(server: FakeServer, client) -> None:
     assert server.bodies("POST", "/api/v1/decide")[0]["arguments"] == {"to": "a@b.co"}
 
 
-def test_bare_decorator_uses_the_function_name(server: FakeServer, client, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_bare_decorator_uses_the_function_name(
+    server: FakeServer, client, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _decide(server, "ALLOW")
     from contextos import session as session_module
 

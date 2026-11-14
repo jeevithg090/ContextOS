@@ -56,7 +56,10 @@ _state: dict[str, str | None] = {"database_url": None}
 @app.callback()
 def _root(
     database_url: str | None = typer.Option(
-        None, "--database-url", help="Database URL to use instead of CONTEXTOS_DATABASE_URL.", show_default=False
+        None,
+        "--database-url",
+        help="Database URL to use instead of CONTEXTOS_DATABASE_URL.",
+        show_default=False,
     ),
 ) -> None:
     _state["database_url"] = database_url
@@ -129,10 +132,14 @@ def init_db() -> None:
         engine.dispose()
     head = ", ".join(result.heads)
     if result.action == "unchanged":
-        console.print(f"[green]✓[/] Database {_display_url(url)} is already at the latest migration ({head}).")
+        console.print(
+            f"[green]✓[/] Database {_display_url(url)} is already at the latest migration ({head})."
+        )
     elif result.action == "adopted":
-        console.print(f"[green]✓[/] Database {_display_url(url)} matched the current schema and was stamped at "
-                      f"{head} (it had been created without migrations).")
+        console.print(
+            f"[green]✓[/] Database {_display_url(url)} matched the current schema and was stamped at "
+            f"{head} (it had been created without migrations)."
+        )
     else:
         before = ", ".join(result.before) or "an empty database"
         console.print(f"[green]✓[/] Database {_display_url(url)} upgraded from {before} to {head}.")
@@ -144,7 +151,10 @@ def create_org(
     email: str = typer.Option(..., "--email", help="Owner's email (their login)."),
     owner_name: str = typer.Option(..., "--name-of-owner", help="Owner's display name."),
     password: str | None = typer.Option(
-        None, "--password", help="Owner password (min 10 characters). Prompted, hidden, when omitted.", show_default=False
+        None,
+        "--password",
+        help="Owner password (min 10 characters). Prompted, hidden, when omitted.",
+        show_default=False,
     ),
 ) -> None:
     """Create an organisation with an owner account and seed its security defaults."""
@@ -154,9 +164,15 @@ def create_org(
     if password is None:
         password = typer.prompt("Owner password", hide_input=True, confirmation_prompt=True)
     with _session() as db:
-        org, user = create_organization(db, name=name, owner_email=email, owner_name=owner_name, password=password)
-        policies = db.scalar(select(func.count()).select_from(SecurityPolicy).where(SecurityPolicy.organization_id == org.id))
-        rules = db.scalar(select(func.count()).select_from(TrustRule).where(TrustRule.organization_id == org.id))
+        org, user = create_organization(
+            db, name=name, owner_email=email, owner_name=owner_name, password=password
+        )
+        policies = db.scalar(
+            select(func.count()).select_from(SecurityPolicy).where(SecurityPolicy.organization_id == org.id)
+        )
+        rules = db.scalar(
+            select(func.count()).select_from(TrustRule).where(TrustRule.organization_id == org.id)
+        )
         org_id, slug, org_name, owner = org.id, org.slug, org.name, user.email
 
     table = Table(show_header=False, box=None, padding=(0, 2))
@@ -172,11 +188,18 @@ def create_org(
 def create_api_key(
     org_slug: str = typer.Option(..., "--org-slug", help="Organisation slug."),
     name: str = typer.Option(..., "--name", help="Key name, e.g. the machine or integration using it."),
-    scopes: str = typer.Option("ingest,decide", "--scopes", help="Comma-separated subset of: ingest, decide, read."),
-    agent: str | None = typer.Option(
-        None, "--agent", help="Bind the key to one agent (id or name): it can then only report that agent.", show_default=False
+    scopes: str = typer.Option(
+        "ingest,decide", "--scopes", help="Comma-separated subset of: ingest, decide, read."
     ),
-    expires_in_days: int | None = typer.Option(None, "--expires-in-days", min=1, max=3650, show_default=False),
+    agent: str | None = typer.Option(
+        None,
+        "--agent",
+        help="Bind the key to one agent (id or name): it can then only report that agent.",
+        show_default=False,
+    ),
+    expires_in_days: int | None = typer.Option(
+        None, "--expires-in-days", min=1, max=3650, show_default=False
+    ),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Print only the raw key (for scripts)."),
 ) -> None:
     """Create an integration API key. The raw key is printed once and never stored."""
@@ -190,7 +213,9 @@ def create_api_key(
         agent_id: str | None = None
         if agent:
             row = db.scalar(
-                select(Agent).where(Agent.organization_id == org.id, (Agent.id == agent) | (Agent.name == agent))
+                select(Agent).where(
+                    Agent.organization_id == org.id, (Agent.id == agent) | (Agent.name == agent)
+                )
             )
             if row is None:
                 raise _fail(
@@ -199,11 +224,18 @@ def create_api_key(
                 )
             agent_id = row.id
         key, raw, bound = create_key(
-            db, org.id, SYSTEM_ACTOR, name=name.strip(), scopes=scope_list, agent_id=agent_id,
+            db,
+            org.id,
+            SYSTEM_ACTOR,
+            name=name.strip(),
+            scopes=scope_list,
+            agent_id=agent_id,
             expires_in_days=expires_in_days,
         )
         summary = {
-            "id": key.id, "scopes": ", ".join(key.scopes), "agent": bound.name if bound else "any agent",
+            "id": key.id,
+            "scopes": ", ".join(key.scopes),
+            "agent": bound.name if bound else "any agent",
             "expires": key.expires_at.isoformat() if key.expires_at else "never",
         }
 
@@ -259,7 +291,9 @@ def seed_demo(org_slug: str = typer.Option(..., "--org-slug", help="Organisation
     except ModuleNotFoundError as exc:
         if exc.name != "app.services.simulations":
             raise
-        raise _fail("The Simulation Lab service (app.services.simulations) is not available in this build.") from exc
+        raise _fail(
+            "The Simulation Lab service (app.services.simulations) is not available in this build."
+        ) from exc
     list_scenarios = getattr(simulations, "list_scenarios", None)
     run_scenario = getattr(simulations, "run_scenario", None)
     if list_scenarios is None or run_scenario is None:
@@ -286,8 +320,10 @@ def seed_demo(org_slug: str = typer.Option(..., "--org-slug", help="Organisation
         console.print(f"[green]✓[/] {scenario_id}" + (f" — {outcome}" if outcome else ""))
     if failures:
         raise _fail(f"{failures} of {len(scenarios)} scenario(s) failed.")
-    console.print(f"Demo data generated from {len(scenarios)} scenario(s). Every row it created is flagged as a "
-                  "simulation.")
+    console.print(
+        f"Demo data generated from {len(scenarios)} scenario(s). Every row it created is flagged as a "
+        "simulation."
+    )
 
 
 @app.command()
@@ -328,8 +364,10 @@ def purge(
         table = Table(show_header=False, box=None, padding=(0, 2))
         for name in TABLES:
             table.add_row(name.replace("_", " "), str(r.counts[name]))
-        console.print(f"\n{escape(slug)}: keeps {r.retention_days} days (older than {isoformat(r.cutoff)}); "
-                      f"{r.protected_incidents} open incident(s) keep their evidence")
+        console.print(
+            f"\n{escape(slug)}: keeps {r.retention_days} days (older than {isoformat(r.cutoff)}); "
+            f"{r.protected_incidents} open incident(s) keep their evidence"
+        )
         console.print(table)
     verb = "would be deleted" if dry_run else "deleted"
     console.print(f"{sum(r.total for _, r in results)} row(s) {verb}. Audit entries are never deleted.")
@@ -346,7 +384,9 @@ def serve(
 
     settings = get_settings()
     if settings.secret_key == INSECURE_DEV_SECRET:
-        err_console.print("[yellow]Warning:[/] using the insecure development secret. Set CONTEXTOS_SECRET_KEY.")
+        err_console.print(
+            "[yellow]Warning:[/] using the insecure development secret. Set CONTEXTOS_SECRET_KEY."
+        )
     if _state["database_url"]:
         os.environ["CONTEXTOS_DATABASE_URL"] = _state["database_url"]
         get_settings.cache_clear()

@@ -48,10 +48,22 @@ R = ProvenanceRelation
 # do not raise findings.
 OPERATOR_SOURCE_TYPES = frozenset({"user_prompt", "system"})
 _TYPE_LABELS = {
-    "web": "web page", "repository": "repository", "file": "file", "document": "document", "email": "email",
-    "api": "API response", "mcp_server": "MCP server", "mcp_tool": "MCP tool", "browser": "browser page",
-    "database": "database", "user_upload": "uploaded file", "user_prompt": "user prompt",
-    "tool_output": "tool output", "agent_output": "agent output", "system": "system prompt", "other": "source",
+    "web": "web page",
+    "repository": "repository",
+    "file": "file",
+    "document": "document",
+    "email": "email",
+    "api": "API response",
+    "mcp_server": "MCP server",
+    "mcp_tool": "MCP tool",
+    "browser": "browser page",
+    "database": "database",
+    "user_upload": "uploaded file",
+    "user_prompt": "user prompt",
+    "tool_output": "tool output",
+    "agent_output": "agent output",
+    "system": "system prompt",
+    "other": "source",
 }
 
 
@@ -87,13 +99,23 @@ def label_for(source_type: str) -> str:
 def receipt_input(item: ContextItem, source: ContextSource) -> dict[str, Any]:
     """The mapping a context receipt is computed from (also used to verify it later)."""
     return {
-        "id": item.id, "organization_id": item.organization_id,
+        "id": item.id,
+        "organization_id": item.organization_id,
         "source": {"type": source.source_type, "identifier": source.identifier},
-        "trust_level": item.trust_level, "agent_id": item.agent_id, "session_id": item.session_id,
-        "event_id": item.event_id, "collected_via": item.collected_via, "collected_at": item.collected_at,
-        "received_at": item.received_at, "content_hash": item.content_hash, "content_length": item.content_length,
-        "content_type": item.content_type, "sensitivity": item.sensitivity, "contains_secrets": item.contains_secrets,
-        "secret_fingerprints": item.secret_fingerprints, "detection_summary": item.detection_summary,
+        "trust_level": item.trust_level,
+        "agent_id": item.agent_id,
+        "session_id": item.session_id,
+        "event_id": item.event_id,
+        "collected_via": item.collected_via,
+        "collected_at": item.collected_at,
+        "received_at": item.received_at,
+        "content_hash": item.content_hash,
+        "content_length": item.content_length,
+        "content_type": item.content_type,
+        "sensitivity": item.sensitivity,
+        "contains_secrets": item.contains_secrets,
+        "secret_fingerprints": item.secret_fingerprints,
+        "detection_summary": item.detection_summary,
         "tool_invocation_id": item.tool_invocation_id,
     }
 
@@ -116,14 +138,22 @@ def _apply_ceiling(assessment: TrustAssessment, ceiling: tuple[str, str] | None)
     level, reason = ceiling
     if level in TRUST_RANK and TRUST_RANK[level] < TRUST_RANK.get(assessment.level, 2):
         assessment.level = level
-        assessment.capabilities = [c for c in assessment.capabilities if c == "read"] if level != "BLOCKED" else []
+        assessment.capabilities = (
+            [c for c in assessment.capabilities if c == "read"] if level != "BLOCKED" else []
+        )
         assessment.reasons = [*assessment.reasons, reason]
     return assessment
 
 
 def _hit_dict(hit: DetectionHit) -> dict[str, Any]:
-    return {"rule_id": hit.rule_id, "category": hit.category, "severity": hit.severity,
-            "confidence": hit.confidence, "technique": hit.technique, "title": hit.title}
+    return {
+        "rule_id": hit.rule_id,
+        "category": hit.category,
+        "severity": hit.severity,
+        "confidence": hit.confidence,
+        "technique": hit.technique,
+        "title": hit.title,
+    }
 
 
 def record_context(st: PipelineState, ci: ContextInput) -> ContextOutcome:
@@ -132,30 +162,43 @@ def record_context(st: PipelineState, ci: ContextInput) -> ContextOutcome:
     settings = get_settings()
 
     canonical_raw, domain = canonicalize_source(ci.source_type, ci.identifier)
-    canonical = (redact_session_text(st, canonical_raw or ci.identifier.strip()) or "")[:2048] or ci.source_type
-    source = upsert_source(st, ci.source_type, canonical, domain, display_name=ci.display_name,
-                           metadata=ci.source_metadata)
+    canonical = (redact_session_text(st, canonical_raw or ci.identifier.strip()) or "")[
+        :2048
+    ] or ci.source_type
+    source = upsert_source(
+        st, ci.source_type, canonical, domain, display_name=ci.display_name, metadata=ci.source_metadata
+    )
 
     raw = ci.raw_text or ""
     redaction = redact_text(raw)
     st.remember_secrets(raw, redaction.matches)
-    known = find_known(st, redaction.text)  # secrets seen earlier in the session, in a form not recognised here
+    known = find_known(
+        st, redaction.text
+    )  # secrets seen earlier in the session, in a form not recognised here
     redacted_text = redact_known(redaction.text, known)
     detection = analyze_content(raw, source_type=ci.source_type, content_type=ci.content_type)
     hits = [_scrubbed(st, h) for h in detection.hits]
     high_secrets = [m for m in redaction.matches if m.confidence >= HIGH_CONFIDENCE]
     fingerprints: dict[str, dict[str, Any]] = {}
     for m in redaction.matches:
-        entry = fingerprints.setdefault(m.fingerprint, {"type": m.secret_type, "fingerprint": m.fingerprint,
-                                                        "confidence": m.confidence})
+        entry = fingerprints.setdefault(
+            m.fingerprint, {"type": m.secret_type, "fingerprint": m.fingerprint, "confidence": m.confidence}
+        )
         entry["confidence"] = max(entry["confidence"], m.confidence)
     for entry in as_matches(known):
         fingerprints.setdefault(entry["fingerprint"], entry)
-    sensitivity = Sensitivity.SECRET.value if known else str(
-        classify_sensitivity(raw, redaction.matches, identifier=ci.identifier))
+    sensitivity = (
+        Sensitivity.SECRET.value
+        if known
+        else str(classify_sensitivity(raw, redaction.matches, identifier=ci.identifier))
+    )
 
-    before = _apply_ceiling(assess_source(ci.source_type, canonical, rules=st.source_rules(),
-                                          history=_history(source, ci.inherited_level)), ci.trust_ceiling)
+    before = _apply_ceiling(
+        assess_source(
+            ci.source_type, canonical, rules=st.source_rules(), history=_history(source, ci.inherited_level)
+        ),
+        ci.trust_ceiling,
+    )
     summary = detection.to_summary()
     summary["hits"] = [_hit_dict(h) for h in hits]
     item_metadata, _ = redact_value(ci.item_metadata or {})
@@ -167,14 +210,19 @@ def record_context(st: PipelineState, ci: ContextInput) -> ContextOutcome:
         agent_id=st.agent.id,
         session_id=st.session.id,
         event_id=st.event.id,
-        collected_via=(redact_str(st.env.collected_via, limit=200) if st.env.collected_via
-                       else f"{st.integration_kind}:{st.env.event_type}"),
+        collected_via=(
+            redact_str(st.env.collected_via, limit=200)
+            if st.env.collected_via
+            else f"{st.integration_kind}:{st.env.event_type}"
+        ),
         collected_at=st.env.timestamp,
         received_at=st.now,
         content_type=ci.content_type[:64],
         content_hash=sha256_hex(raw),
         content_length=len(raw),
-        redacted_preview=preview_of(redacted_text, settings.preview_chars) if st.store_previews and raw else None,
+        redacted_preview=preview_of(redacted_text, settings.preview_chars)
+        if st.store_previews and raw
+        else None,
         sensitivity=sensitivity,
         contains_secrets=bool(high_secrets or known),
         secret_fingerprints=list(fingerprints.values()),
@@ -195,8 +243,12 @@ def record_context(st: PipelineState, ci: ContextInput) -> ContextOutcome:
 
     finding_ids = _content_findings(st, ci, item, source, hits, before)
 
-    after = _apply_ceiling(assess_source(ci.source_type, canonical, rules=st.source_rules(),
-                                         history=_history(source, ci.inherited_level)), ci.trust_ceiling)
+    after = _apply_ceiling(
+        assess_source(
+            ci.source_type, canonical, rules=st.source_rules(), history=_history(source, ci.inherited_level)
+        ),
+        ci.trust_ceiling,
+    )
     _apply_source_assessment(st, source, after, before)
     item.trust_level = after.level
     item.trust_capabilities = list(after.capabilities)
@@ -205,10 +257,19 @@ def record_context(st: PipelineState, ci: ContextInput) -> ContextOutcome:
     add_edge(st, N.SOURCE, source.id, N.CONTEXT_ITEM, item.id, R.SOURCE_PRODUCED_ITEM)
     add_edge(st, N.CONTEXT_ITEM, item.id, N.SESSION, st.session.id, R.ITEM_ENTERED_SESSION)
     if ci.tool_invocation_id:
-        add_edge(st, N.TOOL_INVOCATION, ci.tool_invocation_id, N.CONTEXT_ITEM, item.id, R.INVOCATION_RETURNED_ITEM)
+        add_edge(
+            st, N.TOOL_INVOCATION, ci.tool_invocation_id, N.CONTEXT_ITEM, item.id, R.INVOCATION_RETURNED_ITEM
+        )
     if ci.origin_session_id:
-        add_edge(st, N.SESSION, ci.origin_session_id, N.CONTEXT_ITEM, item.id, R.AGENT_MESSAGED,
-                 metadata={"origin_agent_id": ci.origin_agent_id})
+        add_edge(
+            st,
+            N.SESSION,
+            ci.origin_session_id,
+            N.CONTEXT_ITEM,
+            item.id,
+            R.AGENT_MESSAGED,
+            metadata={"origin_agent_id": ci.origin_agent_id},
+        )
     for fid in finding_ids:
         add_edge(st, N.CONTEXT_ITEM, item.id, N.FINDING, fid, R.ITEM_TRIGGERED_FINDING)
     db.flush()
@@ -221,8 +282,12 @@ def _scrubbed(st: PipelineState, hit: DetectionHit) -> DetectionHit:
 
 
 def _content_findings(
-    st: PipelineState, ci: ContextInput, item: ContextItem, source: ContextSource,
-    hits: list[DetectionHit], before: TrustAssessment,
+    st: PipelineState,
+    ci: ContextInput,
+    item: ContextItem,
+    source: ContextSource,
+    hits: list[DetectionHit],
+    before: TrustAssessment,
 ) -> list[str]:
     if not hits or ci.source_type in OPERATOR_SOURCE_TYPES:
         return []
@@ -231,8 +296,12 @@ def _content_findings(
     new_count, worst = 0, None
     for hit in hits:
         evidence = [
-            {"type": "context_item", "id": item.id, "excerpt": hit.excerpt,
-             "detail": f"rule {hit.rule_id}; revealed via {hit.technique.replace('_', ' ')}; confidence {hit.confidence:.2f}"},
+            {
+                "type": "context_item",
+                "id": item.id,
+                "excerpt": hit.excerpt,
+                "detail": f"rule {hit.rule_id}; revealed via {hit.technique.replace('_', ' ')}; confidence {hit.confidence:.2f}",
+            },
             {"type": "source", "id": source.id, "excerpt": None, "detail": f"{label} (trust {before.level})"},
             *ci.extra_evidence.get(hit.rule_id, []),
             {"type": "event", "id": st.event.id, "excerpt": None, "detail": f"{st.env.event_type} event"},
@@ -258,8 +327,12 @@ def _content_findings(
             new_count += 1
             if worst is None or SEVERITY_RANK.get(hit.severity, 0) > SEVERITY_RANK.get(worst, 0):
                 worst = hit.severity
-    instructions = [h for h in hits if h.category in INJECTION_CATEGORIES
-                    and SEVERITY_RANK.get(h.severity, 0) >= SEVERITY_RANK[Severity.MEDIUM]]
+    instructions = [
+        h
+        for h in hits
+        if h.category in INJECTION_CATEGORIES
+        and SEVERITY_RANK.get(h.severity, 0) >= SEVERITY_RANK[Severity.MEDIUM]
+    ]
     if instructions and not before.can_instruct:
         finding, _ = raise_finding(
             st,
@@ -273,8 +346,10 @@ def _content_findings(
             ),
             severity=Severity.LOW.value,
             confidence=0.9,
-            evidence=[{"type": "context_item", "id": item.id, "excerpt": instructions[0].excerpt, "detail": None},
-                      {"type": "source", "id": source.id, "excerpt": None, "detail": f"trust {before.level}"}],
+            evidence=[
+                {"type": "context_item", "id": item.id, "excerpt": instructions[0].excerpt, "detail": None},
+                {"type": "source", "id": source.id, "excerpt": None, "detail": f"trust {before.level}"},
+            ],
             source_id=source.id,
             context_item_id=item.id,
         )
@@ -301,9 +376,17 @@ def _apply_source_assessment(
         source.domain = assessment.domain
     if prior != assessment.level:
         append_audit(
-            st.db, st.ctx.org_id, action="trust.source_reclassified", actor_type="system",
-            target_type="context_source", target_id=source.id,
-            details={"from": prior, "to": assessment.level, "event_id": st.event.id,
-                     "reason": source.trust_reasons[-1] if source.trust_reasons else None},
+            st.db,
+            st.ctx.org_id,
+            action="trust.source_reclassified",
+            actor_type="system",
+            target_type="context_source",
+            target_id=source.id,
+            details={
+                "from": prior,
+                "to": assessment.level,
+                "event_id": st.event.id,
+                "reason": source.trust_reasons[-1] if source.trust_reasons else None,
+            },
         )
         notify(st.db, st.ctx.org_id, "trust.updated", id=source.id)

@@ -38,8 +38,10 @@ CONTENT_RULES: list[Rule] = [
         0.9,
         "Text tries to cancel the agent's existing instructions and replace them — a hallmark of "
         "prompt injection. Legitimate data describes things; it does not command the agent to forget its task.",
-        _rx(r"\b(?:ignore|disregard|forget|discard|override)\b[^.\n]{0,40}?\b(?:all\s+)?(?:previous|prior|above|earlier|preceding|the\s+(?:system|above))\b[^.\n]{0,20}?\b(?:instruction|instructions|prompt|prompts|rules?|directions?|context|messages)\b"
-            r"|\b(?:ignore|disregard|forget|discard|override)\b[^.\n]{0,20}?\bthe\s+system\s+message\b"),
+        _rx(
+            r"\b(?:ignore|disregard|forget|discard|override)\b[^.\n]{0,40}?\b(?:all\s+)?(?:previous|prior|above|earlier|preceding|the\s+(?:system|above))\b[^.\n]{0,20}?\b(?:instruction|instructions|prompt|prompts|rules?|directions?|context|messages)\b"
+            r"|\b(?:ignore|disregard|forget|discard|override)\b[^.\n]{0,20}?\bthe\s+system\s+message\b"
+        ),
     ),
     Rule(
         "PI-OVERRIDE-002",
@@ -49,7 +51,9 @@ CONTENT_RULES: list[Rule] = [
         0.82,
         "Text announces a fresh set of instructions or redefines the agent's task — a common way to "
         "hijack an agent through data it is merely supposed to read.",
-        _rx(r"(?:\bnew\s+instructions?\s*:|\byour\s+(?:real|actual|true|new)\s+(?:task|job|goal|mission|instructions?)\b|\bthe\s+(?:real|actual)\s+task\s+is\b|\boverride\s+(?:the\s+)?system\s+prompt\b|\bupdated?\s+system\s+prompt\s*:)"),
+        _rx(
+            r"(?:\bnew\s+instructions?\s*:|\byour\s+(?:real|actual|true|new)\s+(?:task|job|goal|mission|instructions?)\b|\bthe\s+(?:real|actual)\s+task\s+is\b|\boverride\s+(?:the\s+)?system\s+prompt\b|\bupdated?\s+system\s+prompt\s*:)"
+        ),
     ),
     Rule(
         "PI-ROLE-001",
@@ -59,7 +63,9 @@ CONTENT_RULES: list[Rule] = [
         0.8,
         "Text impersonates a system or developer message, or fabricates conversation turns, to make "
         "the agent treat injected data as a privileged instruction.",
-        _rx(r"(?:<\s*/?\s*system\s*>|\[\s*system\s*\]|\[\s*/?\s*INST\s*\]|#{1,4}\s*system\b|<\|\s*(?:im_start|system|assistant|user)\s*\|>|\b(?:system|developer)\s+(?:message|prompt)\s*:|\bbegin\s+system\s+prompt\b)"),
+        _rx(
+            r"(?:<\s*/?\s*system\s*>|\[\s*system\s*\]|\[\s*/?\s*INST\s*\]|#{1,4}\s*system\b|<\|\s*(?:im_start|system|assistant|user)\s*\|>|\b(?:system|developer)\s+(?:message|prompt)\s*:|\bbegin\s+system\s+prompt\b)"
+        ),
     ),
     Rule(
         "PI-ROLE-002",
@@ -69,10 +75,12 @@ CONTENT_RULES: list[Rule] = [
         0.78,
         "Text invokes a known jailbreak persona or 'developer mode' to pressure the agent into "
         "ignoring its safety and task constraints.",
-        _rx(r"(?:\byou\s+are\s+now\s+(?:DAN|STAN|in\s+developer\s+mode|an?\s+unrestricted)\b|\byou\s+are\s+in\s+developer\s+mode\b"
+        _rx(
+            r"(?:\byou\s+are\s+now\s+(?:DAN|STAN|in\s+developer\s+mode|an?\s+unrestricted)\b|\byou\s+are\s+in\s+developer\s+mode\b"
             r"|\b(?:enable|enter|activate|switch\s+to)\s+developer\s+mode\b[^.\n]{0,40}?\b(?:bypass|ignore|disable|override|without\s+(?:rules|restrictions|filters|limits))\b"
             r"|\bas\s+an?\s+AI[, ]+you\s+must\b|\bdo\s+anything\s+now\b|\bjailbreak\s+mode\b|\b(?:enter|activate|enable)\s+jailbreak\b"
-            r"|\byou\s+(?:are|have\s+been)\s+(?:now\s+)?jailbroken\b|\bpretend\s+you\s+have\s+no\s+(?:rules|restrictions|guidelines))"),
+            r"|\byou\s+(?:are|have\s+been)\s+(?:now\s+)?jailbroken\b|\bpretend\s+you\s+have\s+no\s+(?:rules|restrictions|guidelines))"
+        ),
     ),
     Rule(
         "PI-AUTHORITY-001",
@@ -82,7 +90,9 @@ CONTENT_RULES: list[Rule] = [
         0.72,
         "Text speaks directly to the AI agent and claims authority or urgency to push it into acting "
         "on embedded data. Trusted instructions come from the user, not from the content being read.",
-        _rx(r"(?:\b(?:important|attention|urgent|note)\b[^.\n]{0,30}\bAI\b[^.\n]{0,30}(?:assistant|agent|model|reading\s+this)|\bnote\s+to\s+the\s+(?:AI|assistant|agent|model|LLM)\b|\b(?:the\s+)?user\s+has\s+(?:already\s+)?authori[sz]ed\s+you\b|\battention\s*,?\s*(?:AI|assistant|language\s+model)\b|\bif\s+you\s+are\s+an?\s+(?:AI|LLM|assistant|language\s+model)\b)"),
+        _rx(
+            r"(?:\b(?:important|attention|urgent|note)\b[^.\n]{0,30}\bAI\b[^.\n]{0,30}(?:assistant|agent|model|reading\s+this)|\bnote\s+to\s+the\s+(?:AI|assistant|agent|model|LLM)\b|\b(?:the\s+)?user\s+has\s+(?:already\s+)?authori[sz]ed\s+you\b|\battention\s*,?\s*(?:AI|assistant|language\s+model)\b|\bif\s+you\s+are\s+an?\s+(?:AI|LLM|assistant|language\s+model)\b)"
+        ),
     ),
     Rule(
         "CRED-001",
@@ -92,13 +102,15 @@ CONTENT_RULES: list[Rule] = [
         0.85,
         "Text directs the agent toward credential stores or environment secrets (.env, SSH keys, cloud "
         "credentials, environment variables) — a step toward stealing secrets the agent can reach.",
-        _rx(r"(?:\b(?:cat|read|print|open|show|display|dump|exfiltrate|send)\b[^.\n]{0,40}?"
+        _rx(
+            r"(?:\b(?:cat|read|print|open|show|display|dump|exfiltrate|send)\b[^.\n]{0,40}?"
             r"(?:(?<![\w$])\.env\b(?!\.(?:example|sample|template|dist|defaults)\b)|~?/?\.ssh/(?![\w.-]*\.pub\b)"
             r"|\bid_(?:rsa|ed25519|ecdsa|dsa)\b(?!\.pub)|\.aws/credentials\b|\.npmrc\b|\.netrc\b|secrets?\.(?:ya?ml|json|txt)\b)"
             r"|\bprint\s*env\b|\bprintenv\b"
             # the whole environment object handed to an output / transmit call (not process.env.NAME)
             r"|\b(?:log|print|dump|send|post|stringify|exfiltrate|upload|leak|show|display|reveal)\b[^.\n;]{0,30}?\bprocess\.env\b(?!\s*(?:\.\s*\w|\[))"
-            r"|\b(?:list|dump|show|read)\s+(?:all\s+)?(?:the\s+)?environment\s+variables?\b|\bfind\s+(?:all\s+)?(?:the\s+)?(?:API\s+keys?|secrets?|credentials?|passwords?|tokens?)\b)"),
+            r"|\b(?:list|dump|show|read)\s+(?:all\s+)?(?:the\s+)?environment\s+variables?\b|\bfind\s+(?:all\s+)?(?:the\s+)?(?:API\s+keys?|secrets?|credentials?|passwords?|tokens?)\b)"
+        ),
     ),
     Rule(
         "EXFIL-001",
@@ -108,11 +120,13 @@ CONTENT_RULES: list[Rule] = [
         0.88,
         "Text instructs the agent to transmit data to an external URL, webhook, or email — the "
         "outbound leg of a data-theft attack. Reading content should never require phoning home.",
-        _rx(r"(?:\b(?:send|post|upload|exfiltrate|transmit|forward|leak|deliver|append)\b[^.\n]{0,50}?\b(?:to|into)\b[^.\n]{0,20}?(?:https?://|webhook|ftp://|the\s+following\s+url|this\s+url|my\s+(?:server|endpoint|email|address))"
+        _rx(
+            r"(?:\b(?:send|post|upload|exfiltrate|transmit|forward|leak|deliver|append)\b[^.\n]{0,50}?\b(?:to|into)\b[^.\n]{0,20}?(?:https?://|webhook|ftp://|the\s+following\s+url|this\s+url|my\s+(?:server|endpoint|email|address))"
             r"|\b(?:curl|wget)\b[^\n]{0,80}?(?:\s-[a-zA-Z]*[dFT]\b|\s--(?:data(?:-\w+)?|form|upload-file|post-(?:data|file))\b|\s-X\s*(?:POST|PUT)\b)[^\n]{0,120}?https?://"
             r"|\b(?:curl|wget)\b[^\n]{0,20}?https?://\S+[^\n]{0,80}?(?:\s-[a-zA-Z]*[dFT]\b|\s--(?:data(?:-\w+)?|form|upload-file|post-(?:data|file))\b|\s-X\s*(?:POST|PUT)\b)"
             r"|\b(?:curl|wget)\b[^.\n]{0,60}?https?://\S+\s+(?:with|containing)\s+(?:the\s+|all\s+|your\s+)?(?:data|contents?|output|secrets?|keys?|credentials?|tokens?|files?)\b"
-            r"|\bappend\s+the\s+(?:contents?|output|results?|data)\b[^.\n]{0,30}?\b(?:to\s+)?(?:this\s+)?(?:url|link|address)\b)"),
+            r"|\bappend\s+the\s+(?:contents?|output|results?|data)\b[^.\n]{0,30}?\b(?:to\s+)?(?:this\s+)?(?:url|link|address)\b)"
+        ),
     ),
     Rule(
         "EXFIL-002",
@@ -122,7 +136,9 @@ CONTENT_RULES: list[Rule] = [
         0.84,
         "A markdown image or link embeds data in a URL query string; when rendered it silently sends "
         "that data to the attacker's server (a 'zero-click' exfiltration beacon).",
-        _rx(r"!\[[^\]]*\]\(\s*https?://[^)\s]+[?&][^)\s]*(?:\{[^}]+\}|\$\{[^}]+\}|%7[bB]|\+[a-z_]+\+|data=|q=|note=|c=)[^)\s]*\)"),
+        _rx(
+            r"!\[[^\]]*\]\(\s*https?://[^)\s]+[?&][^)\s]*(?:\{[^}]+\}|\$\{[^}]+\}|%7[bB]|\+[a-z_]+\+|data=|q=|note=|c=)[^)\s]*\)"
+        ),
     ),
     Rule(
         "EXFIL-003",
@@ -132,7 +148,9 @@ CONTENT_RULES: list[Rule] = [
         0.78,
         "Text describes encoding data into DNS lookups or a similar covert channel to smuggle it out "
         "past normal network controls.",
-        _rx(r"(?:\b(?:nslookup|dig|host)\b[^.\n]{0,40}?\$\(|\bDNS\s+exfil(?:tration)?\b|\bencode\b[^.\n]{0,40}?\b(?:subdomain|DNS)\b|\.(?:oast|dnslog|burpcollaborator|interact)\.[a-z]+)"),
+        _rx(
+            r"(?:\b(?:nslookup|dig|host)\b[^.\n]{0,40}?\$\(|\bDNS\s+exfil(?:tration)?\b|\bencode\b[^.\n]{0,40}?\b(?:subdomain|DNS)\b|\.(?:oast|dnslog|burpcollaborator|interact)\.[a-z]+)"
+        ),
     ),
     Rule(
         "PI-COERCE-001",
@@ -142,7 +160,9 @@ CONTENT_RULES: list[Rule] = [
         0.76,
         "Text tries to make the agent run a command or call a tool directly from within data it is "
         "reading, rather than leaving that decision to the user.",
-        _rx(r"(?:\b(?:run|execute|eval)\b[^.\n]{0,20}?\bthe\s+following\s+(?:command|code|script|shell)\b|\brun\s+this\s+(?:command|code|script|now)\b|\bexecute\s+this\b|\bcall\s+the\s+(?:tool|function|api)\b[^.\n]{0,20}?\bwith\b|\buse\s+the\s+\w+\s+tool\s+to\b[^.\n]{0,30}?(?:send|read|delete|write|post))"),
+        _rx(
+            r"(?:\b(?:run|execute|eval)\b[^.\n]{0,20}?\bthe\s+following\s+(?:command|code|script|shell)\b|\brun\s+this\s+(?:command|code|script|now)\b|\bexecute\s+this\b|\bcall\s+the\s+(?:tool|function|api)\b[^.\n]{0,20}?\bwith\b|\buse\s+the\s+\w+\s+tool\s+to\b[^.\n]{0,30}?(?:send|read|delete|write|post))"
+        ),
     ),
     Rule(
         "PI-COERCE-002",
@@ -152,7 +172,9 @@ CONTENT_RULES: list[Rule] = [
         0.78,
         "Text tells the agent to act without asking or informing the user — an attempt to bypass the "
         "human in the loop, which legitimate content never needs to do.",
-        _rx(r"(?:\bwithout\s+(?:asking|telling|informing|notifying|alerting|confirming\s+with)\s+(?:the\s+)?user\b|\bdo\s+not\s+(?:ask|tell|inform|notify|alert)\s+(?:the\s+)?user\b|\bdon'?t\s+(?:ask|tell|inform|notify)\s+(?:the\s+)?user\b|\bsilently\b[^.\n]{0,30}\b(?:run|send|execute|delete|read|do)\b|\bwithout\s+(?:their|the\s+user'?s)\s+(?:knowledge|consent|permission))"),
+        _rx(
+            r"(?:\bwithout\s+(?:asking|telling|informing|notifying|alerting|confirming\s+with)\s+(?:the\s+)?user\b|\bdo\s+not\s+(?:ask|tell|inform|notify|alert)\s+(?:the\s+)?user\b|\bdon'?t\s+(?:ask|tell|inform|notify)\s+(?:the\s+)?user\b|\bsilently\b[^.\n]{0,30}\b(?:run|send|execute|delete|read|do)\b|\bwithout\s+(?:their|the\s+user'?s)\s+(?:knowledge|consent|permission))"
+        ),
     ),
     Rule(
         "PI-CONCEAL-001",
@@ -162,7 +184,9 @@ CONTENT_RULES: list[Rule] = [
         0.74,
         "Text asks the agent to hide this content or its actions from the user — a strong sign the "
         "content is adversarial, since legitimate data has nothing to conceal.",
-        _rx(r"(?:\b(?:don'?t|do\s+not|never)\s+(?:mention|reveal|disclose|show|tell\s+anyone\s+about|reference)\s+(?:this|these\s+instructions|the\s+above)\b|\bhide\s+this\s+from\s+the\s+user\b|\bkeep\s+this\s+(?:secret|hidden|between\s+us|confidential)\b|\bthis\s+message\s+is\s+(?:invisible|hidden)\s+to\s+the\s+user)"),
+        _rx(
+            r"(?:\b(?:don'?t|do\s+not|never)\s+(?:mention|reveal|disclose|show|tell\s+anyone\s+about|reference)\s+(?:this|these\s+instructions|the\s+above)\b|\bhide\s+this\s+from\s+the\s+user\b|\bkeep\s+this\s+(?:secret|hidden|between\s+us|confidential)\b|\bthis\s+message\s+is\s+(?:invisible|hidden)\s+to\s+the\s+user)"
+        ),
     ),
     Rule(
         "MCP-POISON-001",
@@ -173,7 +197,9 @@ CONTENT_RULES: list[Rule] = [
         "An MCP tool description contains hidden instructions to the agent (an <IMPORTANT> block, a "
         "demand to read secret files before use, or a hidden parameter to smuggle data) — tool-"
         "poisoning that executes whenever the tool is listed.",
-        _rx(r"(?:<\s*IMPORTANT\s*>|\bbefore\s+(?:using|calling|invoking)\s+this\s+tool\b[^.\n]{0,60}?(?:read|cat|open|~/\.ssh|\.env|credentials)|\bpass\s+the\s+(?:contents?|file|output)\b[^.\n]{0,40}?\bas\s+the\s+['\"]?\w+['\"]?\s+(?:parameter|argument|field|param)\b|\b(?:do\s+not|don'?t)\s+(?:mention|tell|inform)\b[^.\n]{0,40}?\btool\b)"),
+        _rx(
+            r"(?:<\s*IMPORTANT\s*>|\bbefore\s+(?:using|calling|invoking)\s+this\s+tool\b[^.\n]{0,60}?(?:read|cat|open|~/\.ssh|\.env|credentials)|\bpass\s+the\s+(?:contents?|file|output)\b[^.\n]{0,40}?\bas\s+the\s+['\"]?\w+['\"]?\s+(?:parameter|argument|field|param)\b|\b(?:do\s+not|don'?t)\s+(?:mention|tell|inform)\b[^.\n]{0,40}?\btool\b)"
+        ),
     ),
 ]
 
@@ -251,13 +277,28 @@ _ML: dict[str, dict[str, str]] = {
 }
 
 _ML_META = {
-    "override": (FindingCategory.INSTRUCTION_OVERRIDE, "Instruction override", Severity.HIGH, 0.82,
-                 "Text in this language tells the agent to ignore its previous instructions — prompt "
-                 "injection expressed in a non-English language to evade simple filters."),
-    "cred": (FindingCategory.CREDENTIAL_ACCESS, "Credential seeking", Severity.HIGH, 0.8,
-             "Text in this language directs the agent toward credentials or environment secrets."),
-    "exfil": (FindingCategory.EXFILTRATION, "Exfiltration instruction", Severity.CRITICAL, 0.82,
-              "Text in this language instructs the agent to send data to an external URL."),
+    "override": (
+        FindingCategory.INSTRUCTION_OVERRIDE,
+        "Instruction override",
+        Severity.HIGH,
+        0.82,
+        "Text in this language tells the agent to ignore its previous instructions — prompt "
+        "injection expressed in a non-English language to evade simple filters.",
+    ),
+    "cred": (
+        FindingCategory.CREDENTIAL_ACCESS,
+        "Credential seeking",
+        Severity.HIGH,
+        0.8,
+        "Text in this language directs the agent toward credentials or environment secrets.",
+    ),
+    "exfil": (
+        FindingCategory.EXFILTRATION,
+        "Exfiltration instruction",
+        Severity.CRITICAL,
+        0.82,
+        "Text in this language instructs the agent to send data to an external URL.",
+    ),
 }
 
 
@@ -293,75 +334,203 @@ ALL_CONTENT_RULES: list[Rule] = CONTENT_RULES + MULTILINGUAL_RULES
 
 PREFILTER: dict[str, tuple[str, ...]] = {
     "PI-OVERRIDE-001": ("ignor", "disregard", "forget", "discard", "overrid"),
-    "PI-OVERRIDE-002": ("new instruction", "real task", "actual task", "true task", "new task",
-                        "overrid", "system prompt", "new\ninstruction"),
-    "PI-ROLE-001": ("<system", "[system", "[inst", "im_start", "|>", "system message",
-                    "system prompt", "developer message", "developer prompt", "begin system",
-                    "# system", "#system"),
-    "PI-ROLE-002": ("dan", "developer mode", "anything now", "jailbreak", "jailbroken", "unrestricted",
-                    "no rules", "no restriction", "pretend you", "as an ai", "as a ai"),
-    "PI-AUTHORITY-001": ("note to the", "ai assistant", "ai agent", "ai model", "ai reading",
-                        "authorized you", "authorised you", "language model", "if you are an ai",
-                        "attention, ai", "attention ai", "agents reading"),
-    "CRED-001": (".env", ".ssh", "id_", ".aws/cred", ".npmrc", ".netrc", "printenv", "print env",
-                "process.env", "environment variable", "find api", "find secret", "find credential",
-                "find password", "find token", "~/.ssh", "secrets.", "credentials"),
-    "EXFIL-001": ("send", "post ", "upload", "exfiltrat", "transmit", "forward", "leak", "deliver",
-                "curl ", "wget ", "webhook", "append the"),
+    "PI-OVERRIDE-002": (
+        "new instruction",
+        "real task",
+        "actual task",
+        "true task",
+        "new task",
+        "overrid",
+        "system prompt",
+        "new\ninstruction",
+    ),
+    "PI-ROLE-001": (
+        "<system",
+        "[system",
+        "[inst",
+        "im_start",
+        "|>",
+        "system message",
+        "system prompt",
+        "developer message",
+        "developer prompt",
+        "begin system",
+        "# system",
+        "#system",
+    ),
+    "PI-ROLE-002": (
+        "dan",
+        "developer mode",
+        "anything now",
+        "jailbreak",
+        "jailbroken",
+        "unrestricted",
+        "no rules",
+        "no restriction",
+        "pretend you",
+        "as an ai",
+        "as a ai",
+    ),
+    "PI-AUTHORITY-001": (
+        "note to the",
+        "ai assistant",
+        "ai agent",
+        "ai model",
+        "ai reading",
+        "authorized you",
+        "authorised you",
+        "language model",
+        "if you are an ai",
+        "attention, ai",
+        "attention ai",
+        "agents reading",
+    ),
+    "CRED-001": (
+        ".env",
+        ".ssh",
+        "id_",
+        ".aws/cred",
+        ".npmrc",
+        ".netrc",
+        "printenv",
+        "print env",
+        "process.env",
+        "environment variable",
+        "find api",
+        "find secret",
+        "find credential",
+        "find password",
+        "find token",
+        "~/.ssh",
+        "secrets.",
+        "credentials",
+    ),
+    "EXFIL-001": (
+        "send",
+        "post ",
+        "upload",
+        "exfiltrat",
+        "transmit",
+        "forward",
+        "leak",
+        "deliver",
+        "curl ",
+        "wget ",
+        "webhook",
+        "append the",
+    ),
     "EXFIL-002": ("data=", "note=", "${", "%7b", "?d=", "&d=", "?q=", "&q=", "?c=", "&c=", "}"),
     "EXFIL-003": ("dns", "nslookup", "dig ", "oast", "dnslog", "burpcollab", "interact.", "exfil"),
-    "PI-COERCE-001": ("run the following", "run this", "execute this", "execute the",
-                    "call the tool", "call the function", "call the api", "use the"),
-    "PI-COERCE-002": ("without asking", "without telling", "without inform", "without notif",
-                    "do not ask", "don't ask", "do not tell", "don't tell", "silently",
-                    "without their", "without the user"),
-    "PI-CONCEAL-001": ("mention", "reveal", "disclose", "hide this", "keep this", "invisible",
-                    "hidden to the"),
-    "MCP-POISON-001": ("<important", "before using this tool", "before calling this tool",
-                    "before invoking this tool", "pass the", "do not mention", "don't mention"),
+    "PI-COERCE-001": (
+        "run the following",
+        "run this",
+        "execute this",
+        "execute the",
+        "call the tool",
+        "call the function",
+        "call the api",
+        "use the",
+    ),
+    "PI-COERCE-002": (
+        "without asking",
+        "without telling",
+        "without inform",
+        "without notif",
+        "do not ask",
+        "don't ask",
+        "do not tell",
+        "don't tell",
+        "silently",
+        "without their",
+        "without the user",
+    ),
+    "PI-CONCEAL-001": (
+        "mention",
+        "reveal",
+        "disclose",
+        "hide this",
+        "keep this",
+        "invisible",
+        "hidden to the",
+    ),
+    "MCP-POISON-001": (
+        "<important",
+        "before using this tool",
+        "before calling this tool",
+        "before invoking this tool",
+        "pass the",
+        "do not mention",
+        "don't mention",
+    ),
 }
 
 # Anchor each multilingual rule on the verb roots that open its pattern (cheap substring gate).
 _ML_ANCHORS: dict[str, dict[str, tuple[str, ...]]] = {
-    "es": {"override": ("ignora", "ignore", "olvida", "descarta", "desestima", "nuevas instrucciones"),
-           "cred": ("credenciales", "contraseñ", "claves", "variables de entorno"),
-           "exfil": ("http", "envía", "envia", "sube", "publica", "manda")},
-    "fr": {"override": ("ignore", "ignorez", "oublie", "néglige", "neglige", "nouvelles instructions"),
-           "cred": ("identifiants", "mots de passe", "clés api", "cles api", "variables d'environnement"),
-           "exfil": ("http", "envoie", "téléverse", "televerse", "publie")},
-    "de": {"override": ("ignorier", "vergiss", "missachte", "verwerfe", "neue anweisungen"),
-           "cred": ("zugangsdaten", "passw", "schlüssel", "schluessel", "umgebungsvariablen"),
-           "exfil": ("http", "sende", "lade hoch", "übertrage", "uebertrage", "poste")},
-    "pt": {"override": ("ignore", "esque", "descarte", "desconsidere", "novas instruções", "novas instrucoes"),
-           "cred": ("credenciais", "senha", "chaves", "variáveis de ambiente", "variaveis de ambiente"),
-           "exfil": ("http", "envie", "carregue", "publique")},
-    "it": {"override": ("ignora", "dimentica", "scarta", "trascura", "nuove istruzioni"),
-           "cred": ("credenziali", "password", "chiavi api", "variabili d'ambiente"),
-           "exfil": ("http", "invia", "carica", "pubblica")},
-    "nl": {"override": ("negeer", "vergeet", "verwerp", "nieuwe instructies"),
-           "cred": ("inloggegevens", "wachtwoord", "sleutels", "omgevingsvariabelen"),
-           "exfil": ("http", "stuur", "upload", "verstuur", "post")},
-    "ru": {"override": ("игнорируй", "забудь", "отбрось", "не обращай", "новые инструкции"),
-           "cred": ("учётные данные", "учетные данные", "пароли", "ключи api", "переменные окружения"),
-           "exfil": ("http", "отправь", "загрузи", "выгрузи", "опубликуй")},
-    "zh": {"override": ("忽略", "忘记", "无视", "不要理会", "新指令", "新的指令"),
-           "cred": ("凭据", "凭证", "密码", "密钥", "环境变量"),
-           "exfil": ("http", "发送", "上传", "提交", "泄露")},
-    "ja": {"override": ("無視して", "忘れて", "破棄して", "新しい指示"),
-           "cred": ("認証情報", "資格情報", "パスワード", "キー", "環境変数"),
-           "exfil": ("http", "送信", "アップロード", "投稿")},
-    "ko": {"override": ("무시", "잊어", "폐기", "새 지시"),
-           "cred": ("자격", "비밀번호", "키", "환경 변수"),
-           "exfil": ("http", "전송", "업로드", "게시", "유출")},
-    "hi": {"override": ("अनदेखा", "नज़रअंदाज़", "भूल", "नए निर्देश"),
-           "cred": ("क्रेडेंशियल", "पासवर्ड", "की", "कुंजी", "एनवायरनमेंट"),
-           "exfil": ("http", "भेज", "अपलोड", "पोस्ट")},
-    "ar": {"override": ("تجاهل", "انس", "تخل عن", "تعليمات جديدة"),
-           "cred": ("بيانات الاعتماد", "كلمات المرور", "كلمة المرور", "مفاتيح", "متغيرات البيئة"),
-           "exfil": ("http", "أرسل", "ارفع", "انشر")},
-    "tr": {"override": ("yok say", "görmezden", "gormezden", "unut", "dikkate alma", "yeni talimatlar"),
-           "cred": ("kimlik bilgileri", "parola", "anahtar", "ortam değişkenleri", "ortam degiskenleri"),
-           "exfil": ("http", "gönder", "gonder", "yükle", "yukle", "paylaş", "paylas")},
+    "es": {
+        "override": ("ignora", "ignore", "olvida", "descarta", "desestima", "nuevas instrucciones"),
+        "cred": ("credenciales", "contraseñ", "claves", "variables de entorno"),
+        "exfil": ("http", "envía", "envia", "sube", "publica", "manda"),
+    },
+    "fr": {
+        "override": ("ignore", "ignorez", "oublie", "néglige", "neglige", "nouvelles instructions"),
+        "cred": ("identifiants", "mots de passe", "clés api", "cles api", "variables d'environnement"),
+        "exfil": ("http", "envoie", "téléverse", "televerse", "publie"),
+    },
+    "de": {
+        "override": ("ignorier", "vergiss", "missachte", "verwerfe", "neue anweisungen"),
+        "cred": ("zugangsdaten", "passw", "schlüssel", "schluessel", "umgebungsvariablen"),
+        "exfil": ("http", "sende", "lade hoch", "übertrage", "uebertrage", "poste"),
+    },
+    "pt": {
+        "override": ("ignore", "esque", "descarte", "desconsidere", "novas instruções", "novas instrucoes"),
+        "cred": ("credenciais", "senha", "chaves", "variáveis de ambiente", "variaveis de ambiente"),
+        "exfil": ("http", "envie", "carregue", "publique"),
+    },
+    "it": {
+        "override": ("ignora", "dimentica", "scarta", "trascura", "nuove istruzioni"),
+        "cred": ("credenziali", "password", "chiavi api", "variabili d'ambiente"),
+        "exfil": ("http", "invia", "carica", "pubblica"),
+    },
+    "nl": {
+        "override": ("negeer", "vergeet", "verwerp", "nieuwe instructies"),
+        "cred": ("inloggegevens", "wachtwoord", "sleutels", "omgevingsvariabelen"),
+        "exfil": ("http", "stuur", "upload", "verstuur", "post"),
+    },
+    "ru": {
+        "override": ("игнорируй", "забудь", "отбрось", "не обращай", "новые инструкции"),
+        "cred": ("учётные данные", "учетные данные", "пароли", "ключи api", "переменные окружения"),
+        "exfil": ("http", "отправь", "загрузи", "выгрузи", "опубликуй"),
+    },
+    "zh": {
+        "override": ("忽略", "忘记", "无视", "不要理会", "新指令", "新的指令"),
+        "cred": ("凭据", "凭证", "密码", "密钥", "环境变量"),
+        "exfil": ("http", "发送", "上传", "提交", "泄露"),
+    },
+    "ja": {
+        "override": ("無視して", "忘れて", "破棄して", "新しい指示"),
+        "cred": ("認証情報", "資格情報", "パスワード", "キー", "環境変数"),
+        "exfil": ("http", "送信", "アップロード", "投稿"),
+    },
+    "ko": {
+        "override": ("무시", "잊어", "폐기", "새 지시"),
+        "cred": ("자격", "비밀번호", "키", "환경 변수"),
+        "exfil": ("http", "전송", "업로드", "게시", "유출"),
+    },
+    "hi": {
+        "override": ("अनदेखा", "नज़रअंदाज़", "भूल", "नए निर्देश"),
+        "cred": ("क्रेडेंशियल", "पासवर्ड", "की", "कुंजी", "एनवायरनमेंट"),
+        "exfil": ("http", "भेज", "अपलोड", "पोस्ट"),
+    },
+    "ar": {
+        "override": ("تجاهل", "انس", "تخل عن", "تعليمات جديدة"),
+        "cred": ("بيانات الاعتماد", "كلمات المرور", "كلمة المرور", "مفاتيح", "متغيرات البيئة"),
+        "exfil": ("http", "أرسل", "ارفع", "انشر"),
+    },
+    "tr": {
+        "override": ("yok say", "görmezden", "gormezden", "unut", "dikkate alma", "yeni talimatlar"),
+        "cred": ("kimlik bilgileri", "parola", "anahtar", "ortam değişkenleri", "ortam degiskenleri"),
+        "exfil": ("http", "gönder", "gonder", "yükle", "yukle", "paylaş", "paylas"),
+    },
 }
 
 for _lang, _fams in _ML_ANCHORS.items():

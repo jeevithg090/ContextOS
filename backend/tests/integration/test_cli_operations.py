@@ -44,8 +44,19 @@ def _session(url: str) -> Session:
 @pytest.fixture()
 def org_slug(runner, db_url) -> str:
     assert _invoke(runner, db_url, "init-db").exit_code == 0
-    result = _invoke(runner, db_url, "create-org", "--name", "Acme AI", "--email", "owner@acme.test",
-                     "--name-of-owner", "Ada Owner", "--password", PASSWORD)
+    result = _invoke(
+        runner,
+        db_url,
+        "create-org",
+        "--name",
+        "Acme AI",
+        "--email",
+        "owner@acme.test",
+        "--name-of-owner",
+        "Ada Owner",
+        "--password",
+        PASSWORD,
+    )
     assert result.exit_code == 0, result.output
     return "acme-ai"
 
@@ -94,16 +105,32 @@ def _backdated_data(url: str, slug: str) -> dict[str, str]:
         agent = Agent(id=new_id("agent"), organization_id=org.id, name="worker")
         db.add(agent)
         db.flush()
-        old = AgentSession(id=new_id("agent_session"), organization_id=org.id, agent_id=agent.id,
-                           external_session_id="old", status="ended", started_at=now - timedelta(days=201),
-                           ended_at=now - timedelta(days=200), last_event_at=now - timedelta(days=200))
+        old = AgentSession(
+            id=new_id("agent_session"),
+            organization_id=org.id,
+            agent_id=agent.id,
+            external_session_id="old",
+            status="ended",
+            started_at=now - timedelta(days=201),
+            ended_at=now - timedelta(days=200),
+            last_event_at=now - timedelta(days=200),
+        )
         db.add(old)
         db.flush()
         ids = {"org": org.id, "session": old.id}
         for key, days, session_id in (("old_event", 200, old.id), ("new_event", 1, None)):
-            row = IngestedEvent(id=new_id("ingested_event"), organization_id=org.id, client_event_id=new_id("x"),
-                                event_type="prompt.submitted", sequence=1, session_id=session_id, occurred_at=now,
-                                received_at=now - timedelta(days=days), payload_redacted={}, payload_hash="0" * 64)
+            row = IngestedEvent(
+                id=new_id("ingested_event"),
+                organization_id=org.id,
+                client_event_id=new_id("x"),
+                event_type="prompt.submitted",
+                sequence=1,
+                session_id=session_id,
+                occurred_at=now,
+                received_at=now - timedelta(days=days),
+                payload_redacted={},
+                payload_hash="0" * 64,
+            )
             db.add(row)
             ids[key] = row.id
         db.commit()
@@ -112,7 +139,9 @@ def _backdated_data(url: str, slug: str) -> dict[str, str]:
 
 def _count(url: str, model, org_id: str) -> int:
     with _session(url) as db:
-        return int(db.scalar(select(func.count()).select_from(model).where(model.organization_id == org_id)) or 0)
+        return int(
+            db.scalar(select(func.count()).select_from(model).where(model.organization_id == org_id)) or 0
+        )
 
 
 def test_purge_dry_run_then_purge_one_organisation(runner, db_url, org_slug):
@@ -132,8 +161,11 @@ def test_purge_dry_run_then_purge_one_organisation(runner, db_url, org_slug):
         events = set(db.scalars(select(IngestedEvent.id).where(IngestedEvent.organization_id == ids["org"])))
         assert events == {ids["new_event"]}
         assert db.scalar(select(AgentSession.id).where(AgentSession.id == ids["session"])) is None
-        audit = db.scalars(select(AuditEvent).where(AuditEvent.organization_id == ids["org"],
-                                                    AuditEvent.action == "retention.purged")).one()
+        audit = db.scalars(
+            select(AuditEvent).where(
+                AuditEvent.organization_id == ids["org"], AuditEvent.action == "retention.purged"
+            )
+        ).one()
         assert audit.details["counts"]["ingested_events"] == 1
 
     again = _invoke(runner, db_url, "purge")
@@ -153,12 +185,20 @@ def _fake_simulations(scenarios: list, outcomes: dict[str, object]) -> tuple[typ
     module = types.ModuleType("app.services.simulations")
 
     def run_scenario(db, org_id, scenario_id, *, triggered_by_user_id=None, agent_id=None, suite_run_id=None):
-        calls.append({"org_id": org_id, "scenario_id": scenario_id, "triggered_by_user_id": triggered_by_user_id})
+        calls.append(
+            {"org_id": org_id, "scenario_id": scenario_id, "triggered_by_user_id": triggered_by_user_id}
+        )
         outcome = outcomes.get(scenario_id)
         if isinstance(outcome, Exception):
             raise outcome
-        run = SimulationRun(id=new_id("simulation_run"), organization_id=org_id, scenario_id=scenario_id,
-                            scenario_name=scenario_id, status="completed", passed=bool(outcome))
+        run = SimulationRun(
+            id=new_id("simulation_run"),
+            organization_id=org_id,
+            scenario_id=scenario_id,
+            scenario_name=scenario_id,
+            status="completed",
+            passed=bool(outcome),
+        )
         db.add(run)
         db.flush()
         return run
@@ -168,10 +208,14 @@ def _fake_simulations(scenarios: list, outcomes: dict[str, object]) -> tuple[typ
     return module, calls
 
 
-def test_seed_demo_runs_only_demo_scenarios_with_the_simulation_contract(runner, db_url, org_slug, monkeypatch):
-    scenarios = [types.SimpleNamespace(id="prompt_injection", name="Injection", demo=True),
-                 types.SimpleNamespace(id="regression_only", name="Regression", demo=False),
-                 types.SimpleNamespace(id="credential_exfiltration", name="Exfiltration", demo=True)]
+def test_seed_demo_runs_only_demo_scenarios_with_the_simulation_contract(
+    runner, db_url, org_slug, monkeypatch
+):
+    scenarios = [
+        types.SimpleNamespace(id="prompt_injection", name="Injection", demo=True),
+        types.SimpleNamespace(id="regression_only", name="Regression", demo=False),
+        types.SimpleNamespace(id="credential_exfiltration", name="Exfiltration", demo=True),
+    ]
     module, calls = _fake_simulations(scenarios, {"prompt_injection": True, "credential_exfiltration": False})
     monkeypatch.setitem(sys.modules, "app.services.simulations", module)
     result = _invoke(runner, db_url, "seed-demo", "--org-slug", org_slug)
@@ -182,18 +226,27 @@ def test_seed_demo_runs_only_demo_scenarios_with_the_simulation_contract(runner,
     assert "credential_exfiltration — completed, expectations NOT met" in result.output
     assert "2 scenario(s)" in result.output
     with _session(db_url) as db:  # each scenario's rows were committed
-        assert {r.scenario_id for r in db.scalars(select(SimulationRun))} == {"prompt_injection",
-                                                                             "credential_exfiltration"}
+        assert {r.scenario_id for r in db.scalars(select(SimulationRun))} == {
+            "prompt_injection",
+            "credential_exfiltration",
+        }
 
 
-def test_seed_demo_runs_everything_when_nothing_is_flagged_and_reports_failures(runner, db_url, org_slug,
-                                                                                 monkeypatch):
+def test_seed_demo_runs_everything_when_nothing_is_flagged_and_reports_failures(
+    runner, db_url, org_slug, monkeypatch
+):
     scenarios = [types.SimpleNamespace(id="a"), {"id": "b"}, types.SimpleNamespace(id="c", demo=False)]
-    module, calls = _fake_simulations(scenarios, {"a": True, "b": RuntimeError("pipeline [unavailable]"), "c": True})
+    module, calls = _fake_simulations(
+        scenarios, {"a": True, "b": RuntimeError("pipeline [unavailable]"), "c": True}
+    )
     monkeypatch.setitem(sys.modules, "app.services.simulations", module)
     result = _invoke(runner, db_url, "seed-demo", "--org-slug", org_slug)
     assert [c["scenario_id"] for c in calls] == ["a", "b", "c"]
-    assert result.exit_code == 1 and "pipeline [unavailable]" in result.output and "1 of 3 scenario(s) failed" in result.output
+    assert (
+        result.exit_code == 1
+        and "pipeline [unavailable]" in result.output
+        and "1 of 3 scenario(s) failed" in result.output
+    )
     with _session(db_url) as db:  # the failed scenario rolled back; the others were kept
         assert {r.scenario_id for r in db.scalars(select(SimulationRun))} == {"a", "c"}
 
@@ -207,8 +260,12 @@ def test_seed_demo_with_the_real_simulation_lab(runner, db_url, org_slug):
     with _session(db_url) as db:
         runs = list(db.scalars(select(SimulationRun)))
         assert runs and all(r.status in ("completed", "failed") for r in runs)
-        assert db.scalar(select(func.count()).select_from(IngestedEvent).where(
-            IngestedEvent.is_simulation.is_(False))) == 0  # demo data is flagged as simulation
+        assert (
+            db.scalar(
+                select(func.count()).select_from(IngestedEvent).where(IngestedEvent.is_simulation.is_(False))
+            )
+            == 0
+        )  # demo data is flagged as simulation
 
 
 def test_create_org_bootstrap_seeds_the_default_boards(runner, db_url, org_slug):
@@ -217,7 +274,12 @@ def test_create_org_bootstrap_seeds_the_default_boards(runner, db_url, org_slug)
     with _session(db_url) as db:
         org = db.scalars(select(Organization).where(Organization.slug == org_slug)).one()
         assert {b.name for b in db.scalars(select(Board).where(Board.organization_id == org.id))} == {
-            "Engineering", "Security Remediation"}
-        seeded = db.scalars(select(AuditEvent).where(AuditEvent.organization_id == org.id,
-                                                     AuditEvent.action == "organization.defaults_seeded")).one()
+            "Engineering",
+            "Security Remediation",
+        }
+        seeded = db.scalars(
+            select(AuditEvent).where(
+                AuditEvent.organization_id == org.id, AuditEvent.action == "organization.defaults_seeded"
+            )
+        ).one()
         assert seeded.details["default_board"] is True and seeded.details["boards_created"] == 2

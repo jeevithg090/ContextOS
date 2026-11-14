@@ -44,12 +44,16 @@ def _header_lines(mode: Any, preset: Any, options: GenerationOptions, title: str
     modify = may_modify_files(spec, options)
     heading = f"# {inline(title, 200)} — {spec.label}" if title else f"# Engineering task — {spec.label}"
     access = "may modify files" if modify else "read-only: do not modify any files"
-    meta = (f"**Mode:** {spec.label} ({access}) · **Agent:** {pre.label} · "
-            f"**Autonomy:** {options.autonomy.value.replace('_', ' ')} · **Depth:** {options.technical_depth.value} · "
-            f"**Security:** {options.security_requirements.value}")
+    meta = (
+        f"**Mode:** {spec.label} ({access}) · **Agent:** {pre.label} · "
+        f"**Autonomy:** {options.autonomy.value.replace('_', ' ')} · **Depth:** {options.technical_depth.value} · "
+        f"**Security:** {options.security_requirements.value}"
+    )
     rules = list(spec.instructions)
     if spec.may_modify_files and not options.allow_code_changes:
-        rules.insert(0, "Do not modify any files: code changes are disabled for this task. Propose changes as a diff.")
+        rules.insert(
+            0, "Do not modify any files: code changes are disabled for this task. Propose changes as a diff."
+        )
     if modify:
         rules.append(AUTONOMY_INSTRUCTIONS[options.autonomy])
     rules.append(DEPTH_INSTRUCTIONS[options.technical_depth])
@@ -108,10 +112,18 @@ def render_json(
         "format": FORMAT_ID,
         "version": FORMAT_VERSION,
         "title": inline(title, 200) if title else None,
-        "mode": {"key": spec.key.value, "label": spec.label, "may_modify_files": may_modify_files(spec, opts),
-                 "instructions": list(spec.instructions)},
-        "preset": {"key": pre.key.value, "label": pre.label, "instruction_file": pre.instruction_file,
-                   "notes": list(pre.notes)},
+        "mode": {
+            "key": spec.key.value,
+            "label": spec.label,
+            "may_modify_files": may_modify_files(spec, opts),
+            "instructions": list(spec.instructions),
+        },
+        "preset": {
+            "key": pre.key.value,
+            "label": pre.label,
+            "instruction_file": pre.instruction_file,
+            "notes": list(pre.notes),
+        },
         "options": opts.to_dict(),
         "sections": [s.to_dict() for s in items],
         "sources": list(dict.fromkeys(src for s in items for src in s.sources)),

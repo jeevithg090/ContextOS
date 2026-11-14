@@ -36,18 +36,26 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         status = ensure_schema_ready(get_engine(), allow_unversioned=settings.env != "production")
     except SchemaNotReadyError as exc:
-        log.error("contextos.schema_not_ready", extra={"state": exc.status.state if exc.status else None,
-                                                       "reason": str(exc)})
+        log.error(
+            "contextos.schema_not_ready",
+            extra={"state": exc.status.state if exc.status else None, "reason": str(exc)},
+        )
         raise
     bus.bind_loop(asyncio.get_running_loop())
-    log.info("contextos.started", extra={"env": settings.env, "schema": status.state,
-                                         "revision": ",".join(status.current) or None})
+    log.info(
+        "contextos.started",
+        extra={"env": settings.env, "schema": status.state, "revision": ",".join(status.current) or None},
+    )
     yield
 
 
 def _frontend_dist() -> Path | None:
     settings = get_settings()
-    candidate = Path(settings.frontend_dist) if settings.frontend_dist else Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    candidate = (
+        Path(settings.frontend_dist)
+        if settings.frontend_dist
+        else Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    )
     return candidate if (candidate / "index.html").exists() else None
 
 
@@ -92,7 +100,10 @@ def create_app() -> FastAPI:
         @app.get("/{path:path}", include_in_schema=False)
         def spa(path: str) -> FileResponse:
             if path.startswith("api/"):
-                return JSONResponse(status_code=404, content={"error": {"code": "not_found", "message": "Not found", "details": None}})  # type: ignore[return-value]
+                return JSONResponse(
+                    status_code=404,
+                    content={"error": {"code": "not_found", "message": "Not found", "details": None}},
+                )  # type: ignore[return-value]
             target = (dist / path).resolve()
             if path and target.is_file() and dist.resolve() in target.parents:
                 return FileResponse(target)

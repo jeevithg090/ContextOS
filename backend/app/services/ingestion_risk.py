@@ -36,9 +36,14 @@ from app.services.ingestion_findings import raise_finding
 from app.services.ingestion_state import PipelineState
 
 MAX_SIGNAL_ROWS = 5000
-INJECTION_CATEGORIES = frozenset({FindingCategory.PROMPT_INJECTION.value, FindingCategory.INSTRUCTION_OVERRIDE.value})
+INJECTION_CATEGORIES = frozenset(
+    {FindingCategory.PROMPT_INJECTION.value, FindingCategory.INSTRUCTION_OVERRIDE.value}
+)
 # Content that tries to steer the agent (injection proper, or instructions to reach credentials / send data).
-MANIPULATION_CATEGORIES = INJECTION_CATEGORIES | {FindingCategory.CREDENTIAL_ACCESS.value, FindingCategory.EXFILTRATION.value}
+MANIPULATION_CATEGORIES = INJECTION_CATEGORIES | {
+    FindingCategory.CREDENTIAL_ACCESS.value,
+    FindingCategory.EXFILTRATION.value,
+}
 _MEDIUM = SEVERITY_RANK[Severity.MEDIUM]
 
 # (tool_id, argument_hash) -> whether that call can transmit data. Pure function of the stored,
@@ -56,8 +61,10 @@ class SessionView:
 def manipulation_hits(summary: dict[str, Any] | None, *, min_rank: int = _MEDIUM) -> list[dict[str, Any]]:
     hits = (summary or {}).get("hits") or []
     return [
-        h for h in hits
-        if isinstance(h, dict) and h.get("category") in MANIPULATION_CATEGORIES
+        h
+        for h in hits
+        if isinstance(h, dict)
+        and h.get("category") in MANIPULATION_CATEGORIES
         and SEVERITY_RANK.get(str(h.get("severity")), 0) >= min_rank
     ]
 
@@ -81,13 +88,17 @@ def _outbound(db: Session, rows: list[Any]) -> dict[str, bool]:
         else:
             missing.append(r)
     if missing:
-        args = dict(db.execute(
-            select(ToolInvocation.id, ToolInvocation.arguments_redacted).where(
-                ToolInvocation.id.in_([r.id for r in missing])
-            )
-        ).all())
+        args = dict(
+            db.execute(
+                select(ToolInvocation.id, ToolInvocation.arguments_redacted).where(
+                    ToolInvocation.id.in_([r.id for r in missing])
+                )
+            ).all()
+        )
         for r in missing:
-            value = classify_tool(r.tool_name, r.provider, server=r.server, arguments=args.get(r.id) or {}).outbound
+            value = classify_tool(
+                r.tool_name, r.provider, server=r.server, arguments=args.get(r.id) or {}
+            ).outbound
             out[r.id] = value
             _OUTBOUND_MEMO[(r.tool_id, r.argument_hash)] = value
             if len(_OUTBOUND_MEMO) > _MEMO_SIZE:
@@ -102,8 +113,13 @@ def session_view(st: PipelineState, *, pending: dict[str, Any] | None = None) ->
     db.flush()
     item_rows = db.execute(
         select(
-            ContextItem.id, ContextItem.trust_level, ContextItem.source_id, ContextItem.contains_secrets,
-            ContextItem.sensitivity, ContextItem.detection_summary, ContextSource.source_type,
+            ContextItem.id,
+            ContextItem.trust_level,
+            ContextItem.source_id,
+            ContextItem.contains_secrets,
+            ContextItem.sensitivity,
+            ContextItem.detection_summary,
+            ContextSource.source_type,
             ContextSource.trust_level.label("source_trust"),
         )
         .join(ContextSource, ContextSource.id == ContextItem.source_id)
@@ -114,25 +130,36 @@ def session_view(st: PipelineState, *, pending: dict[str, Any] | None = None) ->
     items: list[dict[str, Any]] = []
     for r in item_rows:
         summary = r.detection_summary or {}
-        items.append({
-            "id": r.id,
-            "trust_level": _effective_trust(r.trust_level, r.source_trust),
-            "source_type": r.source_type,
-            "source_id": r.source_id,
-            "contains_secrets": bool(r.contains_secrets),
-            "sensitivity": r.sensitivity,
-            "detection_max_severity": summary.get("max_severity"),
-            "detection_categories": list(summary.get("categories") or []),
-            "_manipulation": bool(manipulation_hits(summary)),
-            "_source_trust": r.source_trust,
-        })
+        items.append(
+            {
+                "id": r.id,
+                "trust_level": _effective_trust(r.trust_level, r.source_trust),
+                "source_type": r.source_type,
+                "source_id": r.source_id,
+                "contains_secrets": bool(r.contains_secrets),
+                "sensitivity": r.sensitivity,
+                "detection_max_severity": summary.get("max_severity"),
+                "detection_categories": list(summary.get("categories") or []),
+                "_manipulation": bool(manipulation_hits(summary)),
+                "_source_trust": r.source_trust,
+            }
+        )
 
     inv_rows = db.execute(
         select(
-            ToolInvocation.id, ToolInvocation.status, ToolInvocation.decision, ToolInvocation.resources,
-            ToolInvocation.destination_id, ToolInvocation.sensitive_data_detected,
-            ToolInvocation.matched_session_fingerprints, ToolInvocation.argument_hash, ToolInvocation.tool_id,
-            Tool.name.label("tool_name"), Tool.category, Tool.provider, Tool.server,
+            ToolInvocation.id,
+            ToolInvocation.status,
+            ToolInvocation.decision,
+            ToolInvocation.resources,
+            ToolInvocation.destination_id,
+            ToolInvocation.sensitive_data_detected,
+            ToolInvocation.matched_session_fingerprints,
+            ToolInvocation.argument_hash,
+            ToolInvocation.tool_id,
+            Tool.name.label("tool_name"),
+            Tool.category,
+            Tool.provider,
+            Tool.server,
             Destination.classification.label("destination_classification"),
         )
         .join(Tool, Tool.id == ToolInvocation.tool_id)
@@ -146,9 +173,14 @@ def session_view(st: PipelineState, *, pending: dict[str, Any] | None = None) ->
     outbound = _outbound(db, inv_rows)
     invocations = [
         {
-            "id": r.id, "tool_name": r.tool_name, "category": r.category, "status": r.status,
+            "id": r.id,
+            "tool_name": r.tool_name,
+            "category": r.category,
+            "status": r.status,
             "decision": r.decision,
-            "sensitive_resources": [x.get("id") for x in (r.resources or []) if isinstance(x, dict) and x.get("sensitive")],
+            "sensitive_resources": [
+                x.get("id") for x in (r.resources or []) if isinstance(x, dict) and x.get("sensitive")
+            ],
             "destination_classification": r.destination_classification,
             "outbound": outbound.get(r.id, False),
             "sensitive_data_detected": bool(r.sensitive_data_detected),
@@ -175,7 +207,9 @@ def _session_findings(db: Session, org_id: str, session_id: str) -> list[dict[st
     return [
         {"id": f.id, "category": f.category, "severity": f.severity, "status": f.status}
         for f in db.execute(
-            select(SecurityFinding.id, SecurityFinding.category, SecurityFinding.severity, SecurityFinding.status)
+            select(
+                SecurityFinding.id, SecurityFinding.category, SecurityFinding.severity, SecurityFinding.status
+            )
             .where(SecurityFinding.organization_id == org_id, SecurityFinding.session_id == session_id)
             .limit(MAX_SIGNAL_ROWS)
         ).all()
@@ -186,14 +220,19 @@ def _inherited(db: Session, org_id: str, session: AgentSession) -> dict[str, Any
     if not session.parent_session_id:
         return {}
     parent = db.scalar(
-        select(AgentSession).where(AgentSession.organization_id == org_id, AgentSession.id == session.parent_session_id)
+        select(AgentSession).where(
+            AgentSession.organization_id == org_id, AgentSession.id == session.parent_session_id
+        )
     )
     if parent is None:
         return {}
     state = parent.risk_state or {}
     return {
-        "session_id": parent.id, "score": parent.risk_score or 0, "level": state.get("level"),
-        "trifecta": bool(state.get("trifecta")), "relation": "parent",
+        "session_id": parent.id,
+        "score": parent.risk_score or 0,
+        "level": state.get("level"),
+        "trifecta": bool(state.get("trifecta")),
+        "relation": "parent",
     }
 
 
@@ -205,9 +244,13 @@ def _context_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "lowest_trust": lowest,
         "untrusted_item_count": sum(1 for i in items if i["trust_level"] in UNTRUSTED_LEVELS),
-        "suspicious_source_ids": sorted({
-            i["source_id"] for i in items if i["_source_trust"] in (TrustLevel.SUSPICIOUS, TrustLevel.BLOCKED)
-        }),
+        "suspicious_source_ids": sorted(
+            {
+                i["source_id"]
+                for i in items
+                if i["_source_trust"] in (TrustLevel.SUSPICIOUS, TrustLevel.BLOCKED)
+            }
+        ),
         "injection_detected": any(i["_manipulation"] for i in items),
         "max_detection_severity": max(severities, key=SEVERITY_RANK.__getitem__) if severities else None,
     }
@@ -216,8 +259,11 @@ def _context_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
 def session_risk_input(risk: SessionRisk) -> dict[str, Any]:
     """``EvaluationInput.session``."""
     return {
-        "score": risk.score, "level": risk.level, "untrusted_exposure": risk.untrusted_exposure,
-        "sensitive_access": risk.sensitive_access, "outbound_channel": risk.outbound_channel,
+        "score": risk.score,
+        "level": risk.level,
+        "untrusted_exposure": risk.untrusted_exposure,
+        "sensitive_access": risk.sensitive_access,
+        "outbound_channel": risk.outbound_channel,
         "trifecta": risk.trifecta,
     }
 
@@ -249,12 +295,21 @@ def update_session_risk(st: PipelineState, *, view: SessionView | None = None) -
 
 def _trifecta_finding(st: PipelineState, risk: SessionRisk) -> None:
     evidence: list[dict[str, Any]] = []
-    labels = {"sensitive_access": "sensitive data access", "untrusted_exposure": "untrusted content",
-              "outbound_channel": "outbound channel"}
+    labels = {
+        "sensitive_access": "sensitive data access",
+        "untrusted_exposure": "untrusted content",
+        "outbound_channel": "outbound channel",
+    }
     for leg, label in labels.items():
         for ev in (risk.trifecta_evidence.get(leg) or [])[:5]:
-            evidence.append({"type": ev.get("type"), "id": ev.get("id"), "excerpt": None,
-                             "detail": f"{label}: {ev.get('detail')}"})
+            evidence.append(
+                {
+                    "type": ev.get("type"),
+                    "id": ev.get("id"),
+                    "excerpt": None,
+                    "detail": f"{label}: {ev.get('detail')}",
+                }
+            )
     raise_finding(
         st,
         category=FindingCategory.LETHAL_TRIFECTA.value,

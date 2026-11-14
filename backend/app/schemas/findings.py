@@ -107,7 +107,9 @@ class TopSourceOut(BaseModel):
     identifier: str
     display_name: str | None
     trust_level: str
-    count: int = Field(description="Findings first seen in the window for this source, excluding false positives")
+    count: int = Field(
+        description="Findings first seen in the window for this source, excluding false positives"
+    )
     max_severity: str | None
 
 
@@ -141,7 +143,9 @@ class PeriodStatsOut(BaseModel):
     by_severity: SeverityCountsOut
     by_category: list[CategoryCountOut]
     by_status: dict[str, int]
-    trend: list[TrendPointOut] = Field(description="New findings per bucket by severity, excluding false positives")
+    trend: list[TrendPointOut] = Field(
+        description="New findings per bucket by severity, excluding false positives"
+    )
     top_sources: list[TopSourceOut]
     mttr: MttrOut
 
@@ -152,11 +156,15 @@ class FindingStatsOut(BaseModel):
     since: datetime
     until: datetime
     include_simulated: bool
-    simulated_open: int = Field(description="Open simulated findings not counted because simulations are hidden")
+    simulated_open: int = Field(
+        description="Open simulated findings not counted because simulations are hidden"
+    )
     open: OpenBacklogOut
     period: PeriodStatsOut
     agents: list[AgentFacetOut] = Field(description="Agents with findings (any time), for filtering")
-    categories: list[CategoryCountOut] = Field(description="Categories with findings (any time), for filtering")
+    categories: list[CategoryCountOut] = Field(
+        description="Categories with findings (any time), for filtering"
+    )
 
 
 # ----------------------------------------------------------------------------- detail
@@ -191,8 +199,10 @@ class RelatedSessionOut(BaseModel):
 
 
 class RelatedSourceOut(SourceRefOut):
-    finding_count: int = Field(description="Detections recorded against this source that are not marked false positive "
-                               "(the trust engine's evidence; findings derived from other findings are not counted twice)")
+    finding_count: int = Field(
+        description="Detections recorded against this source that are not marked false positive "
+        "(the trust engine's evidence; findings derived from other findings are not counted twice)"
+    )
     max_finding_severity: str | None
     manually_classified: bool
 
@@ -210,7 +220,9 @@ class RelatedContextItemOut(BaseModel):
     sensitivity: str
     contains_secrets: bool
     content_length: int
-    retrieved_by: RetrievalRefOut | None = Field(description="The tool call whose result delivered this content")
+    retrieved_by: RetrievalRefOut | None = Field(
+        description="The tool call whose result delivered this content"
+    )
 
 
 class RelatedInvocationOut(BaseModel):
@@ -313,8 +325,12 @@ class FindingUpdateIn(BaseModel):
 
 
 class FindingIncidentIn(BaseModel):
-    incident_id: str | None = Field(default=None, max_length=40, description="Attach to this incident; omit to open a new one")
-    title: str | None = Field(default=None, max_length=400, description="Title for a new incident (defaults to the finding's)")
+    incident_id: str | None = Field(
+        default=None, max_length=40, description="Attach to this incident; omit to open a new one"
+    )
+    title: str | None = Field(
+        default=None, max_length=400, description="Title for a new incident (defaults to the finding's)"
+    )
 
     model_config = {"extra": "forbid"}
 

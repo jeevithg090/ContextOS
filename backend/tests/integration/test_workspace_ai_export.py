@@ -34,8 +34,11 @@ def _pack(client, headers, task_id: str, **body) -> dict:
 
 def _audits(db, org_id: str, action: str) -> list[AuditEvent]:
     db.rollback()
-    return list(db.scalars(select(AuditEvent).where(AuditEvent.organization_id == org_id,
-                                                    AuditEvent.action == action)))
+    return list(
+        db.scalars(
+            select(AuditEvent).where(AuditEvent.organization_id == org_id, AuditEvent.action == action)
+        )
+    )
 
 
 # ----------------------------------------------------------------------------- export
@@ -43,14 +46,18 @@ def _audits(db, org_id: str, action: str) -> list[AuditEvent]:
 
 def test_export_downloads_the_pack_as_redacted_json_and_audits_it(client, org, db, repo):
     h = org.user_headers
-    task = create_task(client, h, "Harden the loader", task_type="backend", related_files=["src/loader.py", ".env"])
+    task = create_task(
+        client, h, "Harden the loader", task_type="backend", related_files=["src/loader.py", ".env"]
+    )
     pack = _pack(client, h, task["id"], profile="standard")
 
     res = client.get(f"{AI}/context-packs/{pack['id']}/export", headers=h)
     assert res.status_code == 200, res.text
     assert res.headers["content-type"].startswith("application/json")
     disposition = res.headers["content-disposition"]
-    assert disposition.startswith("attachment;") and f"context-pack-{task['key']}-standard.json" in disposition
+    assert (
+        disposition.startswith("attachment;") and f"context-pack-{task['key']}-standard.json" in disposition
+    )
     assert res.headers["cache-control"] == "no-store"
     doc = json.loads(res.text)
     assert doc["external_transfer"] is False and "no external AI provider" in doc["generated_by"]
@@ -88,8 +95,12 @@ def test_export_isolation_and_permissions(client, org, other_org, db, no_root, m
     url = f"{AI}/context-packs/{pack['id']}/export"
 
     assert client.get(url, headers=other_org.user_headers).status_code == 404
-    assert client.get(f"{AI}/context-packs/ctp_00000000000000000000000000/export",
-                      headers=org.user_headers).status_code == 404
+    assert (
+        client.get(
+            f"{AI}/context-packs/ctp_00000000000000000000000000/export", headers=org.user_headers
+        ).status_code
+        == 404
+    )
     assert client.get(url).status_code == 401
     _, viewer = add_member(db, org.org_id, "viewer", "Vera Viewer")
     db.commit()
@@ -117,7 +128,9 @@ def test_modes_suggest_a_profile_for_a_task(client, seeded_org, db, no_root):
     assert out["suggested_profiles"]["investigate_only"] == "standard"
     assert out["modes"] and out["profiles"]  # still the full catalogue
 
-    harden = ok(client.get(f"{AI}/modes", params={"task_id": plain["id"], "mode": "security_harden"}, headers=h))
+    harden = ok(
+        client.get(f"{AI}/modes", params={"task_id": plain["id"], "mode": "security_harden"}, headers=h)
+    )
     assert harden["mode"] == "security_harden" and harden["suggested_profile"] == "security_critical"
 
     # A task opened from a finding is security work in every mode — the same rule the server applies
@@ -134,7 +147,10 @@ def test_modes_without_task_and_errors(client, org, other_org, no_root):
     out = ok(client.get(f"{AI}/modes", headers=org.user_headers))
     assert out["task_id"] is None and out["suggested_profile"] is None and out["suggested_profiles"] == {}
     foreign = create_task(client, other_org.user_headers, "Globex task")
-    assert client.get(f"{AI}/modes", params={"task_id": foreign["id"]}, headers=org.user_headers).status_code == 404
+    assert (
+        client.get(f"{AI}/modes", params={"task_id": foreign["id"]}, headers=org.user_headers).status_code
+        == 404
+    )
     own = create_task(client, org.user_headers, "Mine")
     bad = client.get(f"{AI}/modes", params={"task_id": own["id"], "mode": "rm_rf"}, headers=org.user_headers)
     assert bad.status_code == 422 and bad.json()["error"]["code"]
@@ -148,7 +164,11 @@ def test_repository_root_comes_only_from_server_settings(client, org, repo, tmp_
     task = create_task(client, h, "Loader")
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
-    for body in ({"repo_root": str(elsewhere)}, {"repository_root": str(elsewhere)}, {"workspace_repo_root": "/"}):
+    for body in (
+        {"repo_root": str(elsewhere)},
+        {"repository_root": str(elsewhere)},
+        {"workspace_repo_root": "/"},
+    ):
         res = client.post(f"{AI}/context-packs", json={"task_id": task["id"], **body}, headers=h)
         assert res.status_code == 422, body
     assert ok(client.get(f"{AI}/modes", headers=h))["repository_configured"] is True

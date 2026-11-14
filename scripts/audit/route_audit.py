@@ -57,14 +57,14 @@ PUBLIC = {  # intentionally unauthenticated: liveness, first-run setup and sign-
 # POSTs that only need ``read`` because they are reviewed dry runs (nothing persisted) or check a
 # stronger permission inline before persisting. Add a route here only after reading its service.
 READ_ONLY_POSTS = {
-    "/api/v1/scan",                       # detection on submitted content, nothing stored
-    "/api/v1/trust/rules/test",           # trust_service_dryrun.run_rule_test
+    "/api/v1/scan",  # detection on submitted content, nothing stored
+    "/api/v1/trust/rules/test",  # trust_service_dryrun.run_rule_test
     "/api/v1/trust/destinations/verify",  # destination checks on the name only
-    "/api/v1/policies/validate",          # draft validation
-    "/api/v1/policies/test",              # policy dry run
-    "/api/v1/replay/counterfactual",      # simulation, nothing persisted
-    "/api/v1/workspace/ai/fix-context",   # save=true requires write inline
-    "/api/v1/workspace/ai/breakdown",     # draft only; creating tasks is a separate write route
+    "/api/v1/policies/validate",  # draft validation
+    "/api/v1/policies/test",  # policy dry run
+    "/api/v1/replay/counterfactual",  # simulation, nothing persisted
+    "/api/v1/workspace/ai/fix-context",  # save=true requires write inline
+    "/api/v1/workspace/ai/breakdown",  # draft only; creating tasks is a separate write route
 }
 
 
@@ -107,9 +107,17 @@ class Report:
 
     @property
     def gaps(self) -> int:
-        return sum(len(x) for x in (self.unexpected_public, self.read_guarded_writes, self.empty_modules,
-                                    self.unregistered_modules, self.not_isolation_tested,
-                                    self.id_routes_without_404)) + (1 if self.pytest_exit not in (None, 0) else 0)
+        return sum(
+            len(x)
+            for x in (
+                self.unexpected_public,
+                self.read_guarded_writes,
+                self.empty_modules,
+                self.unregistered_modules,
+                self.not_isolation_tested,
+                self.id_routes_without_404,
+            )
+        ) + (1 if self.pytest_exit not in (None, 0) else 0)
 
 
 def prepare_environment() -> None:
@@ -125,7 +133,9 @@ def prepare_environment() -> None:
         sys.path.insert(0, str(BACKEND))
 
 
-def iter_api_routes(router: Any, prefix: str = "", inherited: tuple[Callable[..., Any], ...] = ()) -> Iterator[tuple[str, Any, tuple]]:
+def iter_api_routes(
+    router: Any, prefix: str = "", inherited: tuple[Callable[..., Any], ...] = ()
+) -> Iterator[tuple[str, Any, tuple]]:
     """Yield ``(full_path, APIRoute, router-level dependency callables)`` in registration order.
 
     Handles both FastAPI layouts: routes copied into the parent router (older releases) and
@@ -139,8 +149,9 @@ def iter_api_routes(router: Any, prefix: str = "", inherited: tuple[Callable[...
         elif hasattr(route, "original_router"):
             ctx = getattr(route, "include_context", None)
             deps = tuple(d.dependency for d in (getattr(ctx, "dependencies", None) or []) if d.dependency)
-            yield from iter_api_routes(route.original_router, prefix + (getattr(ctx, "prefix", "") or ""),
-                                       inherited + deps)
+            yield from iter_api_routes(
+                route.original_router, prefix + (getattr(ctx, "prefix", "") or ""), inherited + deps
+            )
 
 
 def _dependency_calls(dependant: Any) -> Iterator[Callable[..., Any]]:
@@ -159,25 +170,31 @@ def analyse(path: str, route: Any, inherited: tuple = ()) -> list[RouteInfo]:
     for call in calls:
         if getattr(call, "__code__", None) is require_code:
             permissions.add(str(inspect.getclosurevars(call).nonlocals.get("permission")))
-    authenticated = any(c is get_principal for c in calls) or bool(permissions) or any(c is require_user for c in calls)
+    authenticated = (
+        any(c is get_principal for c in calls) or bool(permissions) or any(c is require_user for c in calls)
+    )
     user_only = any(c is require_user for c in calls)
     endpoint = f"{route.endpoint.__module__}.{route.endpoint.__name__}"
-    return [RouteInfo(m, path, endpoint, authenticated, user_only, sorted(permissions))
-            for m in sorted(route.methods - {"HEAD", "OPTIONS"})]
+    return [
+        RouteInfo(m, path, endpoint, authenticated, user_only, sorted(permissions))
+        for m in sorted(route.methods - {"HEAD", "OPTIONS"})
+    ]
 
 
 def template_regex(path: str) -> re.Pattern[str]:
     """``/api/v1/tasks/{task_id}`` → regex; ``{x:path}`` spans slashes, ``{x}`` does not."""
     out, pos = [], 0
     for m in re.finditer(r"\{([^}:]+)(:path)?\}", path):
-        out.append(re.escape(path[pos:m.start()]))
+        out.append(re.escape(path[pos : m.start()]))
         out.append(".+" if m.group(2) else "[^/]+")
         pos = m.end()
     out.append(re.escape(path[pos:]))
     return re.compile("^" + "".join(out) + "$")
 
 
-def match_route(routes: list[RouteInfo], patterns: list[re.Pattern[str]], method: str, path: str) -> RouteInfo | None:
+def match_route(
+    routes: list[RouteInfo], patterns: list[re.Pattern[str]], method: str, path: str
+) -> RouteInfo | None:
     """First route (registration order) whose template and method match, as Starlette routes it."""
     for info, pattern in zip(routes, patterns, strict=True):
         if info.method == method and pattern.match(path):
@@ -220,7 +237,9 @@ class Recorder:
         def handle_request(transport_self: Any, request: Any) -> Any:
             response = original(transport_self, request)
             if recorder.current is not None:
-                recorder.hits.append(Hit(recorder.current, request.method, request.url.path, response.status_code))
+                recorder.hits.append(
+                    Hit(recorder.current, request.method, request.url.path, response.status_code)
+                )
             return response
 
         self._restore = (transport, original)
@@ -243,10 +262,14 @@ def collect_routes() -> tuple[list[RouteInfo], list[str], list[str]]:
         infos.extend(analyse(path, route, inherited))
         endpoints.add(route.endpoint)
     schema_paths = set(app.openapi()["paths"])
-    walked = {re.sub(r":path\}", "}", r.path) for r in infos if r.path.startswith("/api/")}  # OpenAPI drops ":path"
+    walked = {
+        re.sub(r":path\}", "}", r.path) for r in infos if r.path.startswith("/api/")
+    }  # OpenAPI drops ":path"
     if not walked or not walked <= schema_paths:
-        raise RuntimeError(f"route walk disagrees with OpenAPI ({sorted(walked - schema_paths)[:5]}); "
-                           "FastAPI internals changed — update iter_api_routes")
+        raise RuntimeError(
+            f"route walk disagrees with OpenAPI ({sorted(walked - schema_paths)[:5]}); "
+            "FastAPI internals changed — update iter_api_routes"
+        )
     empty, unregistered = [], []
     for mod in pkgutil.iter_modules(routes_pkg.__path__):
         router = getattr(importlib.import_module(f"app.api.routes.{mod.name}"), "router", None)
@@ -295,7 +318,11 @@ def build_report(static: bool, test_paths: list[str], quiet_stdout: bool) -> Rep
         label = f"{r.method} {r.path}"
         if not r.authenticated and (r.method, r.path) not in PUBLIC:
             report.unexpected_public.append(f"{label}  ({r.endpoint})")
-        if r.method in UNSAFE and r.permissions == ["read"] and not (r.method == "POST" and r.path in READ_ONLY_POSTS):
+        if (
+            r.method in UNSAFE
+            and r.permissions == ["read"]
+            and not (r.method == "POST" and r.path in READ_ONLY_POSTS)
+        ):
             report.read_guarded_writes.append(f"{label}  ({r.endpoint})")
     if not static:
         report.isolation_run, report.pytest_exit, report.isolation_tests = True, pytest_exit, selected
@@ -322,7 +349,9 @@ def render_text(report: Report) -> str:
     section("Route modules with no routes (placeholder interfaces)", report.empty_modules)
     section("Route modules not included in app/api/router.py", report.unregistered_modules)
     if report.isolation_run:
-        lines.append(f"\nIsolation run: {report.isolation_tests} tests using other_org, pytest exit {report.pytest_exit}")
+        lines.append(
+            f"\nIsolation run: {report.isolation_tests} tests using other_org, pytest exit {report.pytest_exit}"
+        )
         section("Authenticated routes never requested in an other_org test", report.not_isolation_tested)
         section("Id routes that never answered 404 in an other_org test", report.id_routes_without_404)
     else:
@@ -334,7 +363,9 @@ def render_text(report: Report) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--static", action="store_true", help="skip running the isolation tests")
-    parser.add_argument("--tests", nargs="+", default=["tests/integration"], help="test paths relative to backend/")
+    parser.add_argument(
+        "--tests", nargs="+", default=["tests/integration"], help="test paths relative to backend/"
+    )
     parser.add_argument("--json", action="store_true", help="print JSON instead of text")
     parser.add_argument("--strict", action="store_true", help="exit 1 when any gap is reported")
     args = parser.parse_args(argv)

@@ -55,7 +55,11 @@ POSITIVES = [
     ("github_token", lambda: f"github_pat_{rnd(22)}_{rnd(59)}", None),
     ("gitlab_token", lambda: f"glpat-{rnd(20, ALNUM + '_-')}", None),
     ("slack_token", lambda: f"xoxb-{rnd(12, string.digits)}-{rnd(12, string.digits)}-{rnd(24)}", None),
-    ("slack_webhook", lambda: f"https://hooks.slack.com/services/T{rnd(8, UPPER)}/B{rnd(8, UPPER)}/{rnd(24)}", None),
+    (
+        "slack_webhook",
+        lambda: f"https://hooks.slack.com/services/T{rnd(8, UPPER)}/B{rnd(8, UPPER)}/{rnd(24)}",
+        None,
+    ),
     ("stripe_live_key", lambda: f"sk_live_{rnd(24)}", None),
     ("stripe_live_key", lambda: f"restricted rk_live_{rnd(24)}", None),
     ("stripe_test_key", lambda: f"sk_test_{rnd(24)}", None),
@@ -88,7 +92,9 @@ POSITIVES = [
 ]
 
 
-@pytest.mark.parametrize(("expected", "make", "kept"), POSITIVES, ids=[f"{p[0]}-{i}" for i, p in enumerate(POSITIVES)])
+@pytest.mark.parametrize(
+    ("expected", "make", "kept"), POSITIVES, ids=[f"{p[0]}-{i}" for i, p in enumerate(POSITIVES)]
+)
 def test_each_secret_type_is_detected_and_redacted(expected, make, kept):
     text = make()
     result = redact_text(text)
@@ -138,7 +144,7 @@ def test_azure_connection_string_redacts_only_the_account_key():
 
 
 def test_env_lines_including_json_escaped_file_content():
-    text = f'DB_PASSWORD=supersecretvalue\nexport STRIPE_KEY={rnd(30)}\nDEBUG=true\nPORT=8080'
+    text = f"DB_PASSWORD=supersecretvalue\nexport STRIPE_KEY={rnd(30)}\nDEBUG=true\nPORT=8080"
     result = redact_text(text)
     assert [m.secret_type for m in result.matches] == ["generic_password", "generic_api_key"]
     assert "DEBUG=true\nPORT=8080" in result.text
@@ -200,7 +206,13 @@ def test_common_non_secrets_are_not_flagged(text):
 
 
 def test_base64_images_are_ignored_even_if_they_contain_token_shapes():
-    image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg" + "+AKIA" + rnd(16, string.ascii_uppercase) + "/" + rnd(200, B64)
+    image = (
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg"
+        + "+AKIA"
+        + rnd(16, string.ascii_uppercase)
+        + "/"
+        + rnd(200, B64)
+    )
     assert detect_secrets(f'<img src="{image}">') == []
 
 
@@ -307,7 +319,9 @@ def test_adversarial_inputs_scan_in_linear_time(name):
 
 
 def test_large_and_adversarial_inputs_scan_in_bounded_time():
-    noisy = ("password: x token= key: auth=" * 20000) + ("a" * 300000) + ("-----BEGIN PRIVATE KEY-----" * 2000)
+    noisy = (
+        ("password: x token= key: auth=" * 20000) + ("a" * 300000) + ("-----BEGIN PRIVATE KEY-----" * 2000)
+    )
     started = time.perf_counter()
     detect_secrets(noisy)
     assert time.perf_counter() - started < 20  # generous: CI machines are shared

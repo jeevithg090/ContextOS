@@ -56,22 +56,31 @@ def free_port() -> int:
 
 def server_env(root: Path) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items() if not k.startswith("CONTEXTOS_")}
-    env.update({
-        "CONTEXTOS_DATABASE_URL": f"sqlite:///{root / 'live.db'}",
-        "CONTEXTOS_SECRET_KEY": secrets.token_urlsafe(48),
-        "CONTEXTOS_ENV": "development",
-        "CONTEXTOS_SERVE_FRONTEND": "false",
-        "CONTEXTOS_LOG_LEVEL": "WARNING",
-        "PYTHONUNBUFFERED": "1",
-    })
+    env.update(
+        {
+            "CONTEXTOS_DATABASE_URL": f"sqlite:///{root / 'live.db'}",
+            "CONTEXTOS_SECRET_KEY": secrets.token_urlsafe(48),
+            "CONTEXTOS_ENV": "development",
+            "CONTEXTOS_SERVE_FRONTEND": "false",
+            "CONTEXTOS_LOG_LEVEL": "WARNING",
+            "PYTHONUNBUFFERED": "1",
+        }
+    )
     return env
 
 
 def client_env(server: LiveServer, home: Path, **extra: str) -> dict[str, str]:
     """Environment for an integration subprocess: only this server's settings, an isolated home."""
     env = {k: v for k, v in os.environ.items() if not k.startswith(("CONTEXTOS_", "CLAUDE_"))}
-    env.update({"CONTEXTOS_URL": server.url, "CONTEXTOS_API_KEY": server.api_key, "CONTEXTOS_HOME": str(home),
-                "PYTHONUNBUFFERED": "1", **extra})
+    env.update(
+        {
+            "CONTEXTOS_URL": server.url,
+            "CONTEXTOS_API_KEY": server.api_key,
+            "CONTEXTOS_HOME": str(home),
+            "PYTHONUNBUFFERED": "1",
+            **extra,
+        }
+    )
     return env
 
 
@@ -87,13 +96,17 @@ class LiveServer:
     _user: httpx.Client | None = field(default=None, repr=False)
 
     def key(self) -> httpx.Client:
-        return httpx.Client(base_url=self.url + API, headers={"Authorization": f"Bearer {self.api_key}"}, timeout=60)
+        return httpx.Client(
+            base_url=self.url + API, headers={"Authorization": f"Bearer {self.api_key}"}, timeout=60
+        )
 
     @property
     def user(self) -> httpx.Client:
         """The owner, signed in through POST /auth/login (httpOnly cookie + CSRF header)."""
         if self._user is None:
-            client = httpx.Client(base_url=self.url + API, headers={"X-Requested-With": "contextos"}, timeout=60)
+            client = httpx.Client(
+                base_url=self.url + API, headers={"X-Requested-With": "contextos"}, timeout=60
+            )
             response = client.post("/auth/login", json={"email": self.email, "password": self.password})
             response.raise_for_status()
             self._user = client
@@ -132,10 +145,19 @@ class LiveServer:
 
 
 def _admin(exe: Path, env: dict[str, str], cwd: Path, *args: str) -> str:
-    done = subprocess.run([str(exe), *args], env=env, cwd=cwd, capture_output=True, text=True, timeout=300,  # noqa: S603
-                          check=False)
+    done = subprocess.run(  # noqa: S603
+        [str(exe), *args],
+        env=env,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
     if done.returncode != 0:
-        raise RuntimeError(f"contextos-server {args[0]} failed ({done.returncode}): {done.stderr or done.stdout}")
+        raise RuntimeError(
+            f"contextos-server {args[0]} failed ({done.returncode}): {done.stderr or done.stdout}"
+        )
     return done.stdout
 
 
@@ -148,20 +170,48 @@ def live_server(root: Path) -> Iterator[LiveServer]:
     password = secrets.token_urlsafe(18)
     email = "owner@live-e2e.test"
     _admin(exe, env, root, "init-db")
-    created = _admin(exe, env, root, "create-org", "--name", "Live E2E", "--email", email,
-                     "--name-of-owner", "Live Owner", "--password", password)
+    created = _admin(
+        exe,
+        env,
+        root,
+        "create-org",
+        "--name",
+        "Live E2E",
+        "--email",
+        email,
+        "--name-of-owner",
+        "Live Owner",
+        "--password",
+        password,
+    )
     slug_match = re.search(r"Slug\s+(\S+)", created)
     if slug_match is None:
         raise RuntimeError(f"could not read the organisation slug from: {created}")
     slug = slug_match.group(1)
-    api_key = _admin(exe, env, root, "create-api-key", "--org-slug", slug, "--name", "live e2e",
-                     "--scopes", "ingest,decide,read", "--quiet").strip()
+    api_key = _admin(
+        exe,
+        env,
+        root,
+        "create-api-key",
+        "--org-slug",
+        slug,
+        "--name",
+        "live e2e",
+        "--scopes",
+        "ingest,decide,read",
+        "--quiet",
+    ).strip()
     if not api_key.startswith("ctxk_"):
         raise RuntimeError("create-api-key --quiet did not print a key")
     port = free_port()
     log = (root / "server.log").open("wb")
-    process = subprocess.Popen([str(exe), "serve", "--host", "127.0.0.1", "--port", str(port)], env=env, cwd=root,  # noqa: S603
-                               stdout=log, stderr=subprocess.STDOUT)
+    process = subprocess.Popen(  # noqa: S603
+        [str(exe), "serve", "--host", "127.0.0.1", "--port", str(port)],
+        env=env,
+        cwd=root,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+    )
     server = LiveServer(f"http://127.0.0.1:{port}", api_key, slug, email, password, root, process)
     try:
         deadline = time.monotonic() + STARTUP_TIMEOUT_S
@@ -182,10 +232,23 @@ def live_server(root: Path) -> Iterator[LiveServer]:
         log.close()
 
 
-def run(args: list[str], env: dict[str, str], *, stdin: bytes | None = None, cwd: Path | None = None,
-        timeout: float = 300) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(args, input=stdin, env=env, cwd=cwd, capture_output=True, timeout=timeout,  # noqa: S603
-                          check=False)
+def run(
+    args: list[str],
+    env: dict[str, str],
+    *,
+    stdin: bytes | None = None,
+    cwd: Path | None = None,
+    timeout: float = 300,
+) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(  # noqa: S603
+        args,
+        input=stdin,
+        env=env,
+        cwd=cwd,
+        capture_output=True,
+        timeout=timeout,
+        check=False,
+    )
 
 
 __all__ = ["EXAMPLES", "LiveServer", "client_env", "free_port", "live_server", "run", "tool_path"]

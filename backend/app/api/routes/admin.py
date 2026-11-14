@@ -61,14 +61,22 @@ def _org(db: Session, org_id: str) -> Organization:
 
 def _org_out(db: Session, org: Organization) -> OrgOut:
     now = utcnow()
-    members = db.scalar(select(func.count()).select_from(Membership).where(Membership.organization_id == org.id)) or 0
-    active_keys = db.scalar(
-        select(func.count()).select_from(ApiKey).where(
-            ApiKey.organization_id == org.id,
-            ApiKey.revoked_at.is_(None),
-            (ApiKey.expires_at.is_(None)) | (ApiKey.expires_at > now),
+    members = (
+        db.scalar(select(func.count()).select_from(Membership).where(Membership.organization_id == org.id))
+        or 0
+    )
+    active_keys = (
+        db.scalar(
+            select(func.count())
+            .select_from(ApiKey)
+            .where(
+                ApiKey.organization_id == org.id,
+                ApiKey.revoked_at.is_(None),
+                (ApiKey.expires_at.is_(None)) | (ApiKey.expires_at > now),
+            )
         )
-    ) or 0
+        or 0
+    )
     settings = effective_org_settings(org)
     return OrgOut(
         id=org.id,
@@ -132,8 +140,13 @@ def add_member(
     body: MemberCreate, principal: Principal = Depends(_user_with("admin")), db: Session = Depends(get_db)
 ) -> MemberOut:
     membership, user, _created = auth_service.add_member(
-        db, principal.org_id, _actor(principal),
-        email=body.email, name=body.name, role=body.role, password=body.password,
+        db,
+        principal.org_id,
+        _actor(principal),
+        email=body.email,
+        name=body.name,
+        role=body.role,
+        password=body.password,
     )
     return _member_out(membership, user)
 
@@ -145,7 +158,9 @@ def change_role(
     principal: Principal = Depends(_user_with("admin")),
     db: Session = Depends(get_db),
 ) -> MemberOut:
-    membership, user = auth_service.change_member_role(db, principal.org_id, _actor(principal), membership_id, body.role)
+    membership, user = auth_service.change_member_role(
+        db, principal.org_id, _actor(principal), membership_id, body.role
+    )
     return _member_out(membership, user)
 
 
@@ -176,8 +191,13 @@ def create_api_key(
     body: ApiKeyCreate, principal: Principal = Depends(_user_with("admin")), db: Session = Depends(get_db)
 ) -> ApiKeyCreated:
     key, raw, agent = auth_service.create_api_key(
-        db, principal.org_id, _actor(principal),
-        name=body.name, scopes=body.scopes, agent_id=body.agent_id, expires_in_days=body.expires_in_days,
+        db,
+        principal.org_id,
+        _actor(principal),
+        name=body.name,
+        scopes=body.scopes,
+        agent_id=body.agent_id,
+        expires_in_days=body.expires_in_days,
     )
     creator = db.get(User, principal.user_id) if principal.user_id else None
     view = auth_service.api_key_view(key, agent.name if agent else None, creator.name if creator else None)

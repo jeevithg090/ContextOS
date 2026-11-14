@@ -27,7 +27,9 @@ C = TrustCapability
 SOURCE_CAPABILITIES = (C.READ.value, C.INSTRUCT.value, C.EXECUTE.value, C.CREDENTIAL_ACCESS.value)
 DESTINATION_CAPABILITIES = (C.SEND.value,)
 ALLOW_LEVELS = frozenset({TrustLevel.TRUSTED.value, TrustLevel.APPROVED.value})
-DATA_ONLY_LEVELS = frozenset({TrustLevel.EXTERNAL.value, TrustLevel.UNKNOWN.value, TrustLevel.SUSPICIOUS.value})
+DATA_ONLY_LEVELS = frozenset(
+    {TrustLevel.EXTERNAL.value, TrustLevel.UNKNOWN.value, TrustLevel.SUSPICIOUS.value}
+)
 OVERRIDE_PREFIX = "Destination override: "
 OVERRIDE_MIN_PRIORITY = 1000
 DEFAULT_RULE_KEYS = frozenset((r["name"], r["pattern"]) for r in DEFAULT_TRUST_RULES)
@@ -45,9 +47,10 @@ def user_labels(db: Session, user_ids: Iterable[str | None]) -> dict[str, str]:
     ids = sorted({u for u in user_ids if u})
     if not ids:
         return {}
-    return {uid: (name or email) for uid, name, email in db.execute(
-        select(User.id, User.name, User.email).where(User.id.in_(ids))
-    )}
+    return {
+        uid: (name or email)
+        for uid, name, email in db.execute(select(User.id, User.name, User.email).where(User.id.in_(ids)))
+    }
 
 
 def actor_label(actor_type: str | None, actor_id: str | None, users: dict[str, str]) -> str:
@@ -59,7 +62,9 @@ def actor_label(actor_type: str | None, actor_id: str | None, users: dict[str, s
 
 
 def make_actor(db: Session, actor_type: str, actor_id: str | None) -> Actor:
-    return Actor(type=actor_type, id=actor_id, label=actor_label(actor_type, actor_id, user_labels(db, [actor_id])))
+    return Actor(
+        type=actor_type, id=actor_id, label=actor_label(actor_type, actor_id, user_labels(db, [actor_id]))
+    )
 
 
 # ----------------------------------------------------------------------------- rules
@@ -85,8 +90,13 @@ def rule_ref(rule: TrustRuleSpec | TrustRule, *, is_draft: bool = False) -> dict
 
 def rule_sort_key(rule: TrustRule) -> tuple[int, int, int, str, str]:
     """Display order = engine precedence: priority, then the more restrictive level, then specificity."""
-    return (-int(rule.priority or 0), TRUST_RANK.get(rule.trust_level, 0), -len(rule.pattern or ""),
-            rule.name.casefold(), rule.id)
+    return (
+        -int(rule.priority or 0),
+        TRUST_RANK.get(rule.trust_level, 0),
+        -len(rule.pattern or ""),
+        rule.name.casefold(),
+        rule.id,
+    )
 
 
 def rules_by_id(db: Session, org_id: str, ids: Iterable[str | None]) -> dict[str, TrustRule]:

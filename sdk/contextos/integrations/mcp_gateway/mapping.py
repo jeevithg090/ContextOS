@@ -49,10 +49,14 @@ def server_name_problem(name: str) -> str | None:
     naming) use them as separators; a name containing them would be attributed to another server.
     """
     if not SERVER_NAME_RE.match(name or ""):
-        return ("the server name must be 1-100 characters of letters, digits, '.', '_' or '-', "
-                "starting and ending with a letter or digit")
+        return (
+            "the server name must be 1-100 characters of letters, digits, '.', '_' or '-', "
+            "starting and ending with a letter or digit"
+        )
     if "__" in name:
-        return "the server name must not contain '__' (it separates server and tool in mcp__server__tool names)"
+        return (
+            "the server name must not contain '__' (it separates server and tool in mcp__server__tool names)"
+        )
     return None
 
 
@@ -65,7 +69,9 @@ def json_size(value: Any) -> int:
     return len(json.dumps(value, separators=(",", ":"), default=str))
 
 
-def fit_text(text: str, max_chars: int = MAX_TEXT_CHARS, max_bytes: int = EVENT_BUDGET_BYTES) -> tuple[str, int]:
+def fit_text(
+    text: str, max_chars: int = MAX_TEXT_CHARS, max_bytes: int = EVENT_BUDGET_BYTES
+) -> tuple[str, int]:
     """``(text, omitted_chars)``: ``text`` cut to ``max_chars`` and ``max_bytes`` with a visible marker."""
     limit = min(len(text), max(max_chars, 0))
     while True:
@@ -109,7 +115,9 @@ def content_text(blocks: Iterable[Any]) -> str:
         if isinstance(block, types.TextContent):
             parts.append(block.text)
         elif isinstance(block, types.EmbeddedResource):
-            parts.append(f"[embedded resource {block.resource.uri}]\n{_resource_contents_text(block.resource)}")
+            parts.append(
+                f"[embedded resource {block.resource.uri}]\n{_resource_contents_text(block.resource)}"
+            )
         elif isinstance(block, types.ResourceLink):
             label = " ".join(p for p in (block.name, block.title) if p)
             detail = f": {block.description}" if block.description else ""
@@ -213,7 +221,11 @@ def listing_content(server_name: str, *, instructions: str | None, tools: Sequen
         lines: list[str] = []
         if tool.title and _norm(tool.title) != _norm(tool.name):
             lines.append(f"title: {tool.title}")
-        if tool.annotations is not None and tool.annotations.title and _norm(tool.annotations.title) != _norm(tool.name):
+        if (
+            tool.annotations is not None
+            and tool.annotations.title
+            and _norm(tool.annotations.title) != _norm(tool.name)
+        ):
             lines.append(f"annotation title: {tool.annotations.title}")
         lines.extend(schema_strings(tool.input_schema, tool.name))
         if lines:
@@ -281,10 +293,18 @@ def server_connected_events(
     chunk_budget = max(budget - json_size(content or "") - 8_000, 50_000)
     chunks, schemas_omitted = _chunks([tool_entry(t) for t in tools], chunk_budget)
     source = SourceRef(
-        type=SourceType.MCP_SERVER, identifier=server_name, display_name=f"MCP server {server_name}"[:400],
-        metadata={"transport": "stdio", **{k: v for k, v in (server_info or {}).items() if v not in (None, "")}},
+        type=SourceType.MCP_SERVER,
+        identifier=server_name,
+        display_name=f"MCP server {server_name}"[:400],
+        metadata={
+            "transport": "stdio",
+            **{k: v for k, v in (server_info or {}).items() if v not in (None, "")},
+        },
     )
-    base: dict[str, Any] = {"tool_count": len(tools), "listing_fingerprint": listing_fingerprint(tools, instructions)}
+    base: dict[str, Any] = {
+        "tool_count": len(tools),
+        "listing_fingerprint": listing_fingerprint(tools, instructions),
+    }
     if host:
         base["mcp_host"] = dict(host)
     if schemas_omitted:
@@ -296,11 +316,18 @@ def server_connected_events(
         metadata = {**base, "tools": chunk}
         if len(chunks) > 1:
             metadata.update(listing_part=index + 1, listing_parts=len(chunks))
-        events.append(EventEnvelope(
-            event_type=EventType.MCP_SERVER_CONNECTED, agent=agent, session_id=session_id,
-            integration=INTEGRATION, collected_via=COLLECTED_VIA, source=source,
-            content=content if index == 0 else None, metadata=metadata,
-        ))
+        events.append(
+            EventEnvelope(
+                event_type=EventType.MCP_SERVER_CONNECTED,
+                agent=agent,
+                session_id=session_id,
+                integration=INTEGRATION,
+                collected_via=COLLECTED_VIA,
+                source=source,
+                content=content if index == 0 else None,
+                metadata=metadata,
+            )
+        )
     return events
 
 
@@ -321,10 +348,17 @@ def tool_request_event(
     """``tool.requested`` for ``POST /decide``. Raises ``ValueError`` when it cannot be built."""
     short = description[:TOOLREF_DESCRIPTION_CHARS] if description else None
     return EventEnvelope(
-        event_type=EventType.TOOL_REQUESTED, agent=agent, session_id=session_id, correlation_id=correlation_id,
-        integration=INTEGRATION, collected_via=COLLECTED_VIA,
-        tool=ToolRef(name=tool_name, provider=provider_for(server_name), server=server_name, description=short),
-        arguments=dict(arguments or {}), metadata=dict(metadata or {}),
+        event_type=EventType.TOOL_REQUESTED,
+        agent=agent,
+        session_id=session_id,
+        correlation_id=correlation_id,
+        integration=INTEGRATION,
+        collected_via=COLLECTED_VIA,
+        tool=ToolRef(
+            name=tool_name, provider=provider_for(server_name), server=server_name, description=short
+        ),
+        arguments=dict(arguments or {}),
+        metadata=dict(metadata or {}),
     )
 
 
@@ -342,9 +376,16 @@ def tool_result_event(
     if omitted:
         meta["result_truncated_chars"] = omitted
     return EventEnvelope(
-        event_type=EventType.TOOL_FAILED if is_error else EventType.TOOL_COMPLETED, agent=request.agent,
-        session_id=request.session_id, correlation_id=request.correlation_id, integration=INTEGRATION,
-        collected_via=COLLECTED_VIA, tool=request.tool, result=fitted or None, is_error=is_error, metadata=meta,
+        event_type=EventType.TOOL_FAILED if is_error else EventType.TOOL_COMPLETED,
+        agent=request.agent,
+        session_id=request.session_id,
+        correlation_id=request.correlation_id,
+        integration=INTEGRATION,
+        collected_via=COLLECTED_VIA,
+        tool=request.tool,
+        result=fitted or None,
+        is_error=is_error,
+        metadata=meta,
     )
 
 
@@ -366,13 +407,20 @@ def context_event(
     if omitted:
         meta["content_truncated_chars"] = omitted
     source = SourceRef(
-        type=SourceType.MCP_SERVER, identifier=f"{server_name}/{kind}:{name}"[:2048],
+        type=SourceType.MCP_SERVER,
+        identifier=f"{server_name}/{kind}:{name}"[:2048],
         display_name=f"MCP {kind} {name} from {server_name}"[:400],
         metadata={"mcp_server": server_name, kind: name[:1000]},
     )
     return EventEnvelope(
-        event_type=EventType.CONTEXT_INGESTED, agent=agent, session_id=session_id, integration=INTEGRATION,
-        collected_via=COLLECTED_VIA, source=source, content=fitted, content_type=content_type[:64] or "text/plain",
+        event_type=EventType.CONTEXT_INGESTED,
+        agent=agent,
+        session_id=session_id,
+        integration=INTEGRATION,
+        collected_via=COLLECTED_VIA,
+        source=source,
+        content=fitted,
+        content_type=content_type[:64] or "text/plain",
         metadata=meta,
     )
 

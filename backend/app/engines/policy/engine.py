@@ -60,7 +60,9 @@ def evaluate(
     """Evaluate ``policies`` against one (redacted) tool request. Deterministic and side-effect free."""
     default = _decision(default_decision)
     if default is None:
-        raise ValueError(f"default_decision must be one of {sorted(DECISION_PRECEDENCE)}, got {default_decision!r}")
+        raise ValueError(
+            f"default_decision must be one of {sorted(DECISION_PRECEDENCE)}, got {default_decision!r}"
+        )
     data = inp.to_dict()
     enforce: list[tuple[PolicySpec, PolicyMatch]] = []
     monitor: list[tuple[PolicySpec, PolicyMatch]] = []
@@ -72,7 +74,9 @@ def evaluate(
         outcome = _decision(spec.outcome)
         mode = spec.mode.strip().lower() if isinstance(spec.mode, str) else ""
         if outcome is None:
-            errors.append({"policy_id": spec.id, "name": spec.name, "error": f"unknown outcome {spec.outcome!r}"})
+            errors.append(
+                {"policy_id": spec.id, "name": spec.name, "error": f"unknown outcome {spec.outcome!r}"}
+            )
             continue
         if mode not in _MODES:
             errors.append({"policy_id": spec.id, "name": spec.name, "error": f"unknown mode {spec.mode!r}"})
@@ -102,7 +106,9 @@ def evaluate(
         tail.append(f"Monitor mode (recorded only, not enforced): {_names(monitor)} would have applied")
     if errors:
         listed = "; ".join(f'"{e["name"]}" ({e["error"]})' for e in errors)
-        tail.append(f"Could not evaluate {len(errors)} {'policy' if len(errors) == 1 else 'policies'}: {listed}")
+        tail.append(
+            f"Could not evaluate {len(errors)} {'policy' if len(errors) == 1 else 'policies'}: {listed}"
+        )
 
     if not enforce:
         return EvaluationResult(
@@ -118,7 +124,9 @@ def evaluate(
     top_spec, top = enforce[0]
     decision = top.outcome
     restrictions: dict[str, Any] = {}
-    parts = [f'{decision} by policy "{top.name}" ({top.severity}, priority {top_spec.priority}). {top.explanation}']
+    parts = [
+        f'{decision} by policy "{top.name}" ({top.severity}, priority {top_spec.priority}). {top.explanation}'
+    ]
     if decision == Decision.RESTRICT:
         merged, problems = merge_restrictions(
             [(s.name, s.restrictions) for s, m in enforce if m.outcome == Decision.RESTRICT]

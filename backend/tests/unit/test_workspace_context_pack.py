@@ -39,14 +39,26 @@ def _all_text(items) -> str:
 
 
 def test_related_file_inside_repo_is_verified_and_included(repo):
-    items, total = build_context_pack(str(repo), related_files=["src/app.py", "./src/app.py"], profile="standard")
+    items, total = build_context_pack(
+        str(repo), related_files=["src/app.py", "./src/app.py"], profile="standard"
+    )
     item = _by_ref(items, "src/app.py")
     assert item["verified"] is True and item["included"] is True and item["kind"] == "source_file"
     assert "def handler" in item["excerpt"]
     assert sum(1 for i in items if i["ref"] == "src/app.py") == 1  # de-duplicated
     assert total == sum(i["token_estimate"] for i in items if i["included"])
-    assert {"key", "kind", "ref", "title", "category", "reason", "verified", "included", "token_estimate",
-            "excerpt"} <= set(item)
+    assert {
+        "key",
+        "kind",
+        "ref",
+        "title",
+        "category",
+        "reason",
+        "verified",
+        "included",
+        "token_estimate",
+        "excerpt",
+    } <= set(item)
 
 
 def test_profile_documents_are_selected_and_missing_ones_skipped(repo):
@@ -65,8 +77,10 @@ def test_traversal_outside_root_is_rejected_and_never_read(repo):
 
 
 def test_absolute_paths_outside_are_rejected_inside_are_normalised(repo, tmp_path):
-    items, _ = build_context_pack(str(repo), related_files=[str(tmp_path / "outside.txt"), str(repo / "src/app.py"),
-                                                           "C:\\Windows\\win.ini"])
+    items, _ = build_context_pack(
+        str(repo),
+        related_files=[str(tmp_path / "outside.txt"), str(repo / "src/app.py"), "C:\\Windows\\win.ini"],
+    )
     assert _by_ref(items, "src/app.py")["verified"] is True
     assert sum(1 for i in items if i["status"] == "rejected") == 2
     assert "OUTSIDE-SECRET-CONTENT" not in _all_text(items)
@@ -90,8 +104,11 @@ def test_sensitive_files_are_listed_as_excluded_and_never_read(repo):
     os.symlink(repo / ".env", repo / "src" / "settings.txt")  # innocuous name pointing at a sensitive file
     (repo / ".git").mkdir()
     (repo / ".git" / "config").write_text("[remote]\nurl = https://user:pw-in-url@example.com/x.git\n")
-    items, _ = build_context_pack(str(repo), related_files=[".env", "config/secrets.yml", "id_rsa", "src/settings.txt",
-                                                           ".git/config"], include_git=False)
+    items, _ = build_context_pack(
+        str(repo),
+        related_files=[".env", "config/secrets.yml", "id_rsa", "src/settings.txt", ".git/config"],
+        include_git=False,
+    )
     excluded = [i for i in items if i["status"] == "excluded_sensitive"]
     assert {i["ref"] for i in excluded} == {".env", "config/secrets.yml", "id_rsa", ".git/config"}
     assert all(not i["included"] and not i["verified"] and i["excerpt"] == "" for i in excluded)
@@ -140,7 +157,9 @@ def test_budget_truncates_then_marks_remaining_over_budget(repo):
 def test_budget_prioritises_records_and_instruction_docs(repo):
     (repo / "src" / "huge.py").write_text("z = 1\n" * 20_000)
     records = [{"ref": "finding:fnd_1", "title": "Injection", "summary": "Recorded injection attempt."}]
-    items, total = build_context_pack(str(repo), related_files=["src/huge.py"], profile="minimal", records=records)
+    items, total = build_context_pack(
+        str(repo), related_files=["src/huge.py"], profile="minimal", records=records
+    )
     order = [i["ref"] for i in items if i["included"]]
     assert order[0] == "finding:fnd_1" and "CLAUDE.md" in order
     assert total <= PROFILES["minimal"].token_budget
@@ -148,13 +167,17 @@ def test_budget_prioritises_records_and_instruction_docs(repo):
 
 def test_excerpts_and_records_are_redacted(repo):
     (repo / "src" / "config.py").write_text(f"GITHUB = '{GH_TOKEN}'\naws_access_key_id = '{AWS_KEY}'\n")
-    records = [{"ref": "event:evt_1", "title": "Tool call", "summary": f"curl -H 'Authorization: token {GH_TOKEN}'"}]
+    records = [
+        {"ref": "event:evt_1", "title": "Tool call", "summary": f"curl -H 'Authorization: token {GH_TOKEN}'"}
+    ]
     items, _ = build_context_pack(str(repo), related_files=["src/config.py"], records=records)
     blob = _all_text(items)
     assert GH_TOKEN not in blob and AWS_KEY not in blob
     assert "[REDACTED:" in _by_ref(items, "src/config.py")["excerpt"]
     record = _by_ref(items, "event:evt_1")
-    assert record["verified"] is True and record["category"] == "evidence" and "[REDACTED:" in record["excerpt"]
+    assert (
+        record["verified"] is True and record["category"] == "evidence" and "[REDACTED:" in record["excerpt"]
+    )
 
 
 def test_related_tests_are_discovered_heuristically(repo):
@@ -175,7 +198,9 @@ def test_related_tests_are_discovered_heuristically(repo):
     assert "tests/unit/test_other.py" not in tests
     assert not any(t.startswith("node_modules") for t in tests)
     discovered = [i for i in items if i["origin"] == "discovered"]
-    assert discovered and all("not proven coverage" in i["reason"] or "truncated" in i["reason"] for i in discovered)
+    assert discovered and all(
+        "not proven coverage" in i["reason"] or "truncated" in i["reason"] for i in discovered
+    )
 
 
 def test_minimal_profile_skips_tests_and_git(repo):
@@ -186,7 +211,9 @@ def test_minimal_profile_skips_tests_and_git(repo):
 
 
 def test_no_repository_marks_paths_unverified_without_reading(tmp_path):
-    items, total = build_context_pack(None, related_files=["src/app.py", "../etc/hosts", "/abs/path.py", ".env"])
+    items, total = build_context_pack(
+        None, related_files=["src/app.py", "../etc/hosts", "/abs/path.py", ".env"]
+    )
     assert _by_ref(items, "src/app.py")["status"] == "unverified"
     assert sum(1 for i in items if i["status"] == "rejected") == 2
     assert _by_ref(items, ".env")["status"] == "excluded_sensitive"
@@ -208,9 +235,16 @@ def test_related_file_limit_and_profile_validation(repo):
         build_context_pack(str(repo), profile="galaxy_brain")
     with pytest.raises(ValueError, match="ref"):
         build_context_pack(str(repo), records=[{"title": "no ref"}])
-    assert {p["key"] for p in describe_profiles()} == {"minimal", "standard", "deep", "security_critical", "full"}
-    assert [PROFILES[k].token_budget for k in ("minimal", "standard", "deep", "security_critical", "full")] == sorted(
-        PROFILES[k].token_budget for k in PROFILES)
+    assert {p["key"] for p in describe_profiles()} == {
+        "minimal",
+        "standard",
+        "deep",
+        "security_critical",
+        "full",
+    }
+    assert [
+        PROFILES[k].token_budget for k in ("minimal", "standard", "deep", "security_critical", "full")
+    ] == sorted(PROFILES[k].token_budget for k in PROFILES)
 
 
 def test_security_critical_profile_prioritises_security_docs(repo):
@@ -223,8 +257,13 @@ def test_security_critical_profile_prioritises_security_docs(repo):
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
 def test_git_history_is_collected_and_redacted(repo):
-    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com", "GIT_COMMITTER_NAME": "t",
-           "GIT_COMMITTER_EMAIL": "t@example.com"}
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+    }
 
     git_bin = shutil.which("git")
     assert git_bin is not None

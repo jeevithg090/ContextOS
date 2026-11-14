@@ -103,8 +103,11 @@ class Acc:
         dev = DEV_NET.search(raw)
         if dev:
             self.add_host(dev.group(1), single_label=True)
-            self.network("/dev/tcp", "redirects data to a network socket via /dev/tcp (a common reverse-shell "
-                                     "and exfiltration technique)")
+            self.network(
+                "/dev/tcp",
+                "redirects data to a network socket via /dev/tcp (a common reverse-shell "
+                "and exfiltration technique)",
+            )
             return
         if _PROC_ENVIRON.match(raw):
             self.env_dumps.append(raw)

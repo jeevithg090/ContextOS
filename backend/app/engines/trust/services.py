@@ -53,7 +53,9 @@ KNOWN_SERVICES: tuple[KnownService, ...] = (
     KnownService("Beeceptor", REQUEST_CAPTURE, domains=("beeceptor.com",)),
     KnownService("Request Catcher", REQUEST_CAPTURE, domains=("requestcatcher.com",)),
     KnownService("Hookbin", REQUEST_CAPTURE, domains=("hookbin.com",)),
-    KnownService("ngrok", TUNNEL, domains=("ngrok.io", "ngrok-free.app", "ngrok.app", "ngrok-free.dev", "ngrok.dev")),
+    KnownService(
+        "ngrok", TUNNEL, domains=("ngrok.io", "ngrok-free.app", "ngrok.app", "ngrok-free.dev", "ngrok.dev")
+    ),
     KnownService("Cloudflare quick tunnel", TUNNEL, domains=("trycloudflare.com",)),
     KnownService("localtunnel", TUNNEL, domains=("loca.lt", "localtunnel.me")),
     KnownService("Serveo", TUNNEL, domains=("serveo.net",)),
@@ -83,13 +85,17 @@ KNOWN_SERVICES: tuple[KnownService, ...] = (
 METADATA_IPS = frozenset(
     ipaddress.ip_address(a) for a in ("169.254.169.254", "169.254.170.2", "fd00:ec2::254", "100.100.100.200")
 )
-METADATA_HOSTS = frozenset({"metadata.google.internal", "metadata.goog", "instance-data", "instance-data.ec2.internal"})
+METADATA_HOSTS = frozenset(
+    {"metadata.google.internal", "metadata.goog", "instance-data", "instance-data.ec2.internal"}
+)
 
 
 def match_service(host: str, path: str = "") -> KnownService | None:
     labels = host.split(".")[:-1]
     for service in KNOWN_SERVICES:
-        hit = any(host_within(host, d) for d in service.domains) or any(lbl in service.labels for lbl in labels)
+        hit = any(host_within(host, d) for d in service.domains) or any(
+            lbl in service.labels for lbl in labels
+        )
         if not hit:
             continue
         if service.path is not None and not service.path.match(path or ""):

@@ -55,22 +55,36 @@ def _error_body(code: str, message: str, details: Any = None) -> bytes:
     return json.dumps({"error": {"code": code, "message": message, "details": details}}).encode()
 
 
-async def _respond(send: Callable[..., Any], status: int, code: str, message: str, details: Any = None) -> None:
+async def _respond(
+    send: Callable[..., Any], status: int, code: str, message: str, details: Any = None
+) -> None:
     body = _error_body(code, message, details)
-    await send({"type": "http.response.start", "status": status, "headers": [
-        (b"content-type", b"application/json"), (b"content-length", str(len(body)).encode()),
-        (b"cache-control", b"no-store"), (b"x-content-type-options", b"nosniff"),
-    ]})
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode()),
+                (b"cache-control", b"no-store"),
+                (b"x-content-type-options", b"nosniff"),
+            ],
+        }
+    )
     await send({"type": "http.response.body", "body": body})
 
 
 class RequestLimitsMiddleware:
-    def __init__(self, app: Any, *, max_body_bytes: Callable[[], int], max_json_depth: int = MAX_JSON_DEPTH) -> None:
+    def __init__(
+        self, app: Any, *, max_body_bytes: Callable[[], int], max_json_depth: int = MAX_JSON_DEPTH
+    ) -> None:
         self.app = app
         self.max_body_bytes = max_body_bytes
         self.max_json_depth = max_json_depth
 
-    async def __call__(self, scope: dict[str, Any], receive: Callable[..., Any], send: Callable[..., Any]) -> None:
+    async def __call__(
+        self, scope: dict[str, Any], receive: Callable[..., Any], send: Callable[..., Any]
+    ) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -99,9 +113,13 @@ class RequestLimitsMiddleware:
                 break
         data = b"".join(chunks)
         if data and data.lstrip()[:1] in (b"{", b"[") and json_depth_exceeds(data, self.max_json_depth):
-            await _respond(send, 422, "validation_failed",
-                           f"Request body is nested more than {self.max_json_depth} levels deep",
-                           {"max_depth": self.max_json_depth})
+            await _respond(
+                send,
+                422,
+                "validation_failed",
+                f"Request body is nested more than {self.max_json_depth} levels deep",
+                {"max_depth": self.max_json_depth},
+            )
             return
 
         replayed = False

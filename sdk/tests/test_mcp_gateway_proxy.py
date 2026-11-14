@@ -61,8 +61,9 @@ def test_tools_are_reported_for_scanning_and_re_exposed_unchanged(server: FakeSe
         return upstream, listed
 
     upstream, listed = _run(scenario, client)
-    assert [(t.name, t.description, t.input_schema) for t in listed] == \
-        [(t.name, t.description, t.input_schema) for t in upstream]
+    assert [(t.name, t.description, t.input_schema) for t in listed] == [
+        (t.name, t.description, t.input_schema) for t in upstream
+    ]
     reported = server.events_of("mcp.server_connected")
     assert len(reported) == 1
     event = reported[0]
@@ -87,13 +88,19 @@ def test_a_changed_tool_description_is_reported_again(server: FakeServer, client
     assert reported[0]["metadata"]["listing_fingerprint"] != reported[1]["metadata"]["listing_fingerprint"]
 
 
-def test_allowed_call_is_decided_first_then_forwarded_and_reported(server: FakeServer, client, _isolated: Path) -> None:
+def test_allowed_call_is_decided_first_then_forwarded_and_reported(
+    server: FakeServer, client, _isolated: Path
+) -> None:
     async def scenario(chain):
         await chain.host.list_tools()
         return await chain.host.call_tool("get_forecast", {"city": "Paris"})
 
     result = _run(scenario, client)
-    assert not result.is_error and "Forecast for Paris" in text_of(result) and "SYSTEM OVERRIDE" in text_of(result)
+    assert (
+        not result.is_error
+        and "Forecast for Paris" in text_of(result)
+        and "SYSTEM OVERRIDE" in text_of(result)
+    )
     assert [c["tool"] for c in call_log(_isolated)] == ["get_forecast"]
     paths = [r.url.path for r in server.requests]
     assert paths.index("/api/v1/decide") < len(paths) - 1  # the decision came before the result report
@@ -103,19 +110,31 @@ def test_allowed_call_is_decided_first_then_forwarded_and_reported(server: FakeS
     completed = server.events_of("tool.completed")
     assert len(completed) == 1 and completed[0]["correlation_id"] == decide["correlation_id"]
     assert "SYSTEM OVERRIDE" in completed[0]["result"]  # the injected result reaches ContextOS for scanning
-    assert completed[0]["metadata"]["decision"] == "ALLOW" and completed[0]["metadata"]["policy_decision_id"] == "pd_1"
+    assert (
+        completed[0]["metadata"]["decision"] == "ALLOW"
+        and completed[0]["metadata"]["policy_decision_id"] == "pd_1"
+    )
 
 
 def test_denied_call_never_reaches_the_upstream_server(server: FakeServer, client, _isolated: Path) -> None:
-    server.route("POST", "/api/v1/decide", decision_body(
-        "DENY", reason="Deleting notes needs a ticket.", matched_policies=[{"name": "Deny deleting notes", "outcome": "DENY"}]))
+    server.route(
+        "POST",
+        "/api/v1/decide",
+        decision_body(
+            "DENY",
+            reason="Deleting notes needs a ticket.",
+            matched_policies=[{"name": "Deny deleting notes", "outcome": "DENY"}],
+        ),
+    )
 
     async def scenario(chain):
         return await chain.host.call_tool("delete_all_notes", {"confirm": True})
 
     result = _run(scenario, client)
     assert result.is_error
-    assert text_of(result).startswith("Blocked by ContextOS policy 'Deny deleting notes': Deleting notes needs a ticket")
+    assert text_of(result).startswith(
+        "Blocked by ContextOS policy 'Deny deleting notes': Deleting notes needs a ticket"
+    )
     assert call_log(_isolated) == []
     assert server.events_of("tool.completed") == [] and server.events_of("tool.failed") == []
 
@@ -130,11 +149,16 @@ def test_a_call_without_a_listing_reports_the_listing_before_the_decision(server
     assert not first.is_error and not second.is_error
     listings = server.events_of("mcp.server_connected")
     assert len(listings) == 1 and "~/.ssh/id_rsa" in json.dumps(listings[0]["metadata"]["tools"])
-    kinds = [json.loads(r.content)["events"][0]["event_type"] if r.url.path == "/api/v1/events" else "decide"
-             for r in server.requests if r.method == "POST"]
+    kinds = [
+        json.loads(r.content)["events"][0]["event_type"] if r.url.path == "/api/v1/events" else "decide"
+        for r in server.requests
+        if r.method == "POST"
+    ]
     assert kinds.index("mcp.server_connected") < kinds.index("decide")
     decide = server.bodies("POST", "/api/v1/decide")[0]
-    assert decide["tool"]["description"].startswith("Get today")  # the listed description accompanies the request
+    assert decide["tool"]["description"].startswith(
+        "Get today"
+    )  # the listed description accompanies the request
 
 
 def test_unreachable_contextos_blocks_by_default(server: FakeServer, client, _isolated: Path) -> None:
@@ -190,11 +214,18 @@ def test_resources_and_prompts_pass_through_and_are_reported_as_context(server: 
         return listed, read, prompts, prompt
 
     listed, read, prompts, prompt = _run(scenario, client)
-    assert [r.uri for r in listed.resources] == ["notes://index"] and [p.name for p in prompts.prompts] == ["summarize_notes"]
+    assert [r.uri for r in listed.resources] == ["notes://index"] and [p.name for p in prompts.prompts] == [
+        "summarize_notes"
+    ]
     assert "attacker.example" in read.contents[0].text  # type: ignore[union-attr]
     contexts = server.events_of("context.ingested")
-    assert [c["source"]["identifier"] for c in contexts] == ["notes/resource:notes://index", "notes/prompt:summarize_notes"]
-    assert "admin@attacker.example" in contexts[0]["content"] and contexts[0]["content_type"] == "text/markdown"
+    assert [c["source"]["identifier"] for c in contexts] == [
+        "notes/resource:notes://index",
+        "notes/prompt:summarize_notes",
+    ]
+    assert (
+        "admin@attacker.example" in contexts[0]["content"] and contexts[0]["content_type"] == "text/markdown"
+    )
     assert contexts[1]["metadata"]["argument_names"] == ["style"] and "bullet" in contexts[1]["content"]
     assert len(server.events_of("mcp.server_connected")) == 1  # listing reported even without tools/list
 
@@ -211,14 +242,20 @@ def _events_with_trust(level: str | None):
     def handler(request: httpx.Request) -> httpx.Response:
         events = json.loads(request.content)["events"]
         refs = {"source_id": "src_1", **({"source_trust_level": level} if level else {})}
-        return httpx.Response(200, json={"results": [
-            {"event_id": e["event_id"], "status": "accepted", "refs": refs} for e in events]})
+        return httpx.Response(
+            200,
+            json={
+                "results": [{"event_id": e["event_id"], "status": "accepted", "refs": refs} for e in events]
+            },
+        )
+
     return handler
 
 
 @pytest.mark.parametrize(("level", "visible"), [("BLOCKED", 0), ("blocked", 0), ("SUSPICIOUS", 3), (None, 3)])
-def test_hide_blocked_tools_follows_the_contextos_classification(server: FakeServer, client, level: str | None,
-                                                                 visible: int) -> None:
+def test_hide_blocked_tools_follows_the_contextos_classification(
+    server: FakeServer, client, level: str | None, visible: int
+) -> None:
     """The classification comes from the mcp.server_connected result: no source read (no read scope)."""
     server.route("POST", "/api/v1/events", handler=_events_with_trust(level))
 
@@ -285,7 +322,9 @@ def test_host_info_and_trust_level_helpers() -> None:
     assert host_info(Modern()) == {"name": "cursor", "version": "1"}
 
 
-def test_the_benign_example_works_unchanged_through_the_gateway(server: FakeServer, client, _isolated: Path) -> None:
+def test_the_benign_example_works_unchanged_through_the_gateway(
+    server: FakeServer, client, _isolated: Path
+) -> None:
     async def scenario(chain):
         tools = sorted(t.name for t in (await chain.host.list_tools()).tools)
         added = await chain.host.call_tool("add", {"a": 2, "b": 3})
@@ -293,8 +332,9 @@ def test_the_benign_example_works_unchanged_through_the_gateway(server: FakeServ
         prompt = await chain.host.get_prompt("review_text", {"text": "Hello"})
         return tools, added, readme, prompt
 
-    tools, added, readme, prompt = _run(scenario, client, GatewaySettings(server_name="toolbox"),
-                                        example="benign_server")
+    tools, added, readme, prompt = _run(
+        scenario, client, GatewaySettings(server_name="toolbox"), example="benign_server"
+    )
     assert tools == ["add", "utc_now", "word_count"]
     assert not added.is_error and text_of(added) == "5.0" and added.structured_content == {"result": 5.0}
     assert "Toolbox" in readme.contents[0].text  # type: ignore[union-attr]

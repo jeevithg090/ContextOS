@@ -73,7 +73,9 @@ def _tp(
     needles: tuple[str, ...],
     spec: int = SPEC_PROVIDER,
 ) -> TokenPattern:
-    return TokenPattern(secret_type, re.compile(pattern), confidence, needles, _WORD if left == _B else _ALNUM, spec)
+    return TokenPattern(
+        secret_type, re.compile(pattern), confidence, needles, _WORD if left == _B else _ALNUM, spec
+    )
 
 
 def left_ok(text: str, start: int, forbidden: frozenset[str]) -> bool:
@@ -90,22 +92,49 @@ def iter_needle(lower: str, needle: str) -> Iterator[int]:
 
 # The named group ``body`` is the random part; placeholder checks run against it.
 TOKEN_PATTERNS: tuple[TokenPattern, ...] = (
-    _tp("aws_access_key", _BA, r"(?:AKIA|ASIA|ABIA|ACCA)(?P<body>[A-Z0-9]{16})" + _EA, 0.95,
-        ("akia", "asia", "abia", "acca")),
-    _tp("github_token", _B, r"gh[pousr]_(?P<body>[A-Za-z0-9]{36,251})" + _E, 0.97,
-        ("ghp_", "gho_", "ghu_", "ghs_", "ghr_")),
+    _tp(
+        "aws_access_key",
+        _BA,
+        r"(?:AKIA|ASIA|ABIA|ACCA)(?P<body>[A-Z0-9]{16})" + _EA,
+        0.95,
+        ("akia", "asia", "abia", "acca"),
+    ),
+    _tp(
+        "github_token",
+        _B,
+        r"gh[pousr]_(?P<body>[A-Za-z0-9]{36,251})" + _E,
+        0.97,
+        ("ghp_", "gho_", "ghu_", "ghs_", "ghr_"),
+    ),
     _tp("github_token", _B, r"github_pat_(?P<body>[A-Za-z0-9_]{60,251})" + _E, 0.97, ("github_pat_",)),
-    _tp("gitlab_token", _B, r"gl(?:pat|dt|rt|ptt|cbt|soat|ft|imt)-(?P<body>[A-Za-z0-9_\-]{20,64})" + _E, 0.95,
-        ("glpat-", "gldt-", "glrt-", "glptt-", "glcbt-", "glsoat-", "glft-", "glimt-")),
-    _tp("slack_token", _B, r"xox[abprse]-(?P<body>[0-9A-Za-z][0-9A-Za-z\-]{8,250}[0-9A-Za-z])(?![A-Za-z0-9\-])",
-        0.95, ("xox",)),
+    _tp(
+        "gitlab_token",
+        _B,
+        r"gl(?:pat|dt|rt|ptt|cbt|soat|ft|imt)-(?P<body>[A-Za-z0-9_\-]{20,64})" + _E,
+        0.95,
+        ("glpat-", "gldt-", "glrt-", "glptt-", "glcbt-", "glsoat-", "glft-", "glimt-"),
+    ),
+    _tp(
+        "slack_token",
+        _B,
+        r"xox[abprse]-(?P<body>[0-9A-Za-z][0-9A-Za-z\-]{8,250}[0-9A-Za-z])(?![A-Za-z0-9\-])",
+        0.95,
+        ("xox",),
+    ),
     _tp("stripe_live_key", _B, r"(?:sk|rk)_live_(?P<body>[A-Za-z0-9]{20,247})" + _E, 0.97, ("_live_",)),
     _tp("stripe_test_key", _B, r"(?:sk|rk)_test_(?P<body>[A-Za-z0-9]{20,247})" + _E, 0.8, ("_test_",)),
     _tp("stripe_webhook_secret", _B, r"whsec_(?P<body>[A-Za-z0-9+/=]{24,128})" + _E, 0.9, ("whsec_",)),
     _tp("anthropic_api_key", _B, r"sk-ant-(?P<body>[A-Za-z0-9_\-]{20,})" + _E, 0.98, ("sk-ant-",)),
-    _tp("openai_api_key", _B, r"sk-(?:proj|svcacct|admin)-(?P<body>[A-Za-z0-9_\-]{20,})" + _E, 0.97,
-        ("sk-proj-", "sk-svcacct-", "sk-admin-")),
-    _tp("openai_api_key", _B, r"sk-(?P<body>[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20})" + _E, 0.99, ("t3blbkfj",)),
+    _tp(
+        "openai_api_key",
+        _B,
+        r"sk-(?:proj|svcacct|admin)-(?P<body>[A-Za-z0-9_\-]{20,})" + _E,
+        0.97,
+        ("sk-proj-", "sk-svcacct-", "sk-admin-"),
+    ),
+    _tp(
+        "openai_api_key", _B, r"sk-(?P<body>[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20})" + _E, 0.99, ("t3blbkfj",)
+    ),
     _tp("openai_api_key", _B, r"sk-(?P<body>[A-Za-z0-9]{32,})" + _E, 0.8, ("sk-",), SPEC_STRUCTURED),
     _tp("google_api_key", _B, r"AIza(?P<body>[0-9A-Za-z_\-]{35})" + _E, 0.9, ("aiza",)),
     _tp("google_oauth_token", _B, r"ya29\.(?P<body>[0-9A-Za-z_\-]{20,})" + _E, 0.85, ("ya29.",)),
@@ -114,11 +143,22 @@ TOKEN_PATTERNS: tuple[TokenPattern, ...] = (
     _tp("sendgrid_api_key", _B, r"SG\.(?P<body>[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43})" + _E, 0.98, ("sg.",)),
     _tp("npm_token", _B, r"npm_(?P<body>[A-Za-z0-9]{36})" + _E, 0.95, ("npm_",)),
     _tp("huggingface_token", _B, r"hf_(?P<body>[A-Za-z0-9]{34,40})" + _E, 0.9, ("hf_",)),
-    _tp("pypi_token", _B, r"pypi-AgEIcHlwaS5vcmc(?P<body>[A-Za-z0-9_\-]{50,})" + _E, 0.98, ("pypi-ageichlwas5vcmc",)),
+    _tp(
+        "pypi_token",
+        _B,
+        r"pypi-AgEIcHlwaS5vcmc(?P<body>[A-Za-z0-9_\-]{50,})" + _E,
+        0.98,
+        ("pypi-ageichlwas5vcmc",),
+    ),
     _tp("docker_hub_token", _B, r"dckr_pat_(?P<body>[A-Za-z0-9_\-]{27,})" + _E, 0.95, ("dckr_pat_",)),
     _tp("digitalocean_token", _B, r"do[por]_v1_(?P<body>[a-f0-9]{64})" + _E, 0.95, ("_v1_",)),
-    _tp("shopify_token", _B, r"shp(?:at|ca|pa|ss)_(?P<body>[a-fA-F0-9]{32})" + _E, 0.95,
-        ("shpat_", "shpca_", "shppa_", "shpss_")),
+    _tp(
+        "shopify_token",
+        _B,
+        r"shp(?:at|ca|pa|ss)_(?P<body>[a-fA-F0-9]{32})" + _E,
+        0.95,
+        ("shpat_", "shpca_", "shppa_", "shpss_"),
+    ),
     _tp("vault_token", _B, r"hv[sbr]\.(?P<body>[A-Za-z0-9_\-]{24,})" + _E, 0.85, ("hvs.", "hvb.", "hvr.")),
     _tp("databricks_token", _BA, r"dapi(?P<body>[a-f0-9]{32})(?:-\d)?" + _EA, 0.85, ("dapi",)),
     _tp("linear_api_key", _B, r"lin_api_(?P<body>[A-Za-z0-9]{40})" + _E, 0.95, ("lin_api_",)),
@@ -126,10 +166,20 @@ TOKEN_PATTERNS: tuple[TokenPattern, ...] = (
     _tp("groq_api_key", _B, r"gsk_(?P<body>[A-Za-z0-9]{48,56})" + _E, 0.9, ("gsk_",)),
     _tp("xai_api_key", _B, r"xai-(?P<body>[A-Za-z0-9]{70,90})" + _E, 0.9, ("xai-",)),
     _tp("telegram_bot_token", _BA, r"\d{8,10}:(?P<body>AA[A-Za-z0-9_\-]{33})" + _E, 0.85, (":aa",)),
-    _tp("slack_webhook", _BA, r"https?://hooks\.slack\.com/(?P<body>(?:services|workflows|triggers)/[A-Za-z0-9_/\-]{20,})",
-        0.95, ("hooks.slack.com",)),
-    _tp("discord_webhook", _BA, r"https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/(?P<body>\d{5,30}/[A-Za-z0-9_\-]{40,})",
-        0.95, ("/api/webhooks/",)),
+    _tp(
+        "slack_webhook",
+        _BA,
+        r"https?://hooks\.slack\.com/(?P<body>(?:services|workflows|triggers)/[A-Za-z0-9_/\-]{20,})",
+        0.95,
+        ("hooks.slack.com",),
+    ),
+    _tp(
+        "discord_webhook",
+        _BA,
+        r"https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/(?P<body>\d{5,30}/[A-Za-z0-9_\-]{40,})",
+        0.95,
+        ("/api/webhooks/",),
+    ),
     _tp("contextos_api_key", _B, r"ctxk_(?P<body>[A-Za-z0-9_\-]{40,})" + _E, 0.99, ("ctxk_",)),
     _tp("contextos_session_token", _B, r"ctxs_(?P<body>[A-Za-z0-9_\-]{40,})" + _E, 0.99, ("ctxs_",)),
 )
@@ -140,9 +190,19 @@ _SPAN_IS_BODY = frozenset({"slack_webhook", "discord_webhook"})
 
 # Patterns whose body alphabet contains their own prefix ("xoxb-xoxb-...") are matched only at
 # prefix occurrences that pass the boundary check, so repeated prefixes cannot cost O(n * body).
-_ANCHORED = frozenset({"slack_token", "gitlab_token", "github_token", "anthropic_api_key", "google_api_key",
-                       "google_oauth_client_secret", "docker_hub_token", "contextos_api_key",
-                       "contextos_session_token"})
+_ANCHORED = frozenset(
+    {
+        "slack_token",
+        "gitlab_token",
+        "github_token",
+        "anthropic_api_key",
+        "google_api_key",
+        "google_oauth_client_secret",
+        "docker_hub_token",
+        "contextos_api_key",
+        "contextos_session_token",
+    }
+)
 
 
 def _token_matches(pattern: TokenPattern, text: str, lower: str) -> Iterator[re.Match[str]]:
@@ -170,7 +230,9 @@ def scan_tokens(text: str, lower: str) -> Iterator[Candidate]:
             if is_placeholder(body):
                 continue
             confidence = pattern.confidence * (0.5 if looks_fake(body) else 1.0)
-            start, end = (m.start("body"), m.end("body")) if pattern.secret_type in _SPAN_IS_BODY else m.span()
+            start, end = (
+                (m.start("body"), m.end("body")) if pattern.secret_type in _SPAN_IS_BODY else m.span()
+            )
             yield Candidate(pattern.secret_type, start, end, text[start:end], confidence, pattern.specificity)
 
 
@@ -283,19 +345,60 @@ _URL_CREDS_RE = re.compile(
 )
 _DB_SCHEMES = frozenset(
     {
-        "postgres", "postgresql", "postgis", "mysql", "mysql2", "mariadb", "mongodb", "mongodb+srv",
-        "redis", "rediss", "amqp", "amqps", "mssql", "sqlserver", "oracle", "cockroachdb", "clickhouse",
-        "kafka", "nats", "cassandra", "couchdb", "neo4j", "neo4j+s", "bolt", "memcached", "snowflake",
-        "db2", "sqlalchemy", "postgresql+psycopg", "postgresql+psycopg2", "postgresql+asyncpg",
-        "mysql+pymysql", "mysql+mysqldb", "mssql+pyodbc", "redshift", "influxdb", "elasticsearch",
+        "postgres",
+        "postgresql",
+        "postgis",
+        "mysql",
+        "mysql2",
+        "mariadb",
+        "mongodb",
+        "mongodb+srv",
+        "redis",
+        "rediss",
+        "amqp",
+        "amqps",
+        "mssql",
+        "sqlserver",
+        "oracle",
+        "cockroachdb",
+        "clickhouse",
+        "kafka",
+        "nats",
+        "cassandra",
+        "couchdb",
+        "neo4j",
+        "neo4j+s",
+        "bolt",
+        "memcached",
+        "snowflake",
+        "db2",
+        "sqlalchemy",
+        "postgresql+psycopg",
+        "postgresql+psycopg2",
+        "postgresql+asyncpg",
+        "mysql+pymysql",
+        "mysql+mysqldb",
+        "mssql+pyodbc",
+        "redshift",
+        "influxdb",
+        "elasticsearch",
     }
 )
 _WEAK_DEFAULTS = frozenset({"postgres", "mysql", "guest", "pass", "pwd", "root", "admin", "user", "test"})
 
 _AZURE_RES = (
-    ("accountkey=", re.compile(r"(?i)AccountKey=(?P<secret>[A-Za-z0-9+/]{40,1024}={0,2})"), "azure_storage_key", 0.95),
-    ("sharedaccesskey=", re.compile(r"(?i)SharedAccessKey=(?P<secret>[A-Za-z0-9+/]{30,1024}={0,2})"),
-     "azure_shared_access_key", 0.9),
+    (
+        "accountkey=",
+        re.compile(r"(?i)AccountKey=(?P<secret>[A-Za-z0-9+/]{40,1024}={0,2})"),
+        "azure_storage_key",
+        0.95,
+    ),
+    (
+        "sharedaccesskey=",
+        re.compile(r"(?i)SharedAccessKey=(?P<secret>[A-Za-z0-9+/]{30,1024}={0,2})"),
+        "azure_shared_access_key",
+        0.9,
+    ),
 )
 _AZURE_SAS_RE = re.compile(r"(?i)sig=(?P<secret>[A-Za-z0-9%+/]{30,1024}(?:%3D|=){0,2})")
 
@@ -345,7 +448,18 @@ _BEARER_RE = re.compile(r"(?i)bearer\s+(?P<secret>[A-Za-z0-9\-._~+/]{20,4096}=*)
 _COOKIE_HEADER_RE = re.compile(r"(?i)cookie\\?[\"']?\s*[:=]\s*\\?[\"']?(?P<val>[^\r\n\"'\\`]{3,8192})")
 _COOKIE_PAIR_RE = re.compile(r"(?P<name>[A-Za-z0-9_\-.!#$%&*+^|~]{1,128})=(?P<value>[^;,\s]{1,4096})")
 _COOKIE_ATTRIBUTES = frozenset(
-    {"path", "domain", "expires", "max-age", "samesite", "secure", "httponly", "priority", "partitioned", "version"}
+    {
+        "path",
+        "domain",
+        "expires",
+        "max-age",
+        "samesite",
+        "secure",
+        "httponly",
+        "priority",
+        "partitioned",
+        "version",
+    }
 )
 _SESSIONISH = ("sess", "sid", "auth", "token", "jwt", "login", "remember", "csrf", "xsrf")
 
@@ -405,7 +519,9 @@ def _scan_cookies(text: str, lower: str) -> Iterator[Candidate]:
             strong = len(value) >= 16 and shannon_entropy(value) >= 3.0 and char_class_count(value) >= 2
             if strong or (named and len(value) >= 8):
                 start = base + pair.start("value")
-                yield Candidate("session_cookie", start, start + len(value), value, 0.85 if named else 0.7, SPEC_HEADER)
+                yield Candidate(
+                    "session_cookie", start, start + len(value), value, 0.85 if named else 0.7, SPEC_HEADER
+                )
 
 
 def scan_http_auth(text: str, lower: str) -> Iterator[Candidate]:

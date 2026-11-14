@@ -26,13 +26,16 @@ def real_source_filter() -> Any:
 
 def _calls(org_id: str) -> Any:
     return select(ToolInvocation.destination_id).where(
-        ToolInvocation.organization_id == org_id, ToolInvocation.destination_id.is_not(None))
+        ToolInvocation.organization_id == org_id, ToolInvocation.destination_id.is_not(None)
+    )
 
 
 def real_destination_filter(org_id: str) -> Any:
     """Destinations observed by real traffic (or with no recorded call)."""
     calls = _calls(org_id)
-    return or_(Destination.id.in_(calls.where(ToolInvocation.is_simulation.is_(False))), Destination.id.not_in(calls))
+    return or_(
+        Destination.id.in_(calls.where(ToolInvocation.is_simulation.is_(False))), Destination.id.not_in(calls)
+    )
 
 
 def simulation_only_destinations(db: Session, org_id: str, ids: Iterable[str]) -> set[str]:

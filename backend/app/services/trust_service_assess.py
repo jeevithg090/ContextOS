@@ -53,7 +53,7 @@ _REPORTED_ONLY = {
     "check": REPORTED_ONLY_CHECK,
     "result": "warn",
     "detail": "The integration reported this destination; ContextOS could not derive it from the call's arguments, "
-              "so it cannot be treated as trusted.",
+    "so it cannot be treated as trusted.",
 }
 _CHUNK = 500
 # Raised by the pipeline on top of the detection findings for the same content (see
@@ -160,7 +160,9 @@ def apply_ceiling(assessment: TrustAssessment, ceiling: tuple[str, str] | None) 
     level, reason = ceiling
     if level in TRUST_RANK and TRUST_RANK[level] < TRUST_RANK.get(assessment.level, 2):
         assessment.level = level
-        assessment.capabilities = [c for c in assessment.capabilities if c == "read"] if level != "BLOCKED" else []
+        assessment.capabilities = (
+            [c for c in assessment.capabilities if c == "read"] if level != "BLOCKED" else []
+        )
         assessment.reasons = [*assessment.reasons, reason]
     return assessment
 
@@ -178,7 +180,11 @@ class SourceContext:
 
 
 def source_context(
-    db: Session, org_id: str, source: ContextSource, *, server_levels: dict[str, str] | None = None,
+    db: Session,
+    org_id: str,
+    source: ContextSource,
+    *,
+    server_levels: dict[str, str] | None = None,
     evidence: Evidence | None = None,
 ) -> SourceContext:
     if evidence is None:
@@ -203,7 +209,9 @@ def assess_source_row(
 ) -> TrustAssessment:
     """Assess a stored source. ``manual`` = (level, capabilities) to evaluate a manual classification."""
     is_manual = manual is not None or (bool(source.manually_classified) and not ignore_manual)
-    level, caps = manual if manual is not None else (source.trust_level, tuple(source.trust_capabilities or ()))
+    level, caps = (
+        manual if manual is not None else (source.trust_level, tuple(source.trust_capabilities or ()))
+    )
     evidence = Evidence() if ignore_evidence else ctx.evidence
     history = SourceHistory(
         observation_count=source.observation_count or 0,
@@ -240,10 +248,17 @@ def source_candidates(source_type: str, identifier: str) -> tuple[list[str], lis
     return identifiers, domain_candidates(host, canonical.domain), canonical.identifier, canonical.domain
 
 
-def matching_source_rules(rules: Sequence[TrustRuleSpec], source_type: str, identifier: str) -> list[TrustRuleSpec]:
+def matching_source_rules(
+    rules: Sequence[TrustRuleSpec], source_type: str, identifier: str
+) -> list[TrustRuleSpec]:
     identifiers, domains, _canonical, _domain = source_candidates(source_type, identifier)
-    return matching_rules(rules, scope="source", source_type=(source_type or "other").strip().lower(),
-                          identifiers=identifiers, domains=domains)
+    return matching_rules(
+        rules,
+        scope="source",
+        source_type=(source_type or "other").strip().lower(),
+        identifiers=identifiers,
+        domains=domains,
+    )
 
 
 # ----------------------------------------------------------------------------- destinations
@@ -256,13 +271,17 @@ def destination_candidates(kind: str, identifier: str) -> tuple[list[str], list[
     return identifiers, domain_candidates(host, registrable_domain(host)), target.canonical, target.kind
 
 
-def matching_destination_rules(rules: Sequence[TrustRuleSpec], kind: str, identifier: str) -> list[TrustRuleSpec]:
+def matching_destination_rules(
+    rules: Sequence[TrustRuleSpec], kind: str, identifier: str
+) -> list[TrustRuleSpec]:
     identifiers, domains, _canonical, _kind = destination_candidates(kind, identifier)
     return matching_rules(rules, scope="destination", identifiers=identifiers, domains=domains)
 
 
 def reported_only(row: Destination) -> bool:
-    return any(isinstance(c, dict) and c.get("check") == REPORTED_ONLY_CHECK for c in (row.verification or []))
+    return any(
+        isinstance(c, dict) and c.get("check") == REPORTED_ONLY_CHECK for c in (row.verification or [])
+    )
 
 
 def assess_destination_row(row: Destination, rules: Sequence[TrustRuleSpec]) -> DestinationAssessment:
@@ -283,7 +302,11 @@ def store_destination_assessment(row: Destination, assessment: DestinationAssess
     row.classification = assessment.classification
     row.trust_rule_id = assessment.matched_rule_id
     row.verification = [
-        {"check": str(c.get("check")), "result": str(c.get("result")), "detail": redact_line(c.get("detail"), 500)}
+        {
+            "check": str(c.get("check")),
+            "result": str(c.get("result")),
+            "detail": redact_line(c.get("detail"), 500),
+        }
         for c in assessment.checks
     ]
     return prior

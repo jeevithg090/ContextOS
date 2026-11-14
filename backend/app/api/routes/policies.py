@@ -100,7 +100,9 @@ def validate_policy(body: ValidateIn, principal: Principal = READ) -> ValidateOu
 
 
 @router.post("/test", response_model=PolicyTestOut)
-def test_policy(body: PolicyTestIn, principal: Principal = DECISIONS_READ, db: Session = Depends(get_db)) -> PolicyTestOut:
+def test_policy(
+    body: PolicyTestIn, principal: Principal = DECISIONS_READ, db: Session = Depends(get_db)
+) -> PolicyTestOut:
     """Dry run: evaluate a draft and/or saved policies against an input. Nothing is persisted."""
     result = policy_testing.run_policy_test(
         db,
@@ -127,10 +129,18 @@ def recent_decisions(
 ) -> Page[DecisionSummaryOut]:
     """Recorded decisions to use as dry-run test inputs (their redacted input snapshots)."""
     items, total = policy_service.recent_decisions(
-        db, principal.org_id, limit=limit, offset=offset, decision=decision, session_id=session_id,
-        agent_id=agent_id, include_simulated=include_simulated,
+        db,
+        principal.org_id,
+        limit=limit,
+        offset=offset,
+        decision=decision,
+        session_id=session_id,
+        agent_id=agent_id,
+        include_simulated=include_simulated,
     )
-    return Page(items=[DecisionSummaryOut.model_validate(i) for i in items], total=total, limit=limit, offset=offset)
+    return Page(
+        items=[DecisionSummaryOut.model_validate(i) for i in items], total=total, limit=limit, offset=offset
+    )
 
 
 # ----------------------------------------------------------------------------- collection
@@ -163,7 +173,9 @@ def list_policies(
 
 
 @router.post("", response_model=PolicyOut, status_code=201)
-def create_policy(body: PolicyCreate, principal: Principal = MANAGE, db: Session = Depends(get_db)) -> PolicyOut:
+def create_policy(
+    body: PolicyCreate, principal: Principal = MANAGE, db: Session = Depends(get_db)
+) -> PolicyOut:
     row = policy_service.create_policy(db, principal.org_id, _actor(principal), body.model_dump())
     return _out(row, policy_service.empty_stats())
 
@@ -206,8 +218,17 @@ def policy_decisions(
 ) -> Page[PolicyDecisionMatchOut]:
     """Recorded decisions in which this policy matched (enforce or monitor), newest first."""
     items, total = policy_service.decisions_for_policy(
-        db, principal.org_id, policy_id, days=days, limit=limit, offset=offset, include_simulated=include_simulated
+        db,
+        principal.org_id,
+        policy_id,
+        days=days,
+        limit=limit,
+        offset=offset,
+        include_simulated=include_simulated,
     )
     return Page(
-        items=[PolicyDecisionMatchOut.model_validate(i) for i in items], total=total, limit=limit, offset=offset
+        items=[PolicyDecisionMatchOut.model_validate(i) for i in items],
+        total=total,
+        limit=limit,
+        offset=offset,
     )

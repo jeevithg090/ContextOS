@@ -33,7 +33,9 @@ GRAPH_NOTE = (
 _FRAMEWORK = re.compile(r"^[a-z0-9][a-z0-9_.:\-]{0,63}$")
 
 
-def _clean_text_list(values: list[str] | None, *, max_items: int, max_len: int, lower: bool = False) -> list[str]:
+def _clean_text_list(
+    values: list[str] | None, *, max_items: int, max_len: int, lower: bool = False
+) -> list[str]:
     out: list[str] = []
     for raw in values or []:
         value = " ".join(str(raw).split())
@@ -63,7 +65,9 @@ class _In(BaseModel):
 
 class DeclaredToolIn(_In):
     name: str = Field(min_length=1, max_length=200)
-    category: ToolCategory | None = Field(default=None, description="Hint only; ContextOS classifies the tool")
+    category: ToolCategory | None = Field(
+        default=None, description="Hint only; ContextOS classifies the tool"
+    )
 
     @field_validator("name")
     @classmethod
@@ -221,7 +225,9 @@ class QuarantinePolicyOut(BaseModel):
 class QuarantineOut(BaseModel):
     active: bool
     label: str = QUARANTINE_LABEL
-    enforced: bool = Field(description="An enabled enforce-mode policy denies or gates every call of a quarantined agent")
+    enforced: bool = Field(
+        description="An enabled enforce-mode policy denies or gates every call of a quarantined agent"
+    )
     policies: list[QuarantinePolicyOut]
     explanation: str
     suggested_policy: dict[str, object]
@@ -276,7 +282,9 @@ class AgentToolOut(BaseModel):
     decisions: dict[str, int]
     statuses: dict[str, int]
     enforcement: dict[str, int]
-    credential_calls: int = Field(description="Calls whose arguments contained a credential (stored redacted)")
+    credential_calls: int = Field(
+        description="Calls whose arguments contained a credential (stored redacted)"
+    )
 
 
 class PostureEvidenceOut(BaseModel):

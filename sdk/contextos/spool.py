@@ -118,7 +118,10 @@ class Spool:
             if not self._warned_full:
                 log.warning(
                     "ContextOS spool %s is full (%d bytes cap); %d event(s) dropped. "
-                    "Reconnect to the server or raise spool_max_bytes.", self.path, self.max_bytes, dropped,
+                    "Reconnect to the server or raise spool_max_bytes.",
+                    self.path,
+                    self.max_bytes,
+                    dropped,
                 )
                 self._warned_full = True
         return written
@@ -177,7 +180,9 @@ class Spool:
             delivered += self._flush_claim(claim, send, batch_size)
         return delivered
 
-    def _flush_claim(self, claim: Path, send: Callable[[list[dict[str, Any]]], list[str]], batch_size: int) -> int:
+    def _flush_claim(
+        self, claim: Path, send: Callable[[list[dict[str, Any]]], list[str]], batch_size: int
+    ) -> int:
         events: list[dict[str, Any]] = []
         for raw in claim.read_text(encoding="utf-8").splitlines():
             if not raw.strip():
@@ -193,17 +198,21 @@ class Spool:
             try:
                 done = set(send(batch))
             except ContextOSError as exc:  # transport/server failure: keep everything not yet delivered
-                log.info("Spool flush paused (%s); %d event(s) kept for later", type(exc).__name__, len(pending))
+                log.info(
+                    "Spool flush paused (%s); %d event(s) kept for later", type(exc).__name__, len(pending)
+                )
                 break
             delivered += sum(1 for e in batch if e.get("event_id") in done)
             leftover = [e for e in batch if e.get("event_id") not in done]
-            pending = leftover + pending[len(batch):]
+            pending = leftover + pending[len(batch) :]
             if leftover:
                 break
         remaining = pending
         if remaining:
             with self._locked():
-                self._append_lines([json.dumps(e, separators=(",", ":"), ensure_ascii=False) for e in remaining])
+                self._append_lines(
+                    [json.dumps(e, separators=(",", ":"), ensure_ascii=False) for e in remaining]
+                )
         claim.unlink(missing_ok=True)
         return delivered
 

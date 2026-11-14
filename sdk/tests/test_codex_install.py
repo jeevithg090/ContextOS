@@ -45,10 +45,27 @@ def test_install_writes_every_event_with_codex_limits(project: Path, home: Path)
     data = json.loads(report.path.read_text())
     assert set(data) == {"hooks"}  # Codex's HooksFile rejects unknown top-level keys
     hooks = data["hooks"]
-    assert set(hooks) == {"PreToolUse", "PostToolUse", "UserPromptSubmit", "SessionStart", "SubagentStop", "SessionEnd"}
-    assert hooks["PreToolUse"] == [{"matcher": "*", "hooks": [{
-        "type": "command", "command": f"{CMD} codex-hook PreToolUse", "timeout": 60,
-        "statusMessage": "ContextOS policy check"}]}]
+    assert set(hooks) == {
+        "PreToolUse",
+        "PostToolUse",
+        "UserPromptSubmit",
+        "SessionStart",
+        "SubagentStop",
+        "SessionEnd",
+    }
+    assert hooks["PreToolUse"] == [
+        {
+            "matcher": "*",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": f"{CMD} codex-hook PreToolUse",
+                    "timeout": 60,
+                    "statusMessage": "ContextOS policy check",
+                }
+            ],
+        }
+    ]
     assert hooks["SessionEnd"][0]["hooks"][0]["timeout"] == 3 and "matcher" not in hooks["SessionEnd"][0]
     assert hooks["PostToolUse"][0]["hooks"][0]["timeout"] == 15
     assert any("/hooks" in w for w in report.warnings)  # trust is the user's step, in Codex
@@ -141,8 +158,13 @@ def test_status_reports_trust_recorded_by_codex(project: Path, home: Path, tmp_p
     assert status["detail"].startswith("enforcing via PreToolUse (user scope; trusted in Codex)")
     assert status["scopes"]["user"]["trust"]["PreToolUse"] == "trusted"
 
-    _trust(home, {f"{report.path}:pre_tool_use:0:0": {"trusted_hash": "sha256:x"},
-                  f"{report.path}:post_tool_use:0:0": {"trusted_hash": "sha256:x", "enabled": False}})
+    _trust(
+        home,
+        {
+            f"{report.path}:pre_tool_use:0:0": {"trusted_hash": "sha256:x"},
+            f"{report.path}:post_tool_use:0:0": {"trusted_hash": "sha256:x", "enabled": False},
+        },
+    )
     status = install.hooks_status(project, home=home)
     assert status["installed"] and status["warning"] and "not yet trusted in /hooks" in status["detail"]
     assert status["scopes"]["user"]["trust"]["PostToolUse"] == "disabled"
@@ -160,15 +182,19 @@ def test_status_errors_when_codex_would_not_run_the_hooks(project: Path, home: P
 
     install.uninstall_hooks(project, "user", home=home)
     report = install.apply_hooks(project, "project", command=f"{sys.executable} -m contextos", home=home)
-    _trust(home, {f"{report.path}:pre_tool_use:0:0": {"trusted_hash": "sha256:x"}},
-           extra=f'[projects."{project.resolve()}"]\ntrust_level = "untrusted"')
+    _trust(
+        home,
+        {f"{report.path}:pre_tool_use:0:0": {"trusted_hash": "sha256:x"}},
+        extra=f'[projects."{project.resolve()}"]\ntrust_level = "untrusted"',
+    )
     status = install.hooks_status(project, home=home)
     assert status["project_trust"] == "untrusted" and not status["ok"]
     assert "project hooks do not load" in status["detail"]
 
 
-def test_status_warns_when_the_login_shell_prints_to_stdout(project: Path, home: Path,
-                                                            monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_warns_when_the_login_shell_prints_to_stdout(
+    project: Path, home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     report = install.apply_hooks(project, "user", command=f"{sys.executable} -m contextos", home=home)
     _trust(home, {f"{report.path}:pre_tool_use:0:0": {"trusted_hash": "sha256:x"}})
     monkeypatch.setattr(install, "login_shell_prints_to_stdout", lambda *a, **k: True)
@@ -186,6 +212,7 @@ def test_login_shell_check_runs_the_real_shell(tmp_path: Path) -> None:
     from contextos.integrations.codex.install import (
         login_shell_prints_to_stdout as real_check,
     )
+
     assert real_check({"SHELL": str(quiet), "PATH": "/usr/bin:/bin"}) is False
     assert real_check({"SHELL": str(noisy), "PATH": "/usr/bin:/bin"}) is True
     assert real_check({"SHELL": str(tmp_path / "missing")}) is None
@@ -208,13 +235,22 @@ def server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeServer:
         monkeypatch.delenv(var, raising=False)
 
     def factory(cfg):
-        return ContextOSClient(cfg.url, cfg.api_key, transport=fake.transport(), sleep=lambda _s: None,
-                               spool=Spool(ctx_home / "spool" / "cli.jsonl"))
+        return ContextOSClient(
+            cfg.url,
+            cfg.api_key,
+            transport=fake.transport(),
+            sleep=lambda _s: None,
+            spool=Spool(ctx_home / "spool" / "cli.jsonl"),
+        )
 
     monkeypatch.setattr(common, "client_factory", factory)
     fake.route("GET", "/api/v1/agents", {"items": [], "total": 0, "limit": 1, "offset": 0})
-    fake.route("POST", "/api/v1/events", {"error": {"code": "validation_failed", "message": "empty"}}, status=422)
-    fake.route("POST", "/api/v1/decide", {"error": {"code": "validation_failed", "message": "empty"}}, status=422)
+    fake.route(
+        "POST", "/api/v1/events", {"error": {"code": "validation_failed", "message": "empty"}}, status=422
+    )
+    fake.route(
+        "POST", "/api/v1/decide", {"error": {"code": "validation_failed", "message": "empty"}}, status=422
+    )
     return fake
 
 
@@ -232,13 +268,19 @@ def test_init_codex_installs_the_hooks_and_explains_trust(server: FakeServer, tm
     assert (tmp_path / "codex-home" / "hooks.json").is_file()
 
 
-def test_init_codex_rejects_the_claude_only_local_scope_before_writing(server: FakeServer, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["init", "--url", BASE_URL, "--api-key", API_KEY, "--codex", "--scope", "local"])
+def test_init_codex_rejects_the_claude_only_local_scope_before_writing(
+    server: FakeServer, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        app, ["init", "--url", BASE_URL, "--api-key", API_KEY, "--codex", "--scope", "local"]
+    )
     assert result.exit_code == 1 and "--scope for --codex" in result.output
     assert not (tmp_path / "work" / ".contextos").exists()
 
 
-def test_doctor_reports_the_codex_hooks(server: FakeServer, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_doctor_reports_the_codex_hooks(
+    server: FakeServer, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("CONTEXTOS_URL", BASE_URL)
     monkeypatch.setenv("CONTEXTOS_API_KEY", API_KEY)
     result = runner.invoke(app, ["doctor"])
