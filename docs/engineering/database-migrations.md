@@ -1,6 +1,6 @@
 # Database models and migrations (SQLite for dev/tests, PostgreSQL in production)
 
-Applies to: `backend/app/models/**/*.py`, `backend/app/database/**/*.py`, `backend/alembic/**`, `backend/alembic.ini`
+Applies to: `backend/app/models/**`, `backend/app/database/**`, `backend/alembic/**`, `backend/alembic.ini`
 
 Models (`backend/app/models/`)
 - Tenant-owned tables mix in `OrgScopedMixin` (indexed `organization_id`, `ON DELETE CASCADE`) and
