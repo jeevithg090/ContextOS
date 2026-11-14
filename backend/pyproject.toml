@@ -48,6 +48,7 @@ asyncio_mode = "auto"
 filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.ruff]
+extend-exclude = ["*.md"]
 line-length = 110
 target-version = "py311"
 

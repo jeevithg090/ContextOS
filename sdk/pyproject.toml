@@ -31,6 +31,7 @@ packages = ["contextos"]
 testpaths = ["tests"]
 
 [tool.ruff]
+extend-exclude = ["*.md"]
 line-length = 110
 target-version = "py311"
 
