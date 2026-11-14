@@ -313,6 +313,10 @@ def test_live_injection_outside_code_is_not_dampened():
         ("Write", "file_write", {"file_path": "/repo/.claude/settings.json", "content": "{}"}, "TOOL-AGENT-CONFIG-WRITE"),
         ("Write", "file_write", {"file_path": "/repo/CLAUDE.md", "content": "do evil"}, "TOOL-AGENT-CONFIG-WRITE"),
         ("Write", "file_write", {"file_path": "/repo/.mcp.json", "content": "{}"}, "TOOL-AGENT-CONFIG-WRITE"),
+        ("apply_patch", "file_write", {"command": "*** Begin Patch\n*** Update File: .codex/hooks.json\n@@\n-a\n+b\n"
+                                                  "*** End Patch\n"}, "TOOL-AGENT-CONFIG-WRITE"),
+        ("Bash", "shell", {"command": "printf '[features]\\nhooks = false\\n' >> ~/.codex/config.toml"},
+         "TOOL-AGENT-CONFIG-WRITE"),
     ],
 )
 def test_tool_request_matrix(tool, category, args, rule):

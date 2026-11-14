@@ -71,13 +71,18 @@ Live Claude Code verification (needs a Claude Code login and network):
 `PYTHONPATH=sdk backend/.venv/bin/python examples/claude_code/live_verify.py --model haiku`
 ([integrations/claude-code.md](integrations/claude-code.md#live-verification)).
 
-## Last recorded results (2026-11-13)
+Live Codex verification (needs the Codex CLI; offline, with a scripted model, no OpenAI account):
+`backend/.venv/bin/python examples/codex/live_verify.py`
+([integrations/codex.md](integrations/codex.md#live-verification)); `tests/e2e/test_live_codex.py`
+runs the same binary inside the backend suite and is skipped when no Codex binary is installed.
+
+## Last recorded results (2026-11-14, after the Codex merge)
 
 | Suite | Result |
 |---|---|
-| Backend, SQLite | 1780 passed (≈ 1.5 min; 1751 at the 2026-11-11 release review) |
+| Backend, SQLite | 1798 passed (≈ 2 min; includes `tests/e2e/test_live_codex.py` with the real Codex binary; 1780 at `v0.1.0`) |
 | Backend, PostgreSQL 17.11 scratch database | 1751 passed (2026-11-11 release review; not re-run since) |
-| SDK | 387 passed |
+| SDK | 478 passed (387 at `v0.1.0`; 91 Codex adapter tests added) |
 | Frontend | `tsc` clean, ESLint clean, 492 tests passed in 66 files (every page has a `*.page.test.tsx`) |
 | `ruff check app tests` | clean |
 

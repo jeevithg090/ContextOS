@@ -34,6 +34,8 @@ _READ_PURPOSE = {
                    "redacts secrets (without it such calls are denied).",
     "mcp_gateway": "Optional: needed for --hide-blocked-tools and for RESTRICT with secret redaction (without it "
                    "such calls are blocked).",
+    "openai_codex": "Optional: lets the hook re-check masked arguments with POST /scan when a RESTRICT policy "
+                    "redacts secrets (without it such calls are blocked).",
     "python_sdk": "Optional: needed for RESTRICT with secret redaction and the CLI's read commands.",
 }
 
@@ -78,19 +80,23 @@ _FAIL_MODE_MEANING = {
 }
 
 
-def _init_step(url: str, *, claude_code: bool, fail_mode: str | None = None, gateway: bool = False) -> SetupStepOut:
-    flags = " --claude-code" if claude_code else ""
+def _init_step(url: str, *, claude_code: bool, codex: bool = False, fail_mode: str | None = None,
+               gateway: bool = False) -> SetupStepOut:
+    flags = " --claude-code" if claude_code else " --codex" if codex else ""
     what = (" and merges the ContextOS hooks into .claude/settings.json (a backup of the original is kept; "
-            "--scope local or --scope user selects another settings file)") if claude_code else ""
+            "--scope local or --scope user selects another settings file)") if claude_code else (
+            " and merges the ContextOS hooks into .codex/hooks.json (a backup of the original is kept; --scope user "
+            "selects ~/.codex/hooks.json)") if codex else ""
+    hooks = claude_code or codex
     mode_note = ""
-    if fail_mode in _FAIL_MODE_MEANING and not claude_code:
+    if fail_mode in _FAIL_MODE_MEANING and not hooks:
         flags += f" --fail-mode {fail_mode}"
         mode_note = (f" --fail-mode {fail_mode} is your organisation's fail mode (Settings → Organisation): when "
                      f"ContextOS cannot be reached, the integration will {_FAIL_MODE_MEANING[fail_mode]}.")
         if gateway and fail_mode == "ask":
             mode_note += " The MCP gateway has no one to ask, so it treats 'ask' as 'closed' (deny)."
     return SetupStepOut(
-        title="Connect the project" + (" and install the hooks" if claude_code else ""),
+        title="Connect the project" + (" and install the hooks" if hooks else ""),
         description="Run in the project directory. It checks the server and the key before writing anything, "
                     "writes .contextos/config.json and stores the key in ~/.contextos with mode 600" + what + ". "
                     "Leave out --api-key to be prompted for it with hidden input, which keeps the key out of your "
@@ -144,12 +150,66 @@ def _claude_code_steps(url: str, fail_mode: str | None = None) -> list[SetupStep
     ]
 
 
+_GATEWAY_ARGS = ["mcp-gateway", "--name", "toolbox", "--", "python", "examples/mcp/benign_server.py"]
+
+
+def _codex_toml(url: str) -> str:
+    return (f"[mcp_servers.toolbox]\ncommand = \"contextos\"\nargs = {json.dumps(_GATEWAY_ARGS)}\n"
+            f"env = {{ CONTEXTOS_URL = {json.dumps(url)} }}\n")
+
+
+def _codex_steps(url: str, fail_mode: str | None = None) -> list[SetupStepOut]:
+    events = (("PreToolUse", "*", 60), ("PostToolUse", "*", 15), ("UserPromptSubmit", None, 15),
+              ("SessionStart", None, 15), ("SubagentStop", None, 15), ("SessionEnd", None, 3))
+    hooks = {"hooks": {ev: [{**({"matcher": matcher} if matcher else {}), "hooks": [
+        {"type": "command", "command": f"contextos codex-hook {ev}", "timeout": timeout}]}]
+        for ev, matcher, timeout in events}}
+    steps = [
+        _key_step("openai_codex"), _install_step(), _init_step(url, claude_code=False, codex=True), _doctor_step(),
+        SetupStepOut(
+            title="Trust the hooks in Codex",
+            description="Codex runs a hook only after you review and trust it: start Codex in the project, open "
+                        "/hooks and trust the ContextOS hooks. Trust is pinned to each hook's definition, so review "
+                        "them again after re-running the installer. Project hooks also need Codex to trust the "
+                        "project (it asks the first time you start it there).",
+            commands=[_cmd("bash", "codex"), _cmd("text", "/hooks", "In Codex")],
+        ),
+        SetupStepOut(
+            title="Reference: what the installer adds",
+            description="The hooks merged into .codex/hooks.json. PreToolUse is the enforcement point (it blocks with "
+                        "exit code 2); the other hooks only observe. The installer writes the absolute path of the "
+                        "CLI so the hooks do not depend on PATH, and recognises its own hooks by their command.",
+            commands=[_cmd("json", json.dumps(hooks, indent=2), ".codex/hooks.json")],
+        ),
+    ]
+    if fail_mode in _FAIL_MODE_MEANING:
+        meaning = ("deny the call (Codex hooks cannot ask, so 'ask' blocks like 'closed')" if fail_mode == "ask"
+                   else _FAIL_MODE_MEANING[fail_mode])
+        steps.append(SetupStepOut(
+            title="Apply your organisation's fail mode to the hook",
+            description=(f"Your organisation's fail mode is '{fail_mode}' (Settings → Organisation): when ContextOS "
+                         f"cannot be reached, the PreToolUse hook will {meaning}. The hook reads its own setting "
+                         "(default 'closed'): export CONTEXTOS_CODEX_FAIL_MODE in the shell that starts Codex, or "
+                         "add the \"codex\" object to .contextos/config.json."),
+            commands=[_cmd("bash", f"export CONTEXTOS_CODEX_FAIL_MODE={fail_mode}"),
+                      _cmd("json", json.dumps({"codex": {"fail_mode": fail_mode}}, indent=2),
+                           ".contextos/config.json (codex section)")],
+        ))
+    steps.append(SetupStepOut(
+        title="Optional: also put MCP servers behind the gateway",
+        description="The hook already decides every MCP tool call Codex makes. Starting a server through the MCP "
+                    "gateway adds protocol-level enforcement and scans its tool listings and resources too. Each "
+                    "call is then decided twice (by the hook and by the gateway).",
+        commands=[_cmd("toml", _codex_toml(url), "~/.codex/config.toml")],
+    ))
+    return steps
+
+
 def _gateway_steps(url: str, *, host: str = "claude_code", fail_mode: str | None = None) -> list[SetupStepOut]:
-    args = ["mcp-gateway", "--name", "toolbox", "--", "python", "examples/mcp/benign_server.py"]
+    args = _GATEWAY_ARGS
     server = json.dumps({"mcpServers": {"toolbox": {"command": "contextos", "args": args,
                                                     "env": {"CONTEXTOS_URL": url}}}}, indent=2)
-    toml = (f"[mcp_servers.toolbox]\ncommand = \"contextos\"\nargs = {json.dumps(args)}\n"
-            f"env = {{ CONTEXTOS_URL = {json.dumps(url)} }}\n")
+    toml = _codex_toml(url)
     title, path, language, code = {
         "claude_code": ("Wrap a server in .mcp.json", ".mcp.json", "json", server),
         "cursor": ("Wrap a server in .cursor/mcp.json", ".cursor/mcp.json", "json", server),
@@ -203,6 +263,8 @@ _VERIFY = {
                    "integrations as Connected, and its tool calls show up with Enforced decisions.",
     "mcp_gateway": "Use one of the wrapped server's tools from the host: the MCP security gateway appears under "
                    "Connected integrations, and each tools/call has an Enforced decision.",
+    "openai_codex": "Start Codex in the project and trust the hooks in /hooks: within seconds OpenAI Codex appears "
+                    "under Connected integrations as Connected, and its tool calls show up with Enforced decisions.",
     "python_sdk": "Run the agent: the Python SDK appears under Connected integrations, and each guarded call has "
                   "an Enforced decision.",
 }
@@ -221,6 +283,8 @@ def setup_guide(kind: str, base_url: str, *, fail_mode: str | None = None) -> Se
     assert target is not None
     if target == "claude_code":
         steps = _claude_code_steps(url, fail_mode)
+    elif target == "openai_codex":
+        steps = _codex_steps(url, fail_mode)
     elif target == "mcp_gateway":
         steps = _gateway_steps(url, host={"cursor": "cursor", "openai_codex": "codex"}.get(kind, "claude_code"),
                                fail_mode=fail_mode)

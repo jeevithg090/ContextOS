@@ -2,7 +2,8 @@
 
 Read after `CLAUDE.md`. Update this file after significant work (what works, what changed, known
 problems, next steps). Last updated 2026-11-14: 0.1.0 is tagged `v0.1.0` at `f9980b5` (release review
-2026-11-11, follow-up fixes 2026-11-13).
+2026-11-11, follow-up fixes 2026-11-13); the OpenAI Codex integration was merged afterwards and is
+not part of 0.1.0 (see "Changes since 0.1.0").
 
 ## Current milestone
 
@@ -31,7 +32,9 @@ updates. React 18 SPA (`frontend/`). Integrations in `sdk/` speak HTTP only. Det
   with enforce/monitor modes; lethal-trifecta session risk; agent posture; provenance risky paths;
   signed Context Receipts.
 - Integrations: Claude Code hooks (PreToolUse enforced, never `allow`; live-verified against Claude
-  Code 2.1.319), MCP stdio gateway (`tools/call` enforced), Python SDK `guard()` (enforced), CLI.
+  Code 2.1.319), OpenAI Codex hooks (PreToolUse enforced by exit 2, never `ask`; live-verified against
+  Codex CLI 0.158.0-alpha.2.1 with an offline scripted model), MCP stdio gateway (`tools/call`
+  enforced), Python SDK `guard()` (enforced), CLI.
   Approvals are withdrawn (`POST /decide/approvals/{id}/cancel`) when an adapter stops waiting.
 - Dashboard: Overview, Agents/Sessions, Context Explorer + receipts, Provenance Graph, Trust Centre,
   Security Intelligence, Policy Studio, Approval Centre, Incidents, Replay Lab (with counterfactual
@@ -53,6 +56,49 @@ Verification on 2026-11-11 (release review) and 2026-11-13 (after the follow-up 
 | Frontend | `cd frontend && npx tsc -b --noEmit && npx eslint src && npx vitest run`; `npm run build` | clean, clean, 492 passed (66 files, every page has a page-level render test); build OK (2026-11-13) |
 | Backend lint / types | `cd backend && .venv/bin/ruff check app tests`; `.venv/bin/mypy app/engines app/workspace app/core app/domain app/events` | clean; clean (services/routes are not mypy-clean: ~320 mostly SQLAlchemy typing errors) |
 | Quick start | `init-db`, `create-org`, `create-api-key`, `serve`, `contextos init --claude-code`, `contextos doctor`, hook `deny`, `contextos simulate`, `seed-demo`, `purge --dry-run` | all as documented (SQLite and PostgreSQL) |
+
+## Changes since 0.1.0
+
+**OpenAI Codex integration (2026-11-13)** — [docs/integrations/codex.md](docs/integrations/codex.md).
+
+- `sdk/contextos/integrations/codex/` + `contextos codex-hook <Event>`: PreToolUse → `POST /decide`;
+  DENY / undecided approval / unapplicable RESTRICT / fail mode `closed` → exit 2 with the reason on
+  stderr (Codex blocks); ALLOW/AUDIT → no output (Codex's approval policy and sandbox still apply);
+  RESTRICT `redact_secrets` → `allow` + masked `updatedInput` after a `/scan` re-check. Observation:
+  `SessionStart`, `UserPromptSubmit` (a sub-agent's task → `agent.message`), `PostToolUse`,
+  `SubagentStop` (child session ended), `SessionEnd` (spooled first, Codex allows 3 s).
+- `contextos init --codex [--scope project|user]` writes `.codex/hooks.json` (merge, backup, keeps
+  existing hooks' positions so their Codex trust stays valid); trust in Codex `/hooks` is the user's
+  step. `contextos doctor` reads the trust Codex recorded (`[hooks.state]` in `config.toml`),
+  `[features] hooks`, project trust and login-shell stdout.
+- Server: `openai_codex` in `ENFORCING_INTEGRATIONS`; catalogue entry supported (was planned);
+  setup guide; Approval Centre / overview labels. Risk engine: Codex built-ins for provider
+  `openai_codex` (`apply_patch` = file write, not shell; patch files extracted as resources;
+  `multi_agent_v1<tool>` names); `.codex/` writes → `TOOL-AGENT-CONFIG-WRITE` (denied by the
+  built-in tampering policy).
+- `sdk/contextos/integrations/hookkit.py`: helpers shared by both hooks (budget, approval polling,
+  reason text, cross-process records); the Claude Code hook now uses them (behaviour unchanged).
+- Live: `examples/codex/live_verify.py` and `backend/tests/e2e/test_live_codex.py` run the real
+  Codex binary against a real server with `examples/codex/fake_model_server.py` as the model
+  (offline): `.env` read and exfiltration blocked (the command never ran), `apply_patch`, an MCP call
+  through the gateway (decided by hook and gateway) and a sub-agent ran, all decisions `enforced`.
+
+Verification on 2026-11-13 (Codex integration, this machine; worktree virtualenv from
+`uv pip install --offline -e "backend[dev,postgres]" -e "sdk[mcp]"`):
+
+| Suite | Command | Result |
+|---|---|---|
+| Backend (SQLite) | `cd backend && .venv/bin/python -m pytest -q -p no:cacheprovider tests` | 1769 passed (18 new, incl. `tests/e2e/test_live_codex.py` with the real Codex binary) |
+| SDK / CLI / adapters | `cd sdk && ../backend/.venv/bin/python -m pytest -q -p no:cacheprovider tests` | 478 passed (91 new Codex tests) |
+| Backend lint | `cd backend && .venv/bin/ruff check app tests` | clean |
+| Frontend (labels only changed) | `npx tsc -b --noEmit`; `npx vitest run src/features/agents src/features/overview src/features/integrations` | clean; 28 passed |
+| Live | `backend/.venv/bin/python examples/codex/live_verify.py` | PASS (Codex CLI 0.158.0-alpha.2.1, offline scripted model) |
+
+After merging into `main` on 2026-11-14 (on top of `v0.1.0` and its follow-up commit `8bc8130`; only
+`CONTEXT.md`, the release notes and the improvements list conflicted): backend **1798 passed** (no
+skips; `tests/e2e/test_live_codex.py` 4 passed with Codex CLI 0.158.0-alpha.2.1 from the ChatGPT
+app), SDK **478 passed**, frontend `tsc` and ESLint clean, **492 passed** (66 files), `npm run build`
+OK, `ruff check app tests` clean, `smoke.py` 12 of 12, `doc_paths.py` 0 missing references.
 
 ## Release readiness (0.1.0)
 
@@ -103,6 +149,12 @@ walk was done afterwards (below) and found no problem.
 - **Enforcement gaps** (by design of the hosts): disabled or bypassed Claude Code hooks, MCP servers
   not behind the gateway, code not wrapped by `guard()`, and files touched inside shell commands are
   not covered. Path RESTRICTs on opaque tools deny.
+- **Codex**: hosted tools (web search) and `write_stdin` into a running command never reach
+  PreToolUse; hooks Codex does not run (untrusted/modified in `/hooks`, `[features] hooks = false`)
+  cover nothing; Codex reports no result for failed calls or for `apply_patch` run through a shell
+  command; a RESTRICT rewrite is lost if the login shell prints to stdout (doctor checks); a hook
+  that crashes or times out lets the tool run (Codex's rule; the hook answers inside its budget).
+  Not live-verified: the `/hooks` trust UI, Windows, the interactive TUI.
 - **Detection is lexical**: semantic paraphrases without trigger vocabulary are missed; secrets are
   recognised in `echo`/`printf` by variable name only, so a credential under an innocuous name is not.
 - **MCP tool calls have no default `mcp:<server>` destination** (would make local MCP servers count
@@ -120,8 +172,8 @@ walk was done afterwards (below) and found no problem.
   secret invalidates fingerprints, receipt signatures and chain verification.
 - **Operations**: retention purge must be scheduled externally (`contextos-server purge`); accounts
   are local email/password (no SSO/MFA).
-- Planned integrations (OpenAI Codex, Cursor, LangGraph, CrewAI, OpenAI Agents SDK, Claude Agent
-  SDK) have no native adapter; the catalogue lists their interim paths.
+- Planned integrations (Cursor, LangGraph, CrewAI, OpenAI Agents SDK, Claude Agent SDK) have no
+  native adapter; the catalogue lists their interim paths.
 
 Full list with impact and decisions: [docs/PRODUCT_IMPROVEMENTS.md](docs/PRODUCT_IMPROVEMENTS.md).
 
@@ -140,6 +192,7 @@ approval for outbound calls after prompt injection". Rationale: [docs/ARCHITECTU
 1. Plan the React Router v7 and Vitest 3+ upgrades (clears the remaining npm advisories).
 2. Verify the Docker image and compose stack on a machine with Docker; record the result here.
 3. Decide the MCP destination question and close the remaining detection blind spots worth fixing.
-4. Review and merge the OpenAI Codex adapter (branch `claude/jovial-dewdney-08aa64`, built after
-   `v0.1.0` and not part of it); then Cursor, and a shared bus for multi-replica deployments.
+4. Next integration from the catalogue (Cursor) and a shared bus for multi-replica deployments.
+5. Codex: re-verify the hook contract on each Codex release (the hooks engine is new and its
+   output rules are strict); verify the `/hooks` trust flow and the TUI by hand.
 See [docs/ROADMAP.md](docs/ROADMAP.md).

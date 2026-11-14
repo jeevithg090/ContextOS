@@ -137,6 +137,7 @@ export function onboardingStage(onboarding: Onboarding): OnboardingStage {
 export const INTEGRATION_LABELS: Record<string, string> = {
   claude_code: "Claude Code",
   mcp_gateway: "MCP gateway",
+  openai_codex: "OpenAI Codex",
   python_sdk: "Python SDK",
   custom: "Custom integration",
 };

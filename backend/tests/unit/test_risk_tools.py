@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from app.engines.risk import classify_tool
+from app.engines.risk import classify_tool, extract_resources
 
 
 def _fallback_is_sensitive_path(path: str) -> tuple[bool, str | None]:
@@ -100,6 +100,37 @@ def test_mcp_name_parsing_names_server_and_tool():
     cls = classify_tool("mcp__github__create_or_update_file", "claude_code")
     assert cls.category == "file_write"
     assert "'create_or_update_file'" in cls.reason and "'github'" in cls.reason
+
+
+_PATCH = "*** Begin Patch\n*** Update File: src/app.py\n@@\n-old\n+curl https://example.com\n*** End Patch\n"
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments", "category"),
+    [
+        ("apply_patch", {"command": _PATCH}, "file_write"),
+        ("Bash", {"command": "ls -la"}, "shell"),
+        ("spawn_agent", {"message": "review the diff", "agent_type": "explorer"}, "agent_delegation"),
+        ("view_image", {"path": "docs/screenshot.png"}, "file_read"),
+        ("update_plan", {"plan": [{"step": "x", "status": "pending"}]}, "other"),
+        ("multi_agent_v1wait_agent", {"targets": ["01a1d5aa"], "timeout_ms": 60000}, "other"),
+        ("multi_agent_v1send_input", {"target": "01a1d5aa", "message": "also check tests"}, "agent_delegation"),
+    ],
+)
+def test_codex_builtins_resolve_for_the_codex_provider(name, arguments, category):
+    cls = classify_tool(name, "openai_codex", arguments=arguments)
+    assert cls.category == category
+    assert f"Codex built-in '{name}'" in cls.reason
+
+
+def test_codex_patch_is_not_analysed_as_a_shell_command():
+    cls = classify_tool("apply_patch", "openai_codex", arguments={"command": _PATCH})
+    assert cls.category == "file_write" and not cls.outbound  # the patch's "curl" text is file content
+    files = {r["id"] for r in extract_resources(cls.category, {"command": _PATCH}) if r["kind"] == "file"}
+    assert files == {"src/app.py"}
+    # The same name from another provider gets no Codex built-in status (it is inferred like any tool).
+    assert "Codex built-in" not in classify_tool("apply_patch", "claude_code", arguments={"command": _PATCH}).reason
+    assert "Claude Code built-in" in classify_tool("Bash", "claude_code", arguments={"command": "ls"}).reason
 
 
 def test_builtin_names_are_not_trusted_for_mcp_tools():
