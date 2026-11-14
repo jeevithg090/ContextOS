@@ -59,6 +59,25 @@ Verification on 2026-11-11 (release review) and 2026-11-13 (after the follow-up 
 
 ## Changes since 0.1.0
 
+**Web UI and README (2026-11-14)**
+
+- Light theme next to the default dark one: a second token set under `<html data-theme="light">`
+  (`frontend/src/styles/index.css`), chosen in the header (System / Light / Dark, stored in
+  `localStorage` as `contextos.theme`, `frontend/src/lib/theme.ts`). `public/theme-init.js` applies
+  it before first paint (a same-origin script; the SPA CSP forbids inline scripts). React Flow canvases
+  follow the theme. Feature code must keep using semantic tokens so both themes work.
+- Contrast: dark `--fg-faint` raised to meet WCAG AA on every surface; light status colours are the
+  600–700 shades for the same reason.
+- `touch:` Tailwind variant (`@media (pointer: coarse)`): buttons, icon buttons, inputs, checkboxes
+  and nav links grow to tap size on touch screens; inputs use 16px text there (no iOS focus zoom).
+- `Field` wires its hint/error to the control (`aria-describedby`, `aria-invalid`); inputs have a
+  focus ring. Sign-in validates fields client-side, focuses the first problem and can reveal the
+  password. The mobile navigation drawer is a modal dialog (focus trap, Escape, focus return).
+- Table empty/error states stay inside the visible width on phones; the overview KPI strip keeps
+  three columns until 1536px.
+- Open Graph / Twitter metadata. README rewritten with screenshots in `docs/screenshots/`
+  (captured from a `seed-demo` database).
+
 **Repository tooling (2026-11-14)**
 
 - CI: `.github/workflows/ci.yml` runs Ruff lint + format check, `alembic check`, the backend, SDK and
