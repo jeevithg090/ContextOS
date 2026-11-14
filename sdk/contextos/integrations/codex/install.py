@@ -303,7 +303,7 @@ def login_shell_prints_to_stdout(env: dict[str, str] | None = None, timeout_s: f
     if os.name == "nt" or not Path(shell).is_file():
         return None
     try:
-        done = subprocess.run([shell, "-lc", "true"], capture_output=True, timeout=timeout_s, env=environ,
+        done = subprocess.run([shell, "-lc", "true"], capture_output=True, timeout=timeout_s, env=environ,  # noqa: S603 (the user's own login shell, fixed arguments)
                               stdin=subprocess.DEVNULL, check=False)
     except (OSError, subprocess.TimeoutExpired):
         return None
