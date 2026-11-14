@@ -1,14 +1,14 @@
 # ContextOS — current state
 
 Read after `CLAUDE.md`. Update this file after significant work (what works, what changed, known
-problems, next steps). Last updated 2026-11-11 (wave 2: release-readiness review X1, then a signed-in
-browser walk and dependency upgrades; committed as the wave-2 completion commit after `60765bd`).
+problems, next steps). Last updated 2026-11-14: 0.1.0 is tagged `v0.1.0` at `f9980b5` (release review
+2026-11-11, follow-up fixes 2026-11-13).
 
 ## Current milestone
 
-**First release, version 0.1.0** (`backend/pyproject.toml`, `sdk/pyproject.toml`): the product is
-built; wave 2 is verifying and hardening it (integration tests, security review, documentation,
-release readiness). Release notes: [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md).
+**First release, version 0.1.0** (`backend/pyproject.toml`, `sdk/pyproject.toml`): released and tagged
+`v0.1.0` (commit `f9980b5`, 2026-11-14) after the wave-2 verification, security review, documentation
+and release-readiness work. Release notes: [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md).
 
 ## Architecture summary
 
@@ -59,7 +59,7 @@ Verification on 2026-11-11 (release review) and 2026-11-13 (after the follow-up 
 Reviewed 2026-11-11 with `.claude/skills/release-readiness/SKILL.md` on a clean copy of the working
 tree (`git ls-files -co --exclude-standard`), a new virtualenv (`uv venv` + `uv pip install --offline
 -e "backend[dev,postgres]" -e "sdk[mcp]"` — `make install` itself downloads from PyPI and was not
-run), `npm ci --offline`, a fresh SQLite database and scratch ports. **Verdict: ready to tag** — no
+run), `npm ci --offline`, a fresh SQLite database and scratch ports. **Verdict: ready to tag** (tagged `v0.1.0` at `f9980b5` on 2026-11-14) — no
 blocker found in the product. Item 22 was partial in that review (no signed-in browser walk); the
 walk was done afterwards (below) and found no problem.
 
@@ -137,8 +137,9 @@ approval for outbound calls after prompt injection". Rationale: [docs/ARCHITECTU
 
 ## Priorities and next steps
 
-1. Tag `v0.1.0`; plan the React Router v7 and Vitest 3+ upgrades (clears the remaining npm advisories).
+1. Plan the React Router v7 and Vitest 3+ upgrades (clears the remaining npm advisories).
 2. Verify the Docker image and compose stack on a machine with Docker; record the result here.
 3. Decide the MCP destination question and close the remaining detection blind spots worth fixing.
-4. Next integrations from the catalogue (Codex, Cursor) and a shared bus for multi-replica deployments.
+4. Review and merge the OpenAI Codex adapter (branch `claude/jovial-dewdney-08aa64`, built after
+   `v0.1.0` and not part of it); then Cursor, and a shared bus for multi-replica deployments.
 See [docs/ROADMAP.md](docs/ROADMAP.md).

@@ -1,6 +1,6 @@
 # Release notes
 
-## 0.1.0 — first release (2026-11-11)
+## 0.1.0 — first release (tagged `v0.1.0` at `f9980b5`, 2026-11-14)
 
 The first complete ContextOS: server (`contextos-server` 0.1.0), Python SDK and CLI (`contextos`
 0.1.0), web UI, three integrations, Simulation Lab and the Engineering Workspace.
@@ -143,6 +143,5 @@ The full Definition-of-Done checklist with evidence is in [../CONTEXT.md](../CON
   `vite` 5/`esbuild` 0.21; `typescript-eslint`'s `minimatch`; `eslint`) still carries advisories that
   need major upgrades; they affect developer machines running the test UI or dev server, not the
   shipped bundle.
-- The release is not tagged yet (`v0.1.0` is the next step).
 
 More: [PRODUCT_IMPROVEMENTS.md](PRODUCT_IMPROVEMENTS.md), [ROADMAP.md](ROADMAP.md).
