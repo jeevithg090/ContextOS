@@ -17,7 +17,7 @@ PORT ?= 8000
 PYTEST_FLAGS ?= -q -p no:cacheprovider
 
 .PHONY: help install dev-backend dev-frontend migrate test test-backend test-sdk test-frontend lint \
-	lint-backend lint-frontend typecheck build serve
+	lint-backend lint-frontend typecheck build serve format test-scripts smoke
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -53,10 +53,23 @@ test-frontend: ## Frontend unit tests (Vitest)
 
 lint: lint-backend lint-frontend typecheck ## Ruff, ESLint and the TypeScript type check
 
-lint-backend:
-	cd backend && $(PY) -m ruff check app tests
+lint-backend: ## Ruff lint and format check (backend, SDK, scripts)
+	cd backend && $(PY) -m ruff check app tests && $(PY) -m ruff format --check app tests alembic
+	cd sdk && $(PY) -m ruff check . && $(PY) -m ruff format --check .
+	$(PY) -m ruff check --config backend/pyproject.toml scripts && $(PY) -m ruff format --config backend/pyproject.toml --check scripts
 
-lint-frontend:
+format: ## Apply ruff format to the Python code
+	cd backend && $(PY) -m ruff format app tests alembic
+	cd sdk && $(PY) -m ruff format .
+	$(PY) -m ruff format --config backend/pyproject.toml scripts
+
+test-scripts: ## Tests for the smoke and audit scripts
+	$(PY) -m pytest $(PYTEST_FLAGS) scripts
+
+smoke: ## Whole-system smoke run: fresh database, real server process, real HTTP
+	$(PY) scripts/smoke.py
+
+lint-frontend: ## ESLint
 	cd frontend && npx eslint src
 
 typecheck: ## TypeScript type check
