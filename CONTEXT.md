@@ -1,14 +1,14 @@
 # ContextOS — current state
 
 Read after `CONTRIBUTING.md`. Update this file after significant work (what works, what changed, known
-problems, next steps). Last updated 2026-11-14: 0.1.0 is tagged `v0.1.0` at `f9980b5` (release review
+problems, next steps). Last updated 2026-11-14: 0.1.0 is tagged `v0.1.0` at `54050a6` (release review
 2026-11-11, follow-up fixes 2026-11-13); the OpenAI Codex integration was merged afterwards and is
 not part of 0.1.0 (see "Changes since 0.1.0").
 
 ## Current milestone
 
 **First release, version 0.1.0** (`backend/pyproject.toml`, `sdk/pyproject.toml`): released and tagged
-`v0.1.0` (commit `f9980b5`, 2026-11-14) after the wave-2 verification, security review, documentation
+`v0.1.0` (commit `54050a6`, 2026-11-14) after the wave-2 verification, security review, documentation
 and release-readiness work. Release notes: [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md).
 
 ## Architecture summary
@@ -126,7 +126,7 @@ Verification on 2026-11-13 (Codex integration, this machine; worktree virtualenv
 | Frontend (labels only changed) | `npx tsc -b --noEmit`; `npx vitest run src/features/agents src/features/overview src/features/integrations` | clean; 28 passed |
 | Live | `backend/.venv/bin/python examples/codex/live_verify.py` | PASS (Codex CLI 0.158.0-alpha.2.1, offline scripted model) |
 
-After merging into `main` on 2026-11-14 (on top of `v0.1.0` and its follow-up commit `8bc8130`; only
+After merging into `main` on 2026-11-14 (on top of `v0.1.0` and its follow-up commit `3917b3c`; only
 `CONTEXT.md`, the release notes and the improvements list conflicted): backend **1798 passed** (no
 skips; `tests/e2e/test_live_codex.py` 4 passed with Codex CLI 0.158.0-alpha.2.1 from the ChatGPT
 app), SDK **478 passed**, frontend `tsc` and ESLint clean, **492 passed** (66 files), `npm run build`
@@ -137,7 +137,7 @@ OK, `ruff check app tests` clean, `smoke.py` 12 of 12, `doc_paths.py` 0 missing 
 Reviewed 2026-11-11 with `docs/engineering/checklists/release-readiness.md` on a clean copy of the working
 tree (`git ls-files -co --exclude-standard`), a new virtualenv (`uv venv` + `uv pip install --offline
 -e "backend[dev,postgres]" -e "sdk[mcp]"` — `make install` itself downloads from PyPI and was not
-run), `npm ci --offline`, a fresh SQLite database and scratch ports. **Verdict: ready to tag** (tagged `v0.1.0` at `f9980b5` on 2026-11-14) — no
+run), `npm ci --offline`, a fresh SQLite database and scratch ports. **Verdict: ready to tag** (tagged `v0.1.0` at `54050a6` on 2026-11-14) — no
 blocker found in the product. Item 22 was partial in that review (no signed-in browser walk); the
 walk was done afterwards (below) and found no problem.
 

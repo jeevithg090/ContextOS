@@ -29,7 +29,7 @@ On `main` after `v0.1.0`; not part of that tag.
   [integrations/codex.md](integrations/codex.md#live-verification). Limitations: hosted tools,
   `write_stdin`, untrusted or disabled hooks and failed-call results are not covered.
 
-## 0.1.0 — first release (tagged `v0.1.0` at `f9980b5`, 2026-11-14)
+## 0.1.0 — first release (tagged `v0.1.0` at `54050a6`, 2026-11-14)
 
 The first complete ContextOS: server (`contextos-server` 0.1.0), Python SDK and CLI (`contextos`
 0.1.0), web UI, three integrations, Simulation Lab and the Engineering Workspace.
@@ -86,7 +86,7 @@ The first complete ContextOS: server (`contextos-server` 0.1.0), Python SDK and 
 ### Verification for this release
 
 Release-readiness review on 2026-11-11 (`docs/engineering/checklists/release-readiness.md`), on a clean copy
-of the working tree (base commit `60765bd` plus the uncommitted wave-2 changes) with a new virtualenv
+of the working tree (base commit `e924cd7` plus the uncommitted wave-2 changes) with a new virtualenv
 (`uv pip install --offline -e "backend[dev,postgres]" -e "sdk[mcp]"`), `npm ci --offline`, an empty
 SQLite database and a scratch port:
 
